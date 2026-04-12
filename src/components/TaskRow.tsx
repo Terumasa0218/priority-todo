@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Task, Category, TouchDragState } from "@/lib/types";
 import { remaining, urgColor, fmt } from "@/lib/utils";
-import { IconGrip, IconCheck, IconFlag, IconRepeat, IconTrash, IconChevR } from "./Icons";
+import { IconGrip, IconFlag, IconRepeat } from "./Icons";
 import ParticleBurst from "./ParticleBurst";
 
 interface TaskRowProps {
@@ -66,12 +66,12 @@ export default function TaskRow({ task, cats, onComplete, onEdit, onDelete, idx,
     const dx = e.touches[0].clientX - touchStartX.current;
     const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
     if (dy > 20 && !swiping.current) return;
-    if (dx < -10) { swiping.current = true; setSwipeX(Math.max(dx, -80)); }
-    else if (showDeleteBtn && dx > 10) { setSwipeX(Math.min(dx - 80, 0)); }
+    if (dx < -14) { swiping.current = true; setSwipeX(Math.max(dx, -84)); }
+    else if (showDeleteBtn && dx > 12) { setSwipeX(Math.min(dx - 84, 0)); }
   };
   const onTouchEndSwipe = () => {
     if (touchDrag.active) return;
-    if (swipeX < -40) { setSwipeX(-80); setShowDeleteBtn(true); }
+    if (swipeX < -52) { setSwipeX(-84); setShowDeleteBtn(true); }
     else { setSwipeX(0); setShowDeleteBtn(false); }
   };
 
@@ -82,7 +82,13 @@ export default function TaskRow({ task, cats, onComplete, onEdit, onDelete, idx,
       touchDrag.start(idx, e.touches[0].clientY);
     }, 500);
   };
-  const onTouchMoveCancelDrag = () => { if (longPressTimer.current) clearTimeout(longPressTimer.current); };
+  const onTouchMoveCancelDrag = (e: React.TouchEvent) => {
+    const dx = Math.abs(e.touches[0].clientX - touchStartX.current);
+    const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
+    if (dx > 8 || dy > 8) {
+      if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    }
+  };
   const onTouchEndDrag = () => { if (longPressTimer.current) clearTimeout(longPressTimer.current); };
 
   // PC right-click
@@ -103,7 +109,7 @@ export default function TaskRow({ task, cats, onComplete, onEdit, onDelete, idx,
         className="relative bg-white transition-transform"
         style={{ transform: `translateX(${swipeX}px)` }}
         onTouchStart={(e) => { onTouchStartSwipe(e); onTouchStartDrag(e); }}
-        onTouchMove={(e) => { onTouchMoveSwipe(e); onTouchMoveCancelDrag(); }}
+        onTouchMove={(e) => { onTouchMoveSwipe(e); onTouchMoveCancelDrag(e); }}
         onTouchEnd={() => { onTouchEndSwipe(); onTouchEndDrag(); }}
         onContextMenu={handleContextMenu}
       >
