@@ -13,7 +13,7 @@ import CompletedList from "@/components/CompletedList";
 import GroupView from "@/components/GroupView";
 import TimetableView from "@/components/TimetableView";
 import { auth, firebaseEnabled, googleProvider } from "@/lib/firebase";
-import { signInWithPopup, signOut, onAuthStateChanged, User } from "firebase/auth";
+import { signInWithPopup, signOut, onAuthStateChanged, signInWithRedirect, User } from "firebase/auth";
 import { loadCloudSnapshot, migrateLocalToCloudOnce, saveCloudSnapshot } from "@/lib/cloudStorage";
 
 type View = "list" | "calendar" | "timetable" | "group" | "completed";
@@ -281,7 +281,27 @@ export default function Home() {
 
   const handleGoogleLogin = async () => {
     if (!auth || !googleProvider) return;
-    await signInWithPopup(auth, googleProvider);
+    const ua = navigator.userAgent;
+    const isIOS = /iPad|iPhone|iPod/.test(ua);
+    const isInAppBrowser = /FBAN|FBAV|Instagram|Line|Twitter|wv/.test(ua);
+    if (isIOS || isInAppBrowser) {
+      await signInWithRedirect(auth, googleProvider);
+      return;
+    }
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (e) {
+      const code = (e as { code?: string })?.code;
+      if (
+        code === "auth/popup-blocked" ||
+        code === "auth/cancelled-popup-request" ||
+        code === "auth/operation-not-supported-in-this-environment"
+      ) {
+        await signInWithRedirect(auth, googleProvider);
+        return;
+      }
+      throw e;
+    }
   };
 
   const handleLogout = async () => {
