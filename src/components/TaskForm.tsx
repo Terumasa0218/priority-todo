@@ -1,8 +1,8 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { Task, Category } from "@/lib/types";
-import { RECUR, REMINDERS } from "@/lib/constants";
-import { DAY, uid, calcEndDate, calcCount, snapToWeekday } from "@/lib/utils";
+import { DAY, RECUR, REMINDERS } from "@/lib/constants";
+import { uid, calcEndDate, calcCount, snapToWeekday } from "@/lib/utils";
 import CategoryPicker from "./CategoryPicker";
 import { IconFlag } from "./Icons";
 

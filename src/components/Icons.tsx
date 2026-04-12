@@ -28,14 +28,14 @@ export const IconTrash = (p: Omit<IconProps, "d">) => <Icon d="M3 6h18M8 6V4a2 2
 export const IconBook = (p: Omit<IconProps, "d">) => <Icon d="M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 016.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" {...p} />;
 export const IconUsers = (p: Omit<IconProps, "d">) => <Icon d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" {...p} />;
 
-export const IconFlag = ({ filled, ...p }: { filled?: boolean } & React.SVGAttributes<SVGSVGElement>) =>
+export const IconFlag = ({ filled, size = 16, ...p }: { filled?: boolean; size?: number } & React.SVGAttributes<SVGSVGElement>) =>
   filled ? (
-    <svg width={16} height={16} viewBox="0 0 24 24" fill="#CD2B31" stroke="#CD2B31" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="#CD2B31" stroke="#CD2B31" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" {...p}>
       <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
       <line x1="4" y1="22" x2="4" y2="15" />
     </svg>
   ) : (
-    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" {...p}>
       <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
       <line x1="4" y1="22" x2="4" y2="15" />
     </svg>
