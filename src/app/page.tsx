@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { FILTERS, DEFAULT_CATS } from "@/lib/constants";
+import { FILTERS, DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG } from "@/lib/constants";
 import { expandRecurring, remaining, uid } from "@/lib/utils";
-import { loadTasks, saveTasks, loadCategories, saveCategories, loadGroups, saveGroups, loadTimetable, saveTimetable } from "@/lib/storage";
-import { Category, Group, Task, TimetableItem, TouchDragState } from "@/lib/types";
+import { loadTasks, saveTasks, loadCategories, saveCategories, loadGroups, saveGroups, loadTimetable, saveTimetable, loadTimetableConfig, saveTimetableConfig } from "@/lib/storage";
+import { Category, Group, Task, TimetableConfig, TimetableItem, TouchDragState } from "@/lib/types";
 import { IconArchive, IconBook, IconCalendar, IconClock, IconList, IconPalette, IconPlus, IconSettings, IconUsers } from "@/components/Icons";
 import TaskRow from "@/components/TaskRow";
 import TaskForm from "@/components/TaskForm";
@@ -21,6 +21,7 @@ export default function Home() {
   const [cats, setCats] = useState<Category[]>(DEFAULT_CATS);
   const [groups, setGroups] = useState<Group[]>([]);
   const [timetable, setTimetable] = useState<TimetableItem[]>([]);
+  const [timetableConfig, setTimetableConfig] = useState<TimetableConfig>(DEFAULT_TIMETABLE_CONFIG);
   const [view, setView] = useState<View>("list");
   const [filter, setFilter] = useState("week");
   const [catFilter, setCatFilter] = useState("all");
@@ -104,12 +105,14 @@ export default function Home() {
     setCats(loadCategories());
     setGroups(loadGroups());
     setTimetable(loadTimetable());
+    setTimetableConfig(loadTimetableConfig());
     setReady(true);
   }, []);
   useEffect(() => { if (ready) saveTasks(tasks); }, [tasks, ready]);
   useEffect(() => { if (ready) saveCategories(cats); }, [cats, ready]);
   useEffect(() => { if (ready) saveGroups(groups); }, [groups, ready]);
   useEffect(() => { if (ready) saveTimetable(timetable); }, [timetable, ready]);
+  useEffect(() => { if (ready) saveTimetableConfig(timetableConfig); }, [timetableConfig, ready]);
 
   useEffect(() => {
     if (view !== "calendar") setSelectedDate(null);
@@ -315,7 +318,7 @@ export default function Home() {
         )}
 
         {view === "calendar" && <div className="px-4 py-4"><CalendarView tasks={allExpanded} cats={cats} month={calMonth} setMonth={setCalMonth} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onAddClick={(d) => openNew(d)} onEditTask={(t) => { setEditTask(t); setPrefillDate(null); setShowForm(true); }} /></div>}
-        {view === "timetable" && <TimetableView items={timetable} setItems={setTimetable} setCats={setCats} />}
+        {view === "timetable" && <TimetableView items={timetable} setItems={setTimetable} setCats={setCats} config={timetableConfig} setConfig={setTimetableConfig} />}
         {view === "group" && <GroupView groups={groups} setGroups={setGroups} />}
         {view === "completed" && <div><div className="px-4 py-3 flex items-center justify-between"><span className="text-sm font-semibold text-gray-900">達成済み</span><span className="text-[11px] text-gray-400">{completed.length}件</span></div><CompletedList tasks={completed} cats={cats} onRestore={handleRestore} /></div>}
       </div>
