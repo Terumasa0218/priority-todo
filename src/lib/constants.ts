@@ -40,6 +40,11 @@ export const DEFAULT_CATS: Category[] = [
 
 export const PERIODS = ["1限", "2限", "3限", "4限", "5限", "6限"] as const;
 
+export const DEFAULT_TIMETABLE_CONFIG = {
+  maxPeriod: 6,
+  showOnDemand: true,
+} as const;
+
 export const MEMBER_COLORS = [
   "#5B5BD6", "#CD2B31", "#30A46C", "#E5A500", "#8E4EC6",
   "#3E63DD", "#0EA5E9", "#D4440C", "#65A30D", "#E879A2",

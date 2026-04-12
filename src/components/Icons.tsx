@@ -53,3 +53,4 @@ export const IconPalette = ({ size = 16, stroke = "currentColor", ...p }: { size
 );
 
 export const IconClock = (p: Omit<IconProps, "d">) => <Icon d="M12 2a10 10 0 100 20 10 10 0 000-20zM12 6v6l4 2" {...p} />;
+export const IconPencil = (p: Omit<IconProps, "d">) => <Icon d="M12 20h9M16.5 3.5a2.1 2.1 0 113 3L7 19l-4 1 1-4 12.5-12.5z" {...p} />;
