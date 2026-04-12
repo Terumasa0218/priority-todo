@@ -42,6 +42,7 @@ export interface TimetableItem {
 export interface TimetableConfig {
   maxPeriod: number; // 6, 8, 10 ...
   showOnDemand: boolean;
+  onDemandSlots: number;
 }
 
 export interface Group {

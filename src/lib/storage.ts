@@ -63,9 +63,11 @@ export const loadTimetableConfig = (): TimetableConfig => {
   try {
     const raw = JSON.parse(localStorage.getItem(SK_TTC) || "null");
     const maxPeriod = Number(raw?.maxPeriod);
+    const onDemandSlots = Number(raw?.onDemandSlots);
     return {
       maxPeriod: Number.isFinite(maxPeriod) && maxPeriod >= 2 ? maxPeriod : DEFAULT_TIMETABLE_CONFIG.maxPeriod,
       showOnDemand: typeof raw?.showOnDemand === "boolean" ? raw.showOnDemand : DEFAULT_TIMETABLE_CONFIG.showOnDemand,
+      onDemandSlots: Number.isFinite(onDemandSlots) && onDemandSlots >= 0 ? onDemandSlots : DEFAULT_TIMETABLE_CONFIG.onDemandSlots,
     };
   } catch {
     return DEFAULT_TIMETABLE_CONFIG;
