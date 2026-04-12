@@ -63,11 +63,19 @@ export const loadTimetableConfig = (): TimetableConfig => {
   try {
     const raw = JSON.parse(localStorage.getItem(SK_TTC) || "null");
     const maxPeriod = Number(raw?.maxPeriod);
-    const onDemandSlots = Number(raw?.onDemandSlots);
+    const legacyOnDemandSlots = Number(raw?.onDemandSlots);
+    const onDemandSlotsByDayRaw = Array.isArray(raw?.onDemandSlotsByDay) ? raw.onDemandSlotsByDay : null;
+    const onDemandSlotsByDay = onDemandSlotsByDayRaw
+      ? [1, 2, 3, 4, 5].map((day) => {
+        const value = Number(onDemandSlotsByDayRaw[day - 1]);
+        return Number.isFinite(value) && value >= 0 ? Math.min(5, Math.floor(value)) : 0;
+      })
+      : [1, 2, 3, 4, 5].map((day) => (Number.isFinite(legacyOnDemandSlots) && day <= legacyOnDemandSlots ? 1 : 0));
+
     return {
       maxPeriod: Number.isFinite(maxPeriod) && maxPeriod >= 2 ? maxPeriod : DEFAULT_TIMETABLE_CONFIG.maxPeriod,
       showOnDemand: typeof raw?.showOnDemand === "boolean" ? raw.showOnDemand : DEFAULT_TIMETABLE_CONFIG.showOnDemand,
-      onDemandSlots: Number.isFinite(onDemandSlots) && onDemandSlots >= 0 ? onDemandSlots : DEFAULT_TIMETABLE_CONFIG.onDemandSlots,
+      onDemandSlotsByDay,
     };
   } catch {
     return DEFAULT_TIMETABLE_CONFIG;

@@ -43,7 +43,7 @@ export const PERIODS = ["1限", "2限", "3限", "4限", "5限", "6限"] as const
 export const DEFAULT_TIMETABLE_CONFIG = {
   maxPeriod: 6,
   showOnDemand: true,
-  onDemandSlots: 2,
+  onDemandSlotsByDay: [1, 1, 0, 0, 0],
 } as const;
 
 export const MEMBER_COLORS = [
