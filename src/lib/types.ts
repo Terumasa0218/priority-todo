@@ -32,11 +32,17 @@ export interface Category {
 export interface TimetableItem {
   id: string;
   name: string;
-  day: number; // 1=月, 2=火, ..., 6=土
-  period: number; // 1〜6
+  day: number; // 1=月, 2=火, ..., 5=金
+  period: number; // 1,3,5 ... (連続2コマの先頭時限)
   teacher: string;
   room: string;
   color: string;
+}
+
+export interface TimetableConfig {
+  maxPeriod: number; // 6, 8, 10 ...
+  showOnDemand: boolean;
+  onDemandSlots: number;
 }
 
 export interface Group {

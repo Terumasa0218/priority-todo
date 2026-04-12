@@ -1,7 +1,8 @@
 "use client";
 import React, { useMemo, useState } from "react";
-import { Category, TimetableItem } from "@/lib/types";
-import { PALETTE, PERIODS } from "@/lib/constants";
+import { IconPencil } from "@/components/Icons";
+import { Category, TimetableConfig, TimetableItem } from "@/lib/types";
+import { PALETTE } from "@/lib/constants";
 import { uid } from "@/lib/utils";
 
 const DAYS = [
@@ -10,13 +11,14 @@ const DAYS = [
   { value: 3, label: "水" },
   { value: 4, label: "木" },
   { value: 5, label: "金" },
-  { value: 6, label: "土" },
 ] as const;
 
 interface TimetableViewProps {
   items: TimetableItem[];
   setItems: React.Dispatch<React.SetStateAction<TimetableItem[]>>;
   setCats: React.Dispatch<React.SetStateAction<Category[]>>;
+  config: TimetableConfig;
+  setConfig: React.Dispatch<React.SetStateAction<TimetableConfig>>;
 }
 
 interface EditingState {
@@ -24,13 +26,45 @@ interface EditingState {
   item: TimetableItem;
 }
 
-export default function TimetableView({ items, setItems, setCats }: TimetableViewProps) {
+const ON_DEMAND_PERIOD = 999;
+const normalizePeriod = (period: number) => (period % 2 === 0 ? period - 1 : period);
+const buildPeriods = (maxPeriod: number) => {
+  const safeMax = Math.max(2, maxPeriod % 2 === 0 ? maxPeriod : maxPeriod + 1);
+  return Array.from({ length: safeMax / 2 }, (_, idx) => {
+    const start = idx * 2 + 1;
+    return { value: start, label: `${start}・${start + 1}限` };
+  });
+};
+
+export default function TimetableView({ items, setItems, setCats, config, setConfig }: TimetableViewProps) {
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [showError, setShowError] = useState(false);
+  const [showCustomize, setShowCustomize] = useState(false);
+
+  const periodOptions = useMemo(() => buildPeriods(config.maxPeriod), [config.maxPeriod]);
+  const onDemandSlots = Math.max(0, config.onDemandSlots ?? 0);
 
   const cellMap = useMemo(() => {
     const map = new Map<string, TimetableItem>();
-    items.forEach((it) => map.set(`${it.day}-${it.period}`, it));
+    items.forEach((it) => {
+      if (it.period === ON_DEMAND_PERIOD) return;
+      if (it.day < 1 || it.day > 5) return;
+      const normalized = normalizePeriod(it.period);
+      const maxStart = Math.max(1, (Math.floor(config.maxPeriod / 2) * 2) - 1);
+      if (normalized < 1 || normalized > maxStart) return;
+      map.set(`${it.day}-${normalized}`, { ...it, period: normalized });
+    });
+    return map;
+  }, [items, config.maxPeriod]);
+
+  const onDemandMap = useMemo(() => {
+    const map = new Map<number, TimetableItem>();
+    items
+      .filter((it) => it.period === ON_DEMAND_PERIOD)
+      .forEach((it, idx) => {
+        const slot = it.day > 0 ? it.day : idx + 1;
+        if (!map.has(slot)) map.set(slot, { ...it, day: slot });
+      });
     return map;
   }, [items]);
 
@@ -51,16 +85,14 @@ export default function TimetableView({ items, setItems, setCats }: TimetableVie
   };
 
   const openEdit = (item: TimetableItem) => {
-    setEditing({ mode: "edit", item });
+    setEditing({ mode: "edit", item: { ...item, period: item.period === ON_DEMAND_PERIOD ? ON_DEMAND_PERIOD : normalizePeriod(item.period) } });
     setShowError(false);
   };
 
   const upsertCategoryByTimetable = (item: TimetableItem) => {
     setCats((prev) => {
       const idx = prev.findIndex((c) => c.timetableId === item.id);
-      if (idx >= 0) {
-        return prev.map((c) => (c.timetableId === item.id ? { ...c, label: item.name, color: item.color } : c));
-      }
+      if (idx >= 0) return prev.map((c) => (c.timetableId === item.id ? { ...c, label: item.name, color: item.color } : c));
       return [...prev, { id: uid(), label: item.name, color: item.color, timetableId: item.id }];
     });
   };
@@ -75,11 +107,24 @@ export default function TimetableView({ items, setItems, setCats }: TimetableVie
       setShowError(true);
       return;
     }
-    const nextItem = { ...editing.item, name: editing.item.name.trim() };
+
+    const nextItem = {
+      ...editing.item,
+      period: editing.item.period === ON_DEMAND_PERIOD ? ON_DEMAND_PERIOD : normalizePeriod(editing.item.period),
+      name: editing.item.name.trim(),
+    };
+
     setItems((prev) => {
-      const filtered = prev.filter((it) => it.id !== nextItem.id && !(it.day === nextItem.day && it.period === nextItem.period));
+      const filtered = prev.filter((it) => {
+        if (it.id === nextItem.id) return false;
+        if (nextItem.period === ON_DEMAND_PERIOD) {
+          return !(it.period === ON_DEMAND_PERIOD && it.day === nextItem.day);
+        }
+        return !(it.day === nextItem.day && normalizePeriod(it.period) === nextItem.period);
+      });
       return [...filtered, nextItem];
     });
+
     upsertCategoryByTimetable(nextItem);
     setEditing(null);
   };
@@ -92,47 +137,110 @@ export default function TimetableView({ items, setItems, setCats }: TimetableVie
     setEditing(null);
   };
 
+  const applyCustomize = (maxPeriodInput: number, showOnDemandInput: boolean, onDemandSlotsInput: number) => {
+    const evenMax = Math.max(2, Math.min(20, maxPeriodInput % 2 === 0 ? maxPeriodInput : maxPeriodInput + 1));
+    const nextOnDemandSlots = Math.max(0, Math.min(20, Math.floor(onDemandSlotsInput)));
+    setConfig({ maxPeriod: evenMax, showOnDemand: showOnDemandInput, onDemandSlots: nextOnDemandSlots });
+    setItems((prev) => prev.filter((it) => {
+      if (it.period === ON_DEMAND_PERIOD) return it.day <= nextOnDemandSlots;
+      return it.day >= 1 && it.day <= 5 && normalizePeriod(it.period) <= evenMax - 1;
+    }));
+    setShowCustomize(false);
+  };
+
   return (
-    <div className="px-4 py-4">
-      <div className="overflow-x-auto">
-        <div className="min-w-[560px] border border-gray-100 rounded-xl overflow-hidden bg-white">
-          <div className="grid" style={{ gridTemplateColumns: "56px repeat(6, minmax(0, 1fr))" }}>
-            <div className="bg-gray-50 border-b border-r border-gray-100 h-10" />
-            {DAYS.map((d) => (
-              <div key={d.value} className="h-10 border-b border-gray-100 text-center text-xs font-semibold text-gray-600 flex items-center justify-center bg-gray-50">{d.label}</div>
-            ))}
-            {PERIODS.map((label, pidx) => {
-              const period = pidx + 1;
-              return (
-                <React.Fragment key={label}>
-                  <div className="h-22 border-r border-b border-gray-100 flex items-center justify-center text-xs text-gray-500 bg-gray-50">{label}</div>
-                  {DAYS.map((d) => {
-                    const key = `${d.value}-${period}`;
-                    const item = cellMap.get(key);
-                    if (!item) {
-                      return (
-                        <button key={key} onClick={() => openCreate(d.value, period)} className="h-22 border-b border-gray-100 flex items-center justify-center text-gray-200 hover:text-gray-400 hover:bg-gray-50 transition-colors">+
-                        </button>
-                      );
-                    }
+    <div className="px-2 py-4">
+      <div className="flex items-center justify-end mb-2">
+        <button onClick={() => setShowCustomize(true)} className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 px-2 py-1 rounded-md hover:bg-gray-100 transition-colors">
+          <IconPencil size={13} />カスタム
+        </button>
+      </div>
+
+      <div className="border border-gray-100 rounded-xl overflow-hidden bg-white">
+        <div className="grid" style={{ gridTemplateColumns: "50px repeat(5, minmax(0, 1fr))" }}>
+          <div className="bg-gray-50 border-b border-r border-gray-100 h-9" />
+          {DAYS.map((d) => (
+            <div key={d.value} className="h-9 border-b border-gray-100 text-center text-xs font-semibold text-gray-600 flex items-center justify-center bg-gray-50">{d.label}</div>
+          ))}
+
+          {periodOptions.map((slot) => (
+            <React.Fragment key={slot.value}>
+              <div className="h-20 border-r border-b border-gray-100 flex items-center justify-center text-[11px] text-gray-500 bg-gray-50">{slot.label}</div>
+              {DAYS.map((d) => {
+                const key = `${d.value}-${slot.value}`;
+                const item = cellMap.get(key);
+                if (!item) {
+                  return <button key={key} onClick={() => openCreate(d.value, slot.value)} className="h-20 border-b border-gray-100 flex items-center justify-center text-gray-200 hover:text-gray-400 hover:bg-gray-50 transition-colors">＋</button>;
+                }
+                return (
+                  <button key={key} onClick={() => openEdit(item)} className="h-20 border-b border-gray-100 p-1.5 text-left transition-colors hover:brightness-95" style={{ backgroundColor: `${item.color}20`, borderLeft: `3px solid ${item.color}` }}>
+                    <div className="text-[11px] font-semibold text-gray-900 leading-tight line-clamp-3">{item.name}</div>
+                    <div className="text-[10px] text-gray-500 truncate mt-1">{item.room || "教室未設定"}</div>
+                  </button>
+                );
+              })}
+            </React.Fragment>
+          ))}
+
+          {config.showOnDemand && onDemandSlots > 0 && (
+            <>
+              <div className="border-r border-b border-gray-100 flex items-center justify-center text-[11px] text-gray-500 bg-gray-50 font-medium">オンデ</div>
+              <div className="border-b border-gray-100 col-span-5 p-2">
+                <div className="grid grid-cols-2 gap-1.5">
+                  {Array.from({ length: onDemandSlots }, (_, idx) => {
+                    const slot = idx + 1;
+                    const item = onDemandMap.get(slot);
                     return (
                       <button
-                        key={key}
-                        onClick={() => openEdit(item)}
-                        className="h-22 border-b border-gray-100 p-2 text-left transition-colors hover:brightness-95"
-                        style={{ backgroundColor: `${item.color}20`, borderLeft: `3px solid ${item.color}` }}
+                        key={slot}
+                        onClick={() => (item ? openEdit(item) : openCreate(slot, ON_DEMAND_PERIOD))}
+                        className={`h-10 rounded-md border text-[11px] px-2 text-left transition-colors ${item ? "hover:brightness-95" : "border-dashed border-gray-300 text-gray-400 hover:bg-gray-50"}`}
+                        style={item ? { backgroundColor: `${item.color}20`, borderColor: `${item.color}88` } : undefined}
                       >
-                        <div className="text-xs font-semibold text-gray-900 truncate">{item.name}</div>
-                        <div className="text-[11px] text-gray-500 truncate mt-1">{item.room || "教室未設定"}</div>
+                        <span className="block truncate">{item ? item.name : `オンデマンド ${slot}`}</span>
                       </button>
                     );
                   })}
-                </React.Fragment>
-              );
-            })}
-          </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
+
+      {showCustomize && (
+        <div className="fixed inset-0 z-50 bg-gray-50/95 flex flex-col" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
+          <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
+            <button onClick={() => setShowCustomize(false)} className="text-sm text-blue-500 font-medium">キャンセル</button>
+            <span className="text-sm font-semibold text-gray-900">時間割のカスタム</span>
+            <button
+              onClick={() => {
+                const periodInput = document.getElementById("max-period-input") as HTMLInputElement | null;
+                const toggle = document.getElementById("ondemand-toggle") as HTMLInputElement | null;
+                const slotInput = document.getElementById("ondemand-slots-input") as HTMLInputElement | null;
+                applyCustomize(Number(periodInput?.value || config.maxPeriod), !!toggle?.checked, Number(slotInput?.value ?? config.onDemandSlots));
+              }}
+              className="text-sm font-semibold text-blue-500"
+            >保存</button>
+          </div>
+          <div className="mt-4 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
+            <div className="px-4 py-3 border-b border-gray-100">
+              <div className="text-sm text-gray-900 mb-1">最大時限</div>
+              <input id="max-period-input" type="number" min={2} max={20} step={2} defaultValue={config.maxPeriod} className="w-full px-3 py-2 rounded-md border border-gray-200 text-sm" />
+              <p className="text-[11px] text-gray-400 mt-1">偶数で入力（例: 6 / 8 / 10）。1・2限、3・4限のセットで表示します。</p>
+            </div>
+            <label className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+              <span className="text-sm text-gray-900">下部にオンデマンド枠を表示</span>
+              <input id="ondemand-toggle" type="checkbox" defaultChecked={config.showOnDemand} className="w-4 h-4" />
+            </label>
+            <div className="px-4 py-3">
+              <div className="text-sm text-gray-900 mb-1">オンデマンド枠数</div>
+              <input id="ondemand-slots-input" type="number" min={0} max={20} step={1} defaultValue={config.onDemandSlots} className="w-full px-3 py-2 rounded-md border border-gray-200 text-sm" />
+              <p className="text-[11px] text-gray-400 mt-1">0で非表示。任意の数に変更できます。</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {editing && (
         <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
@@ -155,38 +263,30 @@ export default function TimetableView({ items, setItems, setCats }: TimetableVie
                 autoFocus
               />
               {showError && !editing.item.name.trim() && <div className="px-4 py-2 text-xs text-red-500 bg-red-50/50">授業名を入力してください</div>}
-              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                <span className="text-sm text-gray-900">曜日</span>
-                <select
-                  value={editing.item.day}
-                  onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, day: Number(e.target.value) } } : prev)}
-                  className="text-sm text-gray-500 bg-transparent focus:outline-none"
-                >
-                  {DAYS.map((d) => <option key={d.value} value={d.value}>{d.label}曜</option>)}
-                </select>
-              </div>
-              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                <span className="text-sm text-gray-900">時限</span>
-                <select
-                  value={editing.item.period}
-                  onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, period: Number(e.target.value) } } : prev)}
-                  className="text-sm text-gray-500 bg-transparent focus:outline-none"
-                >
-                  {PERIODS.map((p, idx) => <option key={p} value={idx + 1}>{p}</option>)}
-                </select>
-              </div>
+              {editing.item.period !== ON_DEMAND_PERIOD && (
+                <>
+                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                    <span className="text-sm text-gray-900">曜日</span>
+                    <select value={editing.item.day} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, day: Number(e.target.value) } } : prev)} className="text-sm text-gray-500 bg-transparent focus:outline-none">
+                      {DAYS.map((d) => <option key={d.value} value={d.value}>{d.label}曜</option>)}
+                    </select>
+                  </div>
+                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                    <span className="text-sm text-gray-900">時限</span>
+                    <select value={editing.item.period} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, period: Number(e.target.value) } } : prev)} className="text-sm text-gray-500 bg-transparent focus:outline-none">
+                      {periodOptions.map((slot) => <option key={slot.value} value={slot.value}>{slot.label}</option>)}
+                    </select>
+                  </div>
+                </>
+              )}
+              {editing.item.period === ON_DEMAND_PERIOD && <div className="px-4 py-3 border-b border-gray-100 text-sm text-gray-500">オンデマンド枠 {editing.item.day}</div>}
               <input type="text" value={editing.item.teacher} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, teacher: e.target.value } } : prev)} placeholder="教員名（任意）" className="w-full px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none border-b border-gray-100" />
               <input type="text" value={editing.item.room} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, room: e.target.value } } : prev)} placeholder="教室（任意）" className="w-full px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none border-b border-gray-100" />
               <div className="px-4 py-3">
                 <span className="text-sm text-gray-900 block mb-2">色</span>
                 <div className="flex gap-1.5 flex-wrap">
                   {PALETTE.map((co) => (
-                    <button
-                      key={co}
-                      onClick={() => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, color: co } } : prev)}
-                      className={`w-6 h-6 rounded-full transition-all ${editing.item.color === co ? "ring-2 ring-offset-1 ring-gray-900 scale-110" : ""}`}
-                      style={{ backgroundColor: co }}
-                    />
+                    <button key={co} onClick={() => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, color: co } } : prev)} className={`w-6 h-6 rounded-full transition-all ${editing.item.color === co ? "ring-2 ring-offset-1 ring-gray-900 scale-110" : ""}`} style={{ backgroundColor: co }} />
                   ))}
                 </div>
               </div>
