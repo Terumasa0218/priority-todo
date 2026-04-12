@@ -42,7 +42,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
   const [showCustomize, setShowCustomize] = useState(false);
 
   const periodOptions = useMemo(() => buildPeriods(config.maxPeriod), [config.maxPeriod]);
-  const onDemandSlots = Math.max(0, config.onDemandSlots ?? 0);
+  const onDemandSlots = Math.max(0, Math.min(5, config.onDemandSlots ?? 0));
 
   const cellMap = useMemo(() => {
     const map = new Map<string, TimetableItem>();
@@ -139,7 +139,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
 
   const applyCustomize = (maxPeriodInput: number, showOnDemandInput: boolean, onDemandSlotsInput: number) => {
     const evenMax = Math.max(2, Math.min(20, maxPeriodInput % 2 === 0 ? maxPeriodInput : maxPeriodInput + 1));
-    const nextOnDemandSlots = Math.max(0, Math.min(20, Math.floor(onDemandSlotsInput)));
+    const nextOnDemandSlots = Math.max(0, Math.min(5, Math.floor(onDemandSlotsInput)));
     setConfig({ maxPeriod: evenMax, showOnDemand: showOnDemandInput, onDemandSlots: nextOnDemandSlots });
     setItems((prev) => prev.filter((it) => {
       if (it.period === ON_DEMAND_PERIOD) return it.day <= nextOnDemandSlots;
@@ -156,24 +156,24 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
         </button>
       </div>
 
-      <div className="border border-gray-100 rounded-xl overflow-hidden bg-white">
+      <div className="border border-gray-300 rounded-xl overflow-hidden bg-white">
         <div className="grid" style={{ gridTemplateColumns: "50px repeat(5, minmax(0, 1fr))" }}>
-          <div className="bg-gray-50 border-b border-r border-gray-100 h-9" />
+          <div className="bg-gray-50 border-b border-r border-gray-300 h-9" />
           {DAYS.map((d) => (
-            <div key={d.value} className="h-9 border-b border-gray-100 text-center text-xs font-semibold text-gray-600 flex items-center justify-center bg-gray-50">{d.label}</div>
+            <div key={d.value} className="h-9 border-b border-gray-300 text-center text-xs font-semibold text-gray-600 flex items-center justify-center bg-gray-50">{d.label}</div>
           ))}
 
           {periodOptions.map((slot) => (
             <React.Fragment key={slot.value}>
-              <div className="h-20 border-r border-b border-gray-100 flex items-center justify-center text-[11px] text-gray-500 bg-gray-50">{slot.label}</div>
+              <div className="h-20 border-r border-b border-gray-300 flex items-center justify-center text-[11px] text-gray-500 bg-gray-50">{slot.label}</div>
               {DAYS.map((d) => {
                 const key = `${d.value}-${slot.value}`;
                 const item = cellMap.get(key);
                 if (!item) {
-                  return <button key={key} onClick={() => openCreate(d.value, slot.value)} className="h-20 border-b border-gray-100 flex items-center justify-center text-gray-200 hover:text-gray-400 hover:bg-gray-50 transition-colors">＋</button>;
+                  return <button key={key} onClick={() => openCreate(d.value, slot.value)} className="h-20 border-b border-gray-300 flex items-center justify-center text-gray-300 hover:text-gray-500 hover:bg-gray-50 transition-colors">＋</button>;
                 }
                 return (
-                  <button key={key} onClick={() => openEdit(item)} className="h-20 border-b border-gray-100 p-1.5 text-left transition-colors hover:brightness-95" style={{ backgroundColor: `${item.color}20`, borderLeft: `3px solid ${item.color}` }}>
+                  <button key={key} onClick={() => openEdit(item)} className="h-20 border-b border-gray-300 p-1.5 text-left transition-colors hover:brightness-95" style={{ backgroundColor: `${item.color}20`, borderLeft: `3px solid ${item.color}` }}>
                     <div className="text-[11px] font-semibold text-gray-900 leading-tight line-clamp-3">{item.name}</div>
                     <div className="text-[10px] text-gray-500 truncate mt-1">{item.room || "教室未設定"}</div>
                   </button>
@@ -184,25 +184,27 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
 
           {config.showOnDemand && onDemandSlots > 0 && (
             <>
-              <div className="min-h-16 border-r border-b border-gray-100 flex items-center justify-center text-xs text-gray-500 bg-gray-50 font-medium px-2">オンデマンド</div>
-              <div className="min-h-16 border-b border-gray-100 col-span-5 p-2">
-                <div className="flex gap-2 flex-wrap">
-                  {Array.from({ length: onDemandSlots }, (_, idx) => {
-                    const slot = idx + 1;
-                    const item = onDemandMap.get(slot);
-                    return (
+              <div className="min-h-16 border-r border-b border-gray-300 flex items-center justify-center text-xs text-gray-500 bg-gray-50 font-medium px-2">オンデマンド</div>
+              {DAYS.map((d, idx) => {
+                const enabled = idx < onDemandSlots;
+                const item = enabled ? onDemandMap.get(d.value) : null;
+                return (
+                  <div key={d.value} className="min-h-16 border-b border-gray-300 p-1.5">
+                    {enabled ? (
                       <button
-                        key={slot}
-                        onClick={() => (item ? openEdit(item) : openCreate(slot, ON_DEMAND_PERIOD))}
-                        className={`h-10 rounded-md border text-[11px] px-2 text-left transition-colors ${item ? "hover:brightness-95" : "border-dashed border-gray-300 text-gray-400 hover:bg-gray-50"}`}
+                        onClick={() => (item ? openEdit(item) : openCreate(d.value, ON_DEMAND_PERIOD))}
+                        className={`w-full h-12 rounded-md border text-[11px] px-2 text-left transition-colors ${item ? "hover:brightness-95" : "border-dashed border-gray-300 text-gray-400 hover:bg-gray-50"}`}
                         style={item ? { backgroundColor: `${item.color}20`, borderColor: `${item.color}88` } : undefined}
                       >
-                        <span className="block truncate">{item ? item.name : `オンデマンド ${slot}`}</span>
+                        <span className="block text-[10px] text-gray-500 mb-0.5">{d.label}曜</span>
+                        <span className="block truncate">{item ? item.name : "未設定"}</span>
                       </button>
-                    );
-                  })}
-                </div>
-              </div>
+                    ) : (
+                      <div className="w-full h-12 rounded-md border border-gray-200 bg-gray-50 text-[10px] text-gray-300 flex items-center justify-center">-</div>
+                    )}
+                  </div>
+                );
+              })}
             </>
           )}
         </div>
@@ -235,8 +237,8 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
             </label>
             <div className="px-4 py-3">
               <div className="text-sm text-gray-900 mb-1">オンデマンド枠数</div>
-              <input id="ondemand-slots-input" type="number" min={0} max={20} step={1} defaultValue={config.onDemandSlots} className="w-full px-3 py-2 rounded-md border border-gray-200 text-sm" />
-              <p className="text-[11px] text-gray-400 mt-1">0で非表示。任意の数に変更できます。</p>
+              <input id="ondemand-slots-input" type="number" min={0} max={5} step={1} defaultValue={config.onDemandSlots} className="w-full px-3 py-2 rounded-md border border-gray-200 text-sm" />
+              <p className="text-[11px] text-gray-400 mt-1">0で非表示。月〜金で表示する曜日数（最大5）を設定できます。</p>
             </div>
           </div>
         </div>
