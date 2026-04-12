@@ -184,37 +184,13 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
 
           {config.showOnDemand && onDemandSlots > 0 && (
             <>
-              <div className="border-r border-b border-gray-100 flex items-center justify-center text-[11px] text-gray-500 bg-gray-50 font-medium">オンデ</div>
-              <div className="border-b border-gray-100 col-span-5 p-2">
-                <div className="grid grid-cols-2 gap-1.5">
+              <div className="min-h-16 border-r border-b border-gray-100 flex items-center justify-center text-xs text-gray-500 bg-gray-50 font-medium px-2">オンデマンド</div>
+              <div className="min-h-16 border-b border-gray-100 col-span-5 p-2">
+                <div className="flex gap-2 flex-wrap">
                   {Array.from({ length: onDemandSlots }, (_, idx) => {
                     const slot = idx + 1;
                     const item = onDemandMap.get(slot);
                     return (
-                      <button key={key} onClick={() => openCreate(d.value, slot.value)} className="h-22 border-b border-gray-100 flex items-center justify-center text-gray-200 hover:text-gray-400 hover:bg-gray-50 transition-colors">+
-                      </button>
-                    );
-                  }
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => openEdit(item)}
-                      className="h-22 border-b border-gray-100 p-2 text-left transition-colors hover:brightness-95"
-                      style={{ backgroundColor: `${item.color}20`, borderLeft: `3px solid ${item.color}` }}
-                    >
-                      <div className="text-xs font-semibold text-gray-900 truncate">{item.name}</div>
-                      <div className="text-[11px] text-gray-500 truncate mt-1">{item.room || "教室未設定"}</div>
-                    </button>
-                  );
-                })}
-              </React.Fragment>
-            ))}
-            {config.showOnDemand && (
-              <>
-                <div className="min-h-16 border-r border-b border-gray-100 flex items-center justify-center text-xs text-gray-500 bg-gray-50 font-medium px-2">オンデマンド</div>
-                <div className="min-h-16 border-b border-gray-100 col-span-5 p-2">
-                  <div className="flex gap-2 flex-wrap">
-                    {onDemandItems.map((item) => (
                       <button
                         key={slot}
                         onClick={() => (item ? openEdit(item) : openCreate(slot, ON_DEMAND_PERIOD))}
