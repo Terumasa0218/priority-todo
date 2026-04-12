@@ -42,7 +42,7 @@ export interface TimetableItem {
 export interface TimetableConfig {
   maxPeriod: number; // 6, 8, 10 ...
   showOnDemand: boolean;
-  onDemandSlots: number;
+  onDemandSlotsByDay: number[]; // 月〜金のオンデマンド枠数
 }
 
 export interface Group {

@@ -27,6 +27,8 @@ interface EditingState {
 }
 
 const ON_DEMAND_PERIOD = 999;
+const isOnDemandPeriod = (period: number) => period >= ON_DEMAND_PERIOD;
+const getOnDemandSlotIndex = (period: number) => Math.max(0, period - ON_DEMAND_PERIOD);
 const normalizePeriod = (period: number) => (period % 2 === 0 ? period - 1 : period);
 const buildPeriods = (maxPeriod: number) => {
   const safeMax = Math.max(2, maxPeriod % 2 === 0 ? maxPeriod : maxPeriod + 1);
@@ -42,12 +44,15 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
   const [showCustomize, setShowCustomize] = useState(false);
 
   const periodOptions = useMemo(() => buildPeriods(config.maxPeriod), [config.maxPeriod]);
-  const onDemandSlots = Math.max(0, Math.min(5, config.onDemandSlots ?? 0));
+  const onDemandSlotsByDay = DAYS.map((_, idx) => {
+    const value = Number(config.onDemandSlotsByDay?.[idx] ?? 0);
+    return Number.isFinite(value) ? Math.max(0, Math.min(5, Math.floor(value))) : 0;
+  });
 
   const cellMap = useMemo(() => {
     const map = new Map<string, TimetableItem>();
     items.forEach((it) => {
-      if (it.period === ON_DEMAND_PERIOD) return;
+      if (isOnDemandPeriod(it.period)) return;
       if (it.day < 1 || it.day > 5) return;
       const normalized = normalizePeriod(it.period);
       const maxStart = Math.max(1, (Math.floor(config.maxPeriod / 2) * 2) - 1);
@@ -58,15 +63,20 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
   }, [items, config.maxPeriod]);
 
   const onDemandMap = useMemo(() => {
-    const map = new Map<number, TimetableItem>();
+    const map = new Map<number, TimetableItem[]>();
     items
-      .filter((it) => it.period === ON_DEMAND_PERIOD)
-      .forEach((it, idx) => {
-        const slot = it.day > 0 ? it.day : idx + 1;
-        if (!map.has(slot)) map.set(slot, { ...it, day: slot });
+      .filter((it) => isOnDemandPeriod(it.period))
+      .forEach((it) => {
+        if (it.day < 1 || it.day > 5) return;
+        const list = map.get(it.day) ?? [];
+        list.push({ ...it, day: it.day });
+        map.set(it.day, list);
       });
+    map.forEach((list, day) => {
+      map.set(day, list.sort((a, b) => getOnDemandSlotIndex(a.period) - getOnDemandSlotIndex(b.period)));
+    });
     return map;
-  }, [items, config.maxPeriod]);
+  }, [items]);
 
   const openCreate = (day: number, period: number) => {
     setEditing({
@@ -85,7 +95,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
   };
 
   const openEdit = (item: TimetableItem) => {
-    setEditing({ mode: "edit", item: { ...item, period: item.period === ON_DEMAND_PERIOD ? ON_DEMAND_PERIOD : normalizePeriod(item.period) } });
+    setEditing({ mode: "edit", item: { ...item, period: isOnDemandPeriod(item.period) ? item.period : normalizePeriod(item.period) } });
     setShowError(false);
   };
 
@@ -110,15 +120,15 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
 
     const nextItem = {
       ...editing.item,
-      period: editing.item.period === ON_DEMAND_PERIOD ? ON_DEMAND_PERIOD : normalizePeriod(editing.item.period),
+      period: isOnDemandPeriod(editing.item.period) ? editing.item.period : normalizePeriod(editing.item.period),
       name: editing.item.name.trim(),
     };
 
     setItems((prev) => {
       const filtered = prev.filter((it) => {
         if (it.id === nextItem.id) return false;
-        if (nextItem.period === ON_DEMAND_PERIOD) {
-          return !(it.period === ON_DEMAND_PERIOD && it.day === nextItem.day);
+        if (isOnDemandPeriod(nextItem.period)) {
+          return !(isOnDemandPeriod(it.period) && it.day === nextItem.day && getOnDemandSlotIndex(it.period) === getOnDemandSlotIndex(nextItem.period));
         }
         return !(it.day === nextItem.day && normalizePeriod(it.period) === nextItem.period);
       });
@@ -137,12 +147,18 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
     setEditing(null);
   };
 
-  const applyCustomize = (maxPeriodInput: number, showOnDemandInput: boolean, onDemandSlotsInput: number) => {
+  const applyCustomize = (maxPeriodInput: number, showOnDemandInput: boolean, onDemandSlotsInput: number[]) => {
     const evenMax = Math.max(2, Math.min(20, maxPeriodInput % 2 === 0 ? maxPeriodInput : maxPeriodInput + 1));
-    const nextOnDemandSlots = Math.max(0, Math.min(5, Math.floor(onDemandSlotsInput)));
-    setConfig({ maxPeriod: evenMax, showOnDemand: showOnDemandInput, onDemandSlots: nextOnDemandSlots });
+    const nextOnDemandSlotsByDay = DAYS.map((_, idx) => {
+      const value = Number(onDemandSlotsInput[idx] ?? 0);
+      return Number.isFinite(value) ? Math.max(0, Math.min(5, Math.floor(value))) : 0;
+    });
+    setConfig({ maxPeriod: evenMax, showOnDemand: showOnDemandInput, onDemandSlotsByDay: nextOnDemandSlotsByDay });
     setItems((prev) => prev.filter((it) => {
-      if (it.period === ON_DEMAND_PERIOD) return it.day <= nextOnDemandSlots;
+      if (isOnDemandPeriod(it.period)) {
+        if (it.day < 1 || it.day > 5) return false;
+        return getOnDemandSlotIndex(it.period) < nextOnDemandSlotsByDay[it.day - 1];
+      }
       return it.day >= 1 && it.day <= 5 && normalizePeriod(it.period) <= evenMax - 1;
     }));
     setShowCustomize(false);
@@ -182,23 +198,31 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
             </React.Fragment>
           ))}
 
-          {config.showOnDemand && onDemandSlots > 0 && (
+          {config.showOnDemand && onDemandSlotsByDay.some((count) => count > 0) && (
             <>
               <div className="min-h-16 border-r border-b border-gray-300 flex items-center justify-center text-xs text-gray-500 bg-gray-50 font-medium px-2">オンデマンド</div>
               {DAYS.map((d, idx) => {
-                const enabled = idx < onDemandSlots;
-                const item = enabled ? onDemandMap.get(d.value) : null;
+                const count = onDemandSlotsByDay[idx];
+                const dayItems = onDemandMap.get(d.value) ?? [];
                 return (
                   <div key={d.value} className="min-h-16 border-b border-gray-300 p-1.5">
-                    {enabled ? (
-                      <button
-                        onClick={() => (item ? openEdit(item) : openCreate(d.value, ON_DEMAND_PERIOD))}
-                        className={`w-full h-12 rounded-md border text-[11px] px-2 text-left transition-colors ${item ? "hover:brightness-95" : "border-dashed border-gray-300 text-gray-400 hover:bg-gray-50"}`}
-                        style={item ? { backgroundColor: `${item.color}20`, borderColor: `${item.color}88` } : undefined}
-                      >
-                        <span className="block text-[10px] text-gray-500 mb-0.5">{d.label}曜</span>
-                        <span className="block truncate">{item ? item.name : "未設定"}</span>
-                      </button>
+                    {count > 0 ? (
+                      <div className="space-y-1">
+                        {Array.from({ length: count }, (_, slotIdx) => {
+                          const item = dayItems.find((it) => getOnDemandSlotIndex(it.period) === slotIdx) ?? null;
+                          return (
+                            <button
+                              key={`${d.value}-${slotIdx}`}
+                              onClick={() => (item ? openEdit(item) : openCreate(d.value, ON_DEMAND_PERIOD + slotIdx))}
+                              className={`w-full h-12 rounded-md border text-[11px] px-2 text-left transition-colors ${item ? "hover:brightness-95" : "border-dashed border-gray-300 text-gray-400 hover:bg-gray-50"}`}
+                              style={item ? { backgroundColor: `${item.color}20`, borderColor: `${item.color}88` } : undefined}
+                            >
+                              <span className="block text-[10px] text-gray-500 mb-0.5">{d.label}曜 {slotIdx + 1}</span>
+                              <span className="block truncate">{item ? item.name : "未設定"}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     ) : (
                       <div className="w-full h-12 rounded-md border border-gray-200 bg-gray-50 text-[10px] text-gray-300 flex items-center justify-center">-</div>
                     )}
@@ -219,8 +243,11 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
               onClick={() => {
                 const periodInput = document.getElementById("max-period-input") as HTMLInputElement | null;
                 const toggle = document.getElementById("ondemand-toggle") as HTMLInputElement | null;
-                const slotInput = document.getElementById("ondemand-slots-input") as HTMLInputElement | null;
-                applyCustomize(Number(periodInput?.value || config.maxPeriod), !!toggle?.checked, Number(slotInput?.value ?? config.onDemandSlots));
+                const slotInputs = DAYS.map((d) => {
+                  const input = document.getElementById(`ondemand-slots-day-${d.value}`) as HTMLInputElement | null;
+                  return Number(input?.value ?? config.onDemandSlotsByDay?.[d.value - 1] ?? 0);
+                });
+                applyCustomize(Number(periodInput?.value || config.maxPeriod), !!toggle?.checked, slotInputs);
               }}
               className="text-sm font-semibold text-blue-500"
             >保存</button>
@@ -236,9 +263,16 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
               <input id="ondemand-toggle" type="checkbox" defaultChecked={config.showOnDemand} className="w-4 h-4" />
             </label>
             <div className="px-4 py-3">
-              <div className="text-sm text-gray-900 mb-1">オンデマンド枠数</div>
-              <input id="ondemand-slots-input" type="number" min={0} max={5} step={1} defaultValue={config.onDemandSlots} className="w-full px-3 py-2 rounded-md border border-gray-200 text-sm" />
-              <p className="text-[11px] text-gray-400 mt-1">0で非表示。月〜金で表示する曜日数（最大5）を設定できます。</p>
+              <div className="text-sm text-gray-900 mb-2">オンデマンド枠数（曜日ごと）</div>
+              <div className="grid grid-cols-5 gap-2">
+                {DAYS.map((d, idx) => (
+                  <label key={d.value} className="space-y-1">
+                    <span className="text-[11px] text-gray-500">{d.label}曜</span>
+                    <input id={`ondemand-slots-day-${d.value}`} type="number" min={0} max={5} step={1} defaultValue={config.onDemandSlotsByDay?.[idx] ?? 0} className="w-full px-2 py-1.5 rounded-md border border-gray-200 text-sm" />
+                  </label>
+                ))}
+              </div>
+              <p className="text-[11px] text-gray-400 mt-2">例: 月曜2・火曜3 のように、曜日ごとに最下段へ表示する枠数を設定できます（最大5）。</p>
             </div>
           </div>
         </div>
@@ -265,7 +299,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
                 autoFocus
               />
               {showError && !editing.item.name.trim() && <div className="px-4 py-2 text-xs text-red-500 bg-red-50/50">授業名を入力してください</div>}
-              {editing.item.period !== ON_DEMAND_PERIOD && (
+              {!isOnDemandPeriod(editing.item.period) && (
                 <>
                   <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                     <span className="text-sm text-gray-900">曜日</span>
@@ -281,7 +315,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
                   </div>
                 </>
               )}
-              {editing.item.period === ON_DEMAND_PERIOD && <div className="px-4 py-3 border-b border-gray-100 text-sm text-gray-500">オンデマンド枠 {editing.item.day}</div>}
+              {isOnDemandPeriod(editing.item.period) && <div className="px-4 py-3 border-b border-gray-100 text-sm text-gray-500">オンデマンド枠 {DAYS.find((d) => d.value === editing.item.day)?.label}曜 {getOnDemandSlotIndex(editing.item.period) + 1}</div>}
               <input type="text" value={editing.item.teacher} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, teacher: e.target.value } } : prev)} placeholder="教員名（任意）" className="w-full px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none border-b border-gray-100" />
               <input type="text" value={editing.item.room} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, room: e.target.value } } : prev)} placeholder="教室（任意）" className="w-full px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none border-b border-gray-100" />
               <div className="px-4 py-3">
