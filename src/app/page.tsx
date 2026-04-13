@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { FILTERS, DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG } from "@/lib/constants";
 import { expandRecurring, remaining, uid } from "@/lib/utils";
-import { loadTasks, saveTasks, loadCategories, saveCategories, loadGroups, saveGroups, loadTimetable, saveTimetable, loadTimetableConfig, saveTimetableConfig } from "@/lib/storage";
 import { Category, Group, Task, TimetableConfig, TimetableItem, TouchDragState } from "@/lib/types";
 import { IconArchive, IconBook, IconCalendar, IconClock, IconList, IconPalette, IconPlus, IconSettings, IconUsers } from "@/components/Icons";
 import TaskRow from "@/components/TaskRow";
@@ -13,8 +12,13 @@ import CalendarView from "@/components/CalendarView";
 import CompletedList from "@/components/CompletedList";
 import GroupView from "@/components/GroupView";
 import TimetableView from "@/components/TimetableView";
+import { auth, firebaseEnabled, googleProvider } from "@/lib/firebase";
+import { signInWithPopup, signOut, onAuthStateChanged, signInWithRedirect, User, browserLocalPersistence, getRedirectResult, setPersistence } from "firebase/auth";
+import { loadCloudSnapshot, migrateLocalToCloudOnce, saveCloudSnapshot } from "@/lib/cloudStorage";
+import { createTimetablePresetToken, loadTimetablePresetFromToken } from "@/lib/timetableShare";
 
 type View = "list" | "calendar" | "timetable" | "group" | "completed";
+const isMobileBrowser = () => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -34,12 +38,17 @@ export default function Home() {
   const [calMonth, setCalMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [ready, setReady] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null);
 
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [dragY, setDragY] = useState(0);
   const dragStartY = useRef(0);
   const listRef = useRef<HTMLDivElement>(null);
+  const importedPresetRef = useRef<string | null>(null);
 
   const touchDrag = useMemo<TouchDragState>(
     () => ({
@@ -101,18 +110,93 @@ export default function Home() {
   }, [dragActive, dragIdx]);
 
   useEffect(() => {
-    setTasks(loadTasks());
-    setCats(loadCategories());
-    setGroups(loadGroups());
-    setTimetable(loadTimetable());
-    setTimetableConfig(loadTimetableConfig());
-    setReady(true);
+    if (!firebaseEnabled || !auth) {
+      setAuthReady(true);
+      return;
+    }
+    setPersistence(auth, browserLocalPersistence).catch(() => { /* ignore */ });
+    getRedirectResult(auth).catch((err: { code?: string }) => {
+      console.error("Redirect result error:", err);
+      const code = err?.code;
+      if (code === "auth/unauthorized-domain") {
+        setAuthErrorMessage("認証ドメイン設定が不足しています（管理者に連絡してください）");
+        return;
+      }
+      if (code === "auth/popup-blocked" || code === "auth/operation-not-supported-in-this-environment") {
+        setAuthErrorMessage("このブラウザではログインに制限があります。Safari/Chromeで開いてください。");
+        return;
+      }
+      setAuthErrorMessage("ログインに失敗しました。時間をおいて再試行してください。");
+    });
+    return onAuthStateChanged(auth, (nextUser) => {
+      setUser(nextUser);
+      setAuthReady(true);
+      if (nextUser) setAuthErrorMessage(null);
+    });
   }, []);
-  useEffect(() => { if (ready) saveTasks(tasks); }, [tasks, ready]);
-  useEffect(() => { if (ready) saveCategories(cats); }, [cats, ready]);
-  useEffect(() => { if (ready) saveGroups(groups); }, [groups, ready]);
-  useEffect(() => { if (ready) saveTimetable(timetable); }, [timetable, ready]);
-  useEffect(() => { if (ready) saveTimetableConfig(timetableConfig); }, [timetableConfig, ready]);
+
+  useEffect(() => {
+    if (!authReady || !user) {
+      setReady(false);
+      return;
+    }
+    let mounted = true;
+    const sync = async () => {
+      setSyncing(true);
+      try {
+        await migrateLocalToCloudOnce(user.uid);
+        const snapshot = await loadCloudSnapshot(user.uid);
+        if (!mounted) return;
+        setTasks(snapshot.tasks);
+        setCats(snapshot.cats);
+        setGroups(snapshot.groups);
+        setTimetable(snapshot.timetable);
+        setTimetableConfig(snapshot.timetableConfig);
+        setReady(true);
+      } finally {
+        if (mounted) setSyncing(false);
+      }
+    };
+    sync();
+    return () => {
+      mounted = false;
+    };
+  }, [authReady, user]);
+
+  useEffect(() => {
+    if (!ready || !user) return;
+    const timer = setTimeout(() => {
+      saveCloudSnapshot(user.uid, { tasks, cats, groups, timetable, timetableConfig });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [tasks, cats, groups, timetable, timetableConfig, ready, user]);
+
+  useEffect(() => {
+    if (!ready || !user) return;
+    const params = new URLSearchParams(window.location.search);
+    const presetId = params.get("preset");
+    if (!presetId || importedPresetRef.current === presetId) return;
+    importedPresetRef.current = presetId;
+    const preset = loadTimetablePresetFromToken(presetId);
+    if (!preset) return;
+    const nextTimetable = preset.timetable.map((it) => ({ ...it, id: uid() }));
+    setTimetable(nextTimetable);
+    setTimetableConfig(preset.timetableConfig);
+    setCats((prev) => {
+      const withoutTimetable = prev.filter((c) => !c.timetableId);
+      const fromTimetable = nextTimetable.map((it) => ({
+        id: uid(),
+        label: it.name,
+        color: it.color,
+        timetableId: it.id,
+      }));
+      return [...withoutTimetable, ...fromTimetable];
+    });
+    params.delete("preset");
+    const nextQuery = params.toString();
+    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`;
+    window.history.replaceState({}, "", nextUrl);
+  }, [ready, user]);
 
   useEffect(() => {
     if (view !== "calendar") setSelectedDate(null);
@@ -241,6 +325,93 @@ export default function Home() {
     setShowForm(true);
   };
 
+  const handleGoogleLogin = async () => {
+    if (!auth || !googleProvider) return;
+    setAuthErrorMessage(null);
+    try {
+      if (isMobileBrowser()) {
+        await signInWithRedirect(auth, googleProvider);
+        return;
+      }
+      await signInWithPopup(auth, googleProvider);
+    } catch (e) {
+      console.error("Login error:", e);
+      const code = (e as { code?: string })?.code;
+      if (
+        code === "auth/popup-blocked" ||
+        code === "auth/popup-closed-by-user" ||
+        code === "auth/cancelled-popup-request" ||
+        code === "auth/operation-not-supported-in-this-environment"
+      ) {
+        await signInWithRedirect(auth, googleProvider);
+        return;
+      }
+      if (code === "auth/unauthorized-domain") {
+        setAuthErrorMessage("認証ドメインが未設定です。管理者に連絡してください。");
+        return;
+      }
+      setAuthErrorMessage("ログインに失敗しました。Safari/Chromeで再試行してください。");
+    }
+  };
+
+  const handleLogout = async () => {
+    if (!auth) return;
+    await signOut(auth);
+    setTasks([]);
+    setCats(DEFAULT_CATS);
+    setGroups([]);
+    setTimetable([]);
+    setTimetableConfig(DEFAULT_TIMETABLE_CONFIG);
+  };
+
+  const handleShareTimetable = async (): Promise<string | null> => {
+    if (!user || timetable.length === 0) return null;
+    const presetId = createTimetablePresetToken({
+      timetable,
+      timetableConfig,
+    });
+    return `${window.location.origin}?preset=${presetId}`;
+  };
+
+  if (!firebaseEnabled) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center p-6 text-center">
+        <div>
+          <h1 className="text-lg font-bold text-gray-900">Firebase設定が必要です</h1>
+          <p className="text-sm text-gray-500 mt-2">
+            NEXT_PUBLIC_FIREBASE_* の環境変数を設定してから再起動してください。
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!authReady || syncing) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center p-6 text-center">
+        <p className="text-sm text-gray-500">データを同期中...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center p-6 text-center">
+        <div>
+          <h1 className="text-lg font-bold text-gray-900">PrioriTodoへようこそ</h1>
+          <p className="text-sm text-gray-500 mt-2">Googleでログインして、クラウド同期を有効化してください。</p>
+          {authErrorMessage && <p className="text-xs text-red-500 mt-2">{authErrorMessage}</p>}
+          <button
+            onClick={handleGoogleLogin}
+            className="mt-4 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-medium"
+          >
+            Googleでログイン
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-white prioritodo-app" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-100">
@@ -250,6 +421,7 @@ export default function Home() {
             <button onClick={() => setShowCatMgr(true)} className="p-1.5 hover:bg-gray-100 rounded-lg" title="カテゴリ編集"><IconPalette size={17} stroke="#666" /></button>
             <button onClick={() => setShowSettings(true)} className="p-1.5 hover:bg-gray-100 rounded-lg" title="設定"><IconSettings size={16} stroke="#666" /></button>
             <button onClick={() => setShowHelp(true)} className="p-1.5 hover:bg-gray-100 rounded-lg" title="ヘルプ"><IconBook size={16} stroke="#666" /></button>
+            <button onClick={handleLogout} className="text-[11px] text-gray-500 border border-gray-200 px-2 py-1 rounded-md">ログアウト</button>
             {overdueCount > 0 && <span className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md">{overdueCount}件超過</span>}
             <div className="text-right leading-none"><div className="text-[10px] text-gray-400">今週</div><div className="text-base font-bold text-gray-900">{weekDone}<span className="text-[10px] text-gray-400 font-normal ml-0.5">達成</span></div></div>
           </div>
@@ -318,7 +490,7 @@ export default function Home() {
         )}
 
         {view === "calendar" && <div className="px-4 py-4"><CalendarView tasks={allExpanded} cats={cats} month={calMonth} setMonth={setCalMonth} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onAddClick={(d) => openNew(d)} onEditTask={(t) => { setEditTask(t); setPrefillDate(null); setShowForm(true); }} /></div>}
-        {view === "timetable" && <TimetableView items={timetable} setItems={setTimetable} setCats={setCats} config={timetableConfig} setConfig={setTimetableConfig} />}
+        {view === "timetable" && <TimetableView items={timetable} setItems={setTimetable} setCats={setCats} config={timetableConfig} setConfig={setTimetableConfig} onShare={handleShareTimetable} />}
         {view === "group" && <GroupView groups={groups} setGroups={setGroups} />}
         {view === "completed" && <div><div className="px-4 py-3 flex items-center justify-between"><span className="text-sm font-semibold text-gray-900">達成済み</span><span className="text-[11px] text-gray-400">{completed.length}件</span></div><CompletedList tasks={completed} cats={cats} onRestore={handleRestore} /></div>}
       </div>
