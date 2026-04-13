@@ -18,7 +18,7 @@ import { loadCloudSnapshot, migrateLocalToCloudOnce, saveCloudSnapshot } from "@
 import { createTimetablePresetToken, loadTimetablePresetFromToken } from "@/lib/timetableShare";
 
 type View = "list" | "calendar" | "timetable" | "group" | "completed";
-const isMobileBrowser = () => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+const isInAppBrowser = () => /FBAN|FBAV|Instagram|Line|Twitter|wv/i.test(navigator.userAgent);
 
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -42,6 +42,7 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null);
+  const [authFlowMessage, setAuthFlowMessage] = useState<string | null>(null);
 
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -115,23 +116,30 @@ export default function Home() {
       return;
     }
     setPersistence(auth, browserLocalPersistence).catch(() => { /* ignore */ });
-    getRedirectResult(auth).catch((err: { code?: string }) => {
-      console.error("Redirect result error:", err);
-      const code = err?.code;
-      if (code === "auth/unauthorized-domain") {
-        setAuthErrorMessage("認証ドメイン設定が不足しています（管理者に連絡してください）");
-        return;
-      }
-      if (code === "auth/popup-blocked" || code === "auth/operation-not-supported-in-this-environment") {
-        setAuthErrorMessage("このブラウザではログインに制限があります。Safari/Chromeで開いてください。");
-        return;
-      }
-      setAuthErrorMessage("ログインに失敗しました。時間をおいて再試行してください。");
-    });
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) setAuthFlowMessage("ログイン情報を確認中...");
+      })
+      .catch((err: { code?: string }) => {
+        console.error("Redirect result error:", err);
+        const code = err?.code;
+        if (code === "auth/unauthorized-domain") {
+          setAuthErrorMessage("認証ドメイン設定が不足しています（管理者に連絡してください）");
+          return;
+        }
+        if (code === "auth/popup-blocked" || code === "auth/operation-not-supported-in-this-environment") {
+          setAuthErrorMessage("このブラウザではログインに制限があります。Safari/Chromeで開いてください。");
+          return;
+        }
+        setAuthErrorMessage("ログインに失敗しました。時間をおいて再試行してください。");
+      });
     return onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser);
       setAuthReady(true);
-      if (nextUser) setAuthErrorMessage(null);
+      if (nextUser) {
+        setAuthErrorMessage(null);
+        setAuthFlowMessage(null);
+      }
     });
   }, []);
 
@@ -328,11 +336,12 @@ export default function Home() {
   const handleGoogleLogin = async () => {
     if (!auth || !googleProvider) return;
     setAuthErrorMessage(null);
+    setAuthFlowMessage(null);
+    if (isInAppBrowser()) {
+      setAuthErrorMessage("アプリ内ブラウザでは失敗しやすいため、Safari/Chromeで開いてください。");
+      return;
+    }
     try {
-      if (isMobileBrowser()) {
-        await signInWithRedirect(auth, googleProvider);
-        return;
-      }
       await signInWithPopup(auth, googleProvider);
     } catch (e) {
       console.error("Login error:", e);
@@ -343,6 +352,7 @@ export default function Home() {
         code === "auth/cancelled-popup-request" ||
         code === "auth/operation-not-supported-in-this-environment"
       ) {
+        setAuthFlowMessage("ポップアップに失敗したため、リダイレクトで再試行します...");
         await signInWithRedirect(auth, googleProvider);
         return;
       }
@@ -400,6 +410,7 @@ export default function Home() {
         <div>
           <h1 className="text-lg font-bold text-gray-900">PrioriTodoへようこそ</h1>
           <p className="text-sm text-gray-500 mt-2">Googleでログインして、クラウド同期を有効化してください。</p>
+          {authFlowMessage && <p className="text-xs text-gray-500 mt-2">{authFlowMessage}</p>}
           {authErrorMessage && <p className="text-xs text-red-500 mt-2">{authErrorMessage}</p>}
           <button
             onClick={handleGoogleLogin}
