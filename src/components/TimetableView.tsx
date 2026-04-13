@@ -180,7 +180,8 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
         await navigator.clipboard.writeText(link);
         setShareMessage("リンクをコピーしました");
       } else {
-        setShareMessage("リンクを作成しました。手動でコピーしてください");
+        window.prompt("このリンクをコピーしてください", link);
+        setShareMessage("リンクを作成しました");
       }
     } catch {
       setShareMessage("共有リンクの作成に失敗しました");

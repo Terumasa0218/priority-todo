@@ -13,9 +13,9 @@ import CompletedList from "@/components/CompletedList";
 import GroupView from "@/components/GroupView";
 import TimetableView from "@/components/TimetableView";
 import { auth, firebaseEnabled, googleProvider } from "@/lib/firebase";
-import { signInWithPopup, signOut, onAuthStateChanged, signInWithRedirect, User } from "firebase/auth";
+import { signInWithPopup, signOut, onAuthStateChanged, signInWithRedirect, User, browserLocalPersistence, getRedirectResult, setPersistence } from "firebase/auth";
 import { loadCloudSnapshot, migrateLocalToCloudOnce, saveCloudSnapshot } from "@/lib/cloudStorage";
-import { createTimetablePreset, loadTimetablePreset } from "@/lib/timetableShare";
+import { createTimetablePresetToken, loadTimetablePresetFromToken } from "@/lib/timetableShare";
 
 type View = "list" | "calendar" | "timetable" | "group" | "completed";
 
@@ -40,6 +40,7 @@ export default function Home() {
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null);
 
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -112,9 +113,23 @@ export default function Home() {
       setAuthReady(true);
       return;
     }
+    setPersistence(auth, browserLocalPersistence).catch(() => { /* ignore */ });
+    getRedirectResult(auth).catch((err: { code?: string }) => {
+      const code = err?.code;
+      if (code === "auth/unauthorized-domain") {
+        setAuthErrorMessage("認証ドメイン設定が不足しています（管理者に連絡してください）");
+        return;
+      }
+      if (code === "auth/popup-blocked" || code === "auth/operation-not-supported-in-this-environment") {
+        setAuthErrorMessage("このブラウザではログインに制限があります。Safari/Chromeで開いてください。");
+        return;
+      }
+      setAuthErrorMessage("ログインに失敗しました。時間をおいて再試行してください。");
+    });
     return onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser);
       setAuthReady(true);
+      if (nextUser) setAuthErrorMessage(null);
     });
   }, []);
 
@@ -160,26 +175,25 @@ export default function Home() {
     const presetId = params.get("preset");
     if (!presetId || importedPresetRef.current === presetId) return;
     importedPresetRef.current = presetId;
-    loadTimetablePreset(presetId).then((preset) => {
-      if (!preset) return;
-      const nextTimetable = preset.timetable.map((it) => ({ ...it, id: uid() }));
-      setTimetable(nextTimetable);
-      setTimetableConfig(preset.timetableConfig);
-      setCats((prev) => {
-        const withoutTimetable = prev.filter((c) => !c.timetableId);
-        const fromTimetable = nextTimetable.map((it) => ({
-          id: uid(),
-          label: it.name,
-          color: it.color,
-          timetableId: it.id,
-        }));
-        return [...withoutTimetable, ...fromTimetable];
-      });
-      params.delete("preset");
-      const nextQuery = params.toString();
-      const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`;
-      window.history.replaceState({}, "", nextUrl);
+    const preset = loadTimetablePresetFromToken(presetId);
+    if (!preset) return;
+    const nextTimetable = preset.timetable.map((it) => ({ ...it, id: uid() }));
+    setTimetable(nextTimetable);
+    setTimetableConfig(preset.timetableConfig);
+    setCats((prev) => {
+      const withoutTimetable = prev.filter((c) => !c.timetableId);
+      const fromTimetable = nextTimetable.map((it) => ({
+        id: uid(),
+        label: it.name,
+        color: it.color,
+        timetableId: it.id,
+      }));
+      return [...withoutTimetable, ...fromTimetable];
     });
+    params.delete("preset");
+    const nextQuery = params.toString();
+    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`;
+    window.history.replaceState({}, "", nextUrl);
   }, [ready, user]);
 
   useEffect(() => {
@@ -311,10 +325,10 @@ export default function Home() {
 
   const handleGoogleLogin = async () => {
     if (!auth || !googleProvider) return;
+    setAuthErrorMessage(null);
     const ua = navigator.userAgent;
-    const isIOS = /iPad|iPhone|iPod/.test(ua);
     const isInAppBrowser = /FBAN|FBAV|Instagram|Line|Twitter|wv/.test(ua);
-    if (isIOS || isInAppBrowser) {
+    if (isInAppBrowser) {
       await signInWithRedirect(auth, googleProvider);
       return;
     }
@@ -330,7 +344,11 @@ export default function Home() {
         await signInWithRedirect(auth, googleProvider);
         return;
       }
-      throw e;
+      if (code === "auth/unauthorized-domain") {
+        setAuthErrorMessage("認証ドメインが未設定です。管理者に連絡してください。");
+        return;
+      }
+      setAuthErrorMessage("ログインに失敗しました。Safari/Chromeで再試行してください。");
     }
   };
 
@@ -346,11 +364,10 @@ export default function Home() {
 
   const handleShareTimetable = async (): Promise<string | null> => {
     if (!user || timetable.length === 0) return null;
-    const presetId = await createTimetablePreset(user.uid, {
+    const presetId = createTimetablePresetToken({
       timetable,
       timetableConfig,
     });
-    if (!presetId) return null;
     return `${window.location.origin}?preset=${presetId}`;
   };
 
@@ -381,6 +398,7 @@ export default function Home() {
         <div>
           <h1 className="text-lg font-bold text-gray-900">PrioriTodoへようこそ</h1>
           <p className="text-sm text-gray-500 mt-2">Googleでログインして、クラウド同期を有効化してください。</p>
+          {authErrorMessage && <p className="text-xs text-red-500 mt-2">{authErrorMessage}</p>}
           <button
             onClick={handleGoogleLogin}
             className="mt-4 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-medium"
