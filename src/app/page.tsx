@@ -18,6 +18,7 @@ import { loadCloudSnapshot, migrateLocalToCloudOnce, saveCloudSnapshot } from "@
 import { createTimetablePresetToken, loadTimetablePresetFromToken } from "@/lib/timetableShare";
 
 type View = "list" | "calendar" | "timetable" | "group" | "completed";
+const isMobileBrowser = () => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -115,6 +116,7 @@ export default function Home() {
     }
     setPersistence(auth, browserLocalPersistence).catch(() => { /* ignore */ });
     getRedirectResult(auth).catch((err: { code?: string }) => {
+      console.error("Redirect result error:", err);
       const code = err?.code;
       if (code === "auth/unauthorized-domain") {
         setAuthErrorMessage("認証ドメイン設定が不足しています（管理者に連絡してください）");
@@ -326,18 +328,18 @@ export default function Home() {
   const handleGoogleLogin = async () => {
     if (!auth || !googleProvider) return;
     setAuthErrorMessage(null);
-    const ua = navigator.userAgent;
-    const isInAppBrowser = /FBAN|FBAV|Instagram|Line|Twitter|wv/.test(ua);
-    if (isInAppBrowser) {
-      await signInWithRedirect(auth, googleProvider);
-      return;
-    }
     try {
+      if (isMobileBrowser()) {
+        await signInWithRedirect(auth, googleProvider);
+        return;
+      }
       await signInWithPopup(auth, googleProvider);
     } catch (e) {
+      console.error("Login error:", e);
       const code = (e as { code?: string })?.code;
       if (
         code === "auth/popup-blocked" ||
+        code === "auth/popup-closed-by-user" ||
         code === "auth/cancelled-popup-request" ||
         code === "auth/operation-not-supported-in-this-environment"
       ) {
