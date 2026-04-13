@@ -15,6 +15,7 @@ import TimetableView from "@/components/TimetableView";
 import { auth, firebaseEnabled, googleProvider } from "@/lib/firebase";
 import { signInWithPopup, signOut, onAuthStateChanged, signInWithRedirect, User } from "firebase/auth";
 import { loadCloudSnapshot, migrateLocalToCloudOnce, saveCloudSnapshot } from "@/lib/cloudStorage";
+import { createTimetablePreset, loadTimetablePreset } from "@/lib/timetableShare";
 
 type View = "list" | "calendar" | "timetable" | "group" | "completed";
 
@@ -45,6 +46,7 @@ export default function Home() {
   const [dragY, setDragY] = useState(0);
   const dragStartY = useRef(0);
   const listRef = useRef<HTMLDivElement>(null);
+  const importedPresetRef = useRef<string | null>(null);
 
   const touchDrag = useMemo<TouchDragState>(
     () => ({
@@ -151,6 +153,34 @@ export default function Home() {
     }, 250);
     return () => clearTimeout(timer);
   }, [tasks, cats, groups, timetable, timetableConfig, ready, user]);
+
+  useEffect(() => {
+    if (!ready || !user) return;
+    const params = new URLSearchParams(window.location.search);
+    const presetId = params.get("preset");
+    if (!presetId || importedPresetRef.current === presetId) return;
+    importedPresetRef.current = presetId;
+    loadTimetablePreset(presetId).then((preset) => {
+      if (!preset) return;
+      const nextTimetable = preset.timetable.map((it) => ({ ...it, id: uid() }));
+      setTimetable(nextTimetable);
+      setTimetableConfig(preset.timetableConfig);
+      setCats((prev) => {
+        const withoutTimetable = prev.filter((c) => !c.timetableId);
+        const fromTimetable = nextTimetable.map((it) => ({
+          id: uid(),
+          label: it.name,
+          color: it.color,
+          timetableId: it.id,
+        }));
+        return [...withoutTimetable, ...fromTimetable];
+      });
+      params.delete("preset");
+      const nextQuery = params.toString();
+      const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`;
+      window.history.replaceState({}, "", nextUrl);
+    });
+  }, [ready, user]);
 
   useEffect(() => {
     if (view !== "calendar") setSelectedDate(null);
@@ -314,6 +344,16 @@ export default function Home() {
     setTimetableConfig(DEFAULT_TIMETABLE_CONFIG);
   };
 
+  const handleShareTimetable = async (): Promise<string | null> => {
+    if (!user || timetable.length === 0) return null;
+    const presetId = await createTimetablePreset(user.uid, {
+      timetable,
+      timetableConfig,
+    });
+    if (!presetId) return null;
+    return `${window.location.origin}?preset=${presetId}`;
+  };
+
   if (!firebaseEnabled) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center p-6 text-center">
@@ -430,7 +470,7 @@ export default function Home() {
         )}
 
         {view === "calendar" && <div className="px-4 py-4"><CalendarView tasks={allExpanded} cats={cats} month={calMonth} setMonth={setCalMonth} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onAddClick={(d) => openNew(d)} onEditTask={(t) => { setEditTask(t); setPrefillDate(null); setShowForm(true); }} /></div>}
-        {view === "timetable" && <TimetableView items={timetable} setItems={setTimetable} setCats={setCats} config={timetableConfig} setConfig={setTimetableConfig} />}
+        {view === "timetable" && <TimetableView items={timetable} setItems={setTimetable} setCats={setCats} config={timetableConfig} setConfig={setTimetableConfig} onShare={handleShareTimetable} />}
         {view === "group" && <GroupView groups={groups} setGroups={setGroups} />}
         {view === "completed" && <div><div className="px-4 py-3 flex items-center justify-between"><span className="text-sm font-semibold text-gray-900">達成済み</span><span className="text-[11px] text-gray-400">{completed.length}件</span></div><CompletedList tasks={completed} cats={cats} onRestore={handleRestore} /></div>}
       </div>
