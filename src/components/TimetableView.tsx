@@ -19,6 +19,7 @@ interface TimetableViewProps {
   setCats: React.Dispatch<React.SetStateAction<Category[]>>;
   config: TimetableConfig;
   setConfig: React.Dispatch<React.SetStateAction<TimetableConfig>>;
+  onShare: () => Promise<string | null>;
 }
 
 interface EditingState {
@@ -38,10 +39,12 @@ const buildPeriods = (maxPeriod: number) => {
   });
 };
 
-export default function TimetableView({ items, setItems, setCats, config, setConfig }: TimetableViewProps) {
+export default function TimetableView({ items, setItems, setCats, config, setConfig, onShare }: TimetableViewProps) {
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [showError, setShowError] = useState(false);
   const [showCustomize, setShowCustomize] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
 
   const periodOptions = useMemo(() => buildPeriods(config.maxPeriod), [config.maxPeriod]);
   const onDemandSlotsByDay = DAYS.map((_, idx) => {
@@ -164,13 +167,40 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
     setShowCustomize(false);
   };
 
+  const handleShare = async () => {
+    setSharing(true);
+    setShareMessage(null);
+    try {
+      const link = await onShare();
+      if (!link) {
+        setShareMessage("共有リンクを作成できませんでした");
+        return;
+      }
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link);
+        setShareMessage("リンクをコピーしました");
+      } else {
+        window.prompt("このリンクをコピーしてください", link);
+        setShareMessage("リンクを作成しました");
+      }
+    } catch {
+      setShareMessage("共有リンクの作成に失敗しました");
+    } finally {
+      setSharing(false);
+    }
+  };
+
   return (
     <div className="px-2 py-4">
-      <div className="flex items-center justify-end mb-2">
+      <div className="flex items-center justify-end gap-2 mb-2">
+        <button onClick={handleShare} disabled={sharing || items.length === 0} className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 px-2 py-1 rounded-md hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+          共有
+        </button>
         <button onClick={() => setShowCustomize(true)} className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 px-2 py-1 rounded-md hover:bg-gray-100 transition-colors">
           <IconPencil size={13} />カスタム
         </button>
       </div>
+      {shareMessage && <div className="mb-2 text-[11px] text-right text-gray-500">{shareMessage}</div>}
 
       <div className="border border-gray-300 rounded-xl overflow-hidden bg-white">
         <div className="grid" style={{ gridTemplateColumns: "50px repeat(5, minmax(0, 1fr))" }}>
