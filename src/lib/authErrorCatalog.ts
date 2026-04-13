@@ -40,6 +40,11 @@ const CATALOG: Record<string, AuthIssue> = {
     summary: "ネットワーク接続エラー",
     detail: "通信エラーにより認証処理に失敗しました。",
   },
+  "auth/disallowed-useragent": {
+    id: 407,
+    summary: "アプリ内ブラウザではGoogleログイン不可",
+    detail: "Googleの安全なブラウザ要件により、LINEなどのアプリ内ブラウザからのOAuthが拒否されました。",
+  },
 };
 
 const FALLBACK_ISSUE: AuthIssue = {

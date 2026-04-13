@@ -330,8 +330,7 @@ export default function Home() {
     setAuthIssue(null);
     setAuthFlowMessage(null);
     if (isInAppBrowser()) {
-      setAuthFlowMessage("アプリ内ブラウザを検知。リダイレクト方式でログインします...");
-      await signInWithRedirect(auth, googleProvider);
+      setAuthIssue(resolveAuthIssue("auth/disallowed-useragent"));
       return;
     }
     try {
@@ -351,6 +350,15 @@ export default function Home() {
       }
       setAuthIssue(resolveAuthIssue(code));
     }
+  };
+
+  const openInExternalBrowser = () => {
+    const currentUrl = window.location.href;
+    if (/Line/i.test(navigator.userAgent)) {
+      window.location.href = `https://line.me/R/openExternalBrowser?url=${encodeURIComponent(currentUrl)}`;
+      return;
+    }
+    window.open(currentUrl, "_blank", "noopener,noreferrer");
   };
 
   const handleLogout = async () => {
@@ -404,6 +412,11 @@ export default function Home() {
             <div className="mt-2">
               <p className="text-xs text-red-500">ログインに失敗しました {authIssue.id}</p>
               <p className="text-[11px] text-red-400 mt-0.5">{authIssue.summary}</p>
+              {authIssue.id === 407 && (
+                <button onClick={openInExternalBrowser} className="mt-2 text-[11px] font-medium text-blue-500 underline">
+                  Safari / Chromeで開く
+                </button>
+              )}
             </div>
           )}
           <button
