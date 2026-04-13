@@ -16,6 +16,7 @@ import { auth, firebaseEnabled, googleProvider } from "@/lib/firebase";
 import { signInWithPopup, signOut, onAuthStateChanged, signInWithRedirect, User, browserLocalPersistence, getRedirectResult, setPersistence } from "firebase/auth";
 import { loadCloudSnapshot, migrateLocalToCloudOnce, saveCloudSnapshot } from "@/lib/cloudStorage";
 import { createTimetablePresetToken, loadTimetablePresetFromToken } from "@/lib/timetableShare";
+import { AuthIssue, resolveAuthIssue } from "@/lib/authErrorCatalog";
 
 type View = "list" | "calendar" | "timetable" | "group" | "completed";
 const isInAppBrowser = () => /FBAN|FBAV|Instagram|Line|Twitter|wv/i.test(navigator.userAgent);
@@ -41,7 +42,7 @@ export default function Home() {
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [syncing, setSyncing] = useState(false);
-  const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null);
+  const [authIssue, setAuthIssue] = useState<AuthIssue | null>(null);
   const [authFlowMessage, setAuthFlowMessage] = useState<string | null>(null);
 
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -122,22 +123,13 @@ export default function Home() {
       })
       .catch((err: { code?: string }) => {
         console.error("Redirect result error:", err);
-        const code = err?.code;
-        if (code === "auth/unauthorized-domain") {
-          setAuthErrorMessage("認証ドメイン設定が不足しています（管理者に連絡してください）");
-          return;
-        }
-        if (code === "auth/popup-blocked" || code === "auth/operation-not-supported-in-this-environment") {
-          setAuthErrorMessage("このブラウザではログインに制限があります。Safari/Chromeで開いてください。");
-          return;
-        }
-        setAuthErrorMessage("ログインに失敗しました。時間をおいて再試行してください。");
+        setAuthIssue(resolveAuthIssue(err?.code));
       });
     return onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser);
       setAuthReady(true);
       if (nextUser) {
-        setAuthErrorMessage(null);
+        setAuthIssue(null);
         setAuthFlowMessage(null);
       }
     });
@@ -335,10 +327,11 @@ export default function Home() {
 
   const handleGoogleLogin = async () => {
     if (!auth || !googleProvider) return;
-    setAuthErrorMessage(null);
+    setAuthIssue(null);
     setAuthFlowMessage(null);
     if (isInAppBrowser()) {
-      setAuthErrorMessage("アプリ内ブラウザでは失敗しやすいため、Safari/Chromeで開いてください。");
+      setAuthFlowMessage("アプリ内ブラウザを検知。リダイレクト方式でログインします...");
+      await signInWithRedirect(auth, googleProvider);
       return;
     }
     try {
@@ -356,11 +349,7 @@ export default function Home() {
         await signInWithRedirect(auth, googleProvider);
         return;
       }
-      if (code === "auth/unauthorized-domain") {
-        setAuthErrorMessage("認証ドメインが未設定です。管理者に連絡してください。");
-        return;
-      }
-      setAuthErrorMessage("ログインに失敗しました。Safari/Chromeで再試行してください。");
+      setAuthIssue(resolveAuthIssue(code));
     }
   };
 
@@ -411,7 +400,12 @@ export default function Home() {
           <h1 className="text-lg font-bold text-gray-900">PrioriTodoへようこそ</h1>
           <p className="text-sm text-gray-500 mt-2">Googleでログインして、クラウド同期を有効化してください。</p>
           {authFlowMessage && <p className="text-xs text-gray-500 mt-2">{authFlowMessage}</p>}
-          {authErrorMessage && <p className="text-xs text-red-500 mt-2">{authErrorMessage}</p>}
+          {authIssue && (
+            <div className="mt-2">
+              <p className="text-xs text-red-500">ログインに失敗しました {authIssue.id}</p>
+              <p className="text-[11px] text-red-400 mt-0.5">{authIssue.summary}</p>
+            </div>
+          )}
           <button
             onClick={handleGoogleLogin}
             className="mt-4 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-medium"
