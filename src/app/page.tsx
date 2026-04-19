@@ -599,6 +599,29 @@ export default function Home() {
     );
   }
 
+  const renderSortedTasks = () => (
+    <div ref={listRef}>
+      {sorted.map((t, i) => {
+        const now = Date.now();
+        const deadlineTime = new Date(t.deadline).getTime();
+        const isOverdueTask = deadlineTime < now;
+        const prevIsOverdueTask = i > 0 && new Date(sorted[i - 1].deadline).getTime() < now;
+        const showOverdueLabel = i === 0 && isOverdueTask;
+        const showPriorityLabel = !isOverdueTask && t.priority && (i === 0 || (prevIsOverdueTask && !isOverdueTask) || (i > 0 && !sorted[i - 1].priority && new Date(sorted[i - 1].deadline).getTime() >= now));
+        const showNormalLabel = !isOverdueTask && !t.priority && i > 0 && (new Date(sorted[i - 1].deadline).getTime() < now || sorted[i - 1].priority);
+
+        return (
+          <div key={t.id} data-task-idx={i} style={dragActive && dragIdx === i ? { transform: `translateY(${dragY}px)` } : {}}>
+            {showOverdueLabel && <div className="px-4 pt-2 pb-1"><span className="text-[10px] font-semibold text-red-500 tracking-widest uppercase">期限超過</span></div>}
+            {showPriorityLabel && <div className="px-4 pt-3 pb-1"><span className="text-[10px] font-semibold text-red-500 tracking-widest uppercase">最優先</span></div>}
+            {showNormalLabel && <div className="px-4 pt-3 pb-1"><span className="text-[10px] font-semibold text-gray-400 tracking-widest uppercase">その他</span></div>}
+            <TaskRow task={t} cats={cats} idx={i} touchDrag={touchDrag} onComplete={handleComplete} onEdit={(task) => { setEditTask(task); setPrefillDate(null); setShowForm(true); }} onDelete={handleDeleteTask} />
+          </div>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className="h-[100dvh] flex flex-col overflow-hidden bg-background prioritodo-app">
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-100">
@@ -659,29 +682,7 @@ export default function Home() {
                 <EmptyState title="タスクなし" description="右下の + から追加して、今日の流れを作りましょう。" icon={<IconList size={20} stroke="#94A3B8" />} />
               </div>
             ) : (
-              <div ref={listRef}>
-                {sorted.map((t, i) => {
-                  const now = Date.now();
-                  const tTime = new Date(t.deadline).getTime();
-                  const isOD = tTime < now;
-                  const prevIsOD = i > 0 && new Date(sorted[i - 1].deadline).getTime() < now;
-                  const showODLabel = i === 0 && isOD;
-                  const showPriLabel = !isOD && t.priority && (i === 0 || (prevIsOD && !isOD) || (i > 0 && !sorted[i - 1].priority && new Date(sorted[i - 1].deadline).getTime() >= now));
-                  const showNormLabel = !isOD && !t.priority && i > 0 && (new Date(sorted[i - 1].deadline).getTime() < now || sorted[i - 1].priority);
-                  return (
-                    <div key={t.id} data-task-idx={i} style={dragActive && dragIdx === i ? { transform: `translateY(${dragY}px)` } : {}}>
-                      {showODLabel && <div className="px-4 pt-2 pb-1"><span className="text-[10px] font-semibold text-red-500 tracking-widest uppercase">期限超過</span></div>}
-                      {showPriLabel && <div className="px-4 pt-3 pb-1"><span className="text-[10px] font-semibold text-red-500 tracking-widest uppercase">最優先</span></div>}
-                      {showNormLabel && <div className="px-4 pt-3 pb-1"><span className="text-[10px] font-semibold text-gray-400 tracking-widest uppercase">その他</span></div>}
-                      <TaskRow task={t} cats={cats} idx={i} touchDrag={touchDrag} onComplete={handleComplete} onEdit={(task) => { setEditTask(task); setPrefillDate(null); setShowForm(true); }} onDelete={handleDeleteTask} />
-                    </div>
-                  ))}
-                </section>
-                <section>
-                  <div className="text-xs font-semibold text-gray-500 mb-2">代替タスク</div>
-                  {todayView.alternatives.slice(0, 5).map(({ t, weightedLoad }) => <div key={t.id} className="text-xs text-gray-600 py-1">・{t.title}（負荷{weightedLoad}）</div>)}
-                </section>
-              </div>
+              renderSortedTasks()
             )}
 
             {listMode === "near" && (
