@@ -393,6 +393,15 @@ export default function Home() {
     }
   };
 
+  const copyCurrentUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setAuthFlowMessage("URLをコピーしました。Safari / Chrome に貼り付けて開いてください。");
+    } catch {
+      setAuthFlowMessage("URLコピーに失敗しました。アドレスバーからURLをコピーしてSafari / Chromeで開いてください。");
+    }
+  };
+
   const openInExternalBrowser = () => {
     const currentUrl = window.location.href;
     if (/Line/i.test(navigator.userAgent)) {
