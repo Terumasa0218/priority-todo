@@ -29,10 +29,20 @@ interface EditingState {
   item: TimetableItem;
 }
 
-const ON_DEMAND_PERIOD = 999;
-const isOnDemandPeriod = (period: number) => period >= ON_DEMAND_PERIOD;
-const getOnDemandSlotIndex = (period: number) => Math.max(0, period - ON_DEMAND_PERIOD);
-const normalizePeriod = (period: number) => (period % 2 === 0 ? period - 1 : period);
+const ON_DEMAND_PREFIX = "オンデマンド";
+const isOnDemandPeriod = (period: string) => String(period).startsWith(ON_DEMAND_PREFIX);
+const getOnDemandSlotIndex = (period: string) => {
+  const m = String(period).match(/^オンデマンド(\d+)$/);
+  return m ? Math.max(0, Number(m[1]) - 1) : 0;
+};
+const normalizePeriod = (period: string) => {
+  if (isOnDemandPeriod(period)) return period;
+  const m = String(period).match(/^(\d+)(?:・(\d+))?限$/);
+  if (!m) return period;
+  const start = Number(m[1]);
+  const normalizedStart = start % 2 === 0 ? start - 1 : start;
+  return `${normalizedStart}・${normalizedStart + 1}限`;
+};
 const buildPeriods = (maxPeriod: number) => {
   const safeMax = Math.max(2, maxPeriod % 2 === 0 ? maxPeriod : maxPeriod + 1);
   return Array.from({ length: safeMax / 2 }, (_, idx) => {
@@ -44,13 +54,16 @@ const buildPeriods = (maxPeriod: number) => {
 // Backward-compatible alias for historical references.
 const buildPeriodGroups = (maxPeriod: number) => buildPeriods(maxPeriod);
 
-export default function TimetableView({ items, setItems, setCats, config, setConfig, onShare }: TimetableViewProps) {
+export default function TimetableView({ items, setItems, setCats, config, setConfig, onShare, tasks, cats }: TimetableViewProps) {
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [showError, setShowError] = useState(false);
   const [showCustomize, setShowCustomize] = useState(false);
   const [detailCourseId, setDetailCourseId] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
 
   const periodOptions = useMemo(() => buildPeriodGroups(config.maxPeriod), [config.maxPeriod]);
+  const normalizedItems = useMemo(() => items.map((it) => ({ ...it, period: normalizePeriod(String(it.period)) })), [items]);
   const onDemandSlotsByDay = DAYS.map((_, idx) => {
     const value = Number(config.onDemandSlotsByDay?.[idx] ?? 0);
     return Number.isFinite(value) ? Math.max(0, Math.min(20, Math.floor(value))) : 0;
@@ -62,12 +75,11 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
       if (isOnDemandPeriod(it.period)) return;
       if (it.day < 1 || it.day > 5) return;
       const normalized = normalizePeriod(it.period);
-      const maxStart = Math.max(1, (Math.floor(config.maxPeriod / 2) * 2) - 1);
-      if (normalized < 1 || normalized > maxStart) return;
+      if (!periodOptions.some((option) => option.value === normalized)) return;
       map.set(`${it.day}-${normalized}`, { ...it, period: normalized });
     });
     return map;
-  }, [items, config.maxPeriod]);
+  }, [normalizedItems, periodOptions]);
 
   const onDemandMap = useMemo(() => {
     const map = new Map<number, TimetableItem[]>();
@@ -85,6 +97,10 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
 
   const onDemandItems = useMemo(() => normalizedItems.filter((it) => isOnDemandPeriod(it.period)), [normalizedItems]);
   const detailCourse = normalizedItems.find((it) => it.id === detailCourseId) || null;
+  const updateDetail = (patch: Partial<TimetableItem>) => {
+    if (!detailCourse) return;
+    setItems((prev) => prev.map((it) => (it.id === detailCourse.id ? { ...it, ...patch } : it)));
+  };
 
   const upsertCategoryByTimetable = (item: TimetableItem) => {
     setCats((prev) => {
@@ -120,7 +136,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
     setEditing(null);
   };
 
-  const applyCustomize = (maxPeriodInput: number, showOnDemandInput: boolean, onDemandSlotsInput: number[]) => {
+  const applyCustomize = (maxPeriodInput: number, showOnDemandInput: boolean, onDemandSlotsInput: number[] = onDemandSlotsByDay) => {
     const evenMax = Math.max(2, Math.min(20, maxPeriodInput % 2 === 0 ? maxPeriodInput : maxPeriodInput + 1));
     const nextOnDemandSlotsByDay = DAYS.map((_, idx) => {
       const value = Number(onDemandSlotsInput[idx] ?? 0);
@@ -129,7 +145,8 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
     setConfig({ maxPeriod: evenMax, showOnDemand: showOnDemandInput, onDemandSlotsByDay: nextOnDemandSlotsByDay });
     setItems((prev) => prev.filter((it) => {
       if (isOnDemandPeriod(it.period)) return it.day >= 1 && it.day <= 5;
-      return it.day >= 1 && it.day <= 5 && normalizePeriod(it.period) <= evenMax - 1;
+      const normalized = normalizePeriod(it.period);
+      return it.day >= 1 && it.day <= 5 && periodOptions.slice(0, evenMax / 2).some((option) => option.value === normalized);
     }));
     setShowCustomize(false);
   };
@@ -164,26 +181,27 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
   return (
     <div className="px-2 py-4">
       <div className="flex items-center justify-end gap-2 mb-2">
-        <button onClick={() => onShare()} disabled={items.length === 0} className="px-3 py-2 min-h-11 text-xs rounded-md hover:bg-gray-100">共有</button>
+        <button onClick={handleShare} disabled={items.length === 0 || sharing} className="px-3 py-2 min-h-11 text-xs rounded-md hover:bg-gray-100">{sharing ? "共有中..." : "共有"}</button>
         <button onClick={() => setShowCustomize(true)} className="px-3 py-2 min-h-11 text-xs rounded-md hover:bg-gray-100"><IconPencil size={13} />カスタム</button>
       </div>
+      {shareMessage && <p className="mb-2 text-xs text-gray-500 text-right">{shareMessage}</p>}
 
       <div className="border border-gray-300 rounded-xl overflow-hidden bg-white">
         <div className="grid" style={{ gridTemplateColumns: "62px repeat(5, minmax(0, 1fr))" }}>
           <div className="bg-gray-50 border-b border-r border-gray-300 h-11" />
           {DAYS.map((d) => <div key={d.value} className="h-11 border-b border-gray-300 text-center text-sm font-semibold text-gray-600 flex items-center justify-center bg-gray-50">{d.label}</div>)}
           {periodOptions.map((label) => (
-            <React.Fragment key={label}>
-              <div className="h-28 border-r border-b border-gray-300 flex items-center justify-center text-xs text-gray-600 bg-gray-50">{label}</div>
+            <React.Fragment key={label.value}>
+              <div className="h-28 border-r border-b border-gray-300 flex items-center justify-center text-xs text-gray-600 bg-gray-50">{label.label}</div>
               {DAYS.map((d) => {
-                const key = `${d.value}-${label}`;
+                const key = `${d.value}-${label.value}`;
                 const item = cellMap.get(key);
                 return item ? (
                   <button key={key} onClick={() => setDetailCourseId(item.id)} className="h-28 border-b border-gray-300 p-2 text-left" style={{ backgroundColor: `${item.color}20`, borderLeft: `4px solid ${item.color}` }}>
                     <div className="text-xs font-semibold line-clamp-3">{item.name}</div>
                     <div className="text-[11px] text-gray-600 mt-1 truncate">{item.room || "教室未設定"}</div>
                   </button>
-                ) : <button key={key} onClick={() => openCreate(d.value, label)} className="h-28 border-b border-gray-300 text-gray-300 hover:bg-gray-50">＋</button>;
+                ) : <button key={key} onClick={() => openCreate(d.value, label.value)} className="h-28 border-b border-gray-300 text-gray-300 hover:bg-gray-50">＋</button>;
               })}
             </React.Fragment>
           ))}
@@ -227,7 +245,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
           <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200"><button onClick={() => setEditing(null)} className="text-sm text-blue-500">キャンセル</button><span className="text-sm font-semibold">{editing.mode === "edit" ? "授業の編集" : "授業の追加"}</span><button onClick={handleSave} className="text-sm text-blue-500 font-semibold">保存</button></div>
           <div className="flex-1 overflow-y-auto mt-4 mx-4 bg-white rounded-xl border border-gray-100">
             <input type="text" value={editing.item.name} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, name: e.target.value } } : prev)} placeholder="授業名" className="w-full px-4 py-3 border-b" />
-            {!isOnDemandPeriod(editing.item.period) && <div className="px-4 py-3 border-b flex items-center justify-between"><span className="text-sm">時限</span><select value={editing.item.period} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, period: e.target.value } } : prev)}>{periodOptions.map((p) => <option key={p} value={p}>{p}</option>)}</select></div>}
+            {!isOnDemandPeriod(editing.item.period) && <div className="px-4 py-3 border-b flex items-center justify-between"><span className="text-sm">時限</span><select value={editing.item.period} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, period: e.target.value } } : prev)}>{periodOptions.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</select></div>}
             <input type="text" value={editing.item.teacher} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, teacher: e.target.value } } : prev)} placeholder="教員名" className="w-full px-4 py-3 border-b" />
             <input type="text" value={editing.item.room} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, room: e.target.value } } : prev)} placeholder="教室" className="w-full px-4 py-3 border-b" />
           </div>
