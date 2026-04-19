@@ -98,15 +98,15 @@ export default function TaskRow({ task, cats, onComplete, onEdit, onDelete, idx,
   };
 
   return (
-    <div className={`relative overflow-hidden ${popping ? "task-shrink" : ""}`}>
+    <div className={`relative overflow-hidden px-3 py-1 ${popping ? "task-shrink" : ""}`}>
       {burst && <ParticleBurst x={burst.x} y={burst.y} />}
       {/* Delete button behind (swipe) */}
-      <div className="absolute right-0 top-0 bottom-0 w-20 bg-red-500 flex items-center justify-center">
+      <div className="absolute right-3 top-1 bottom-1 w-20 bg-rose-500 rounded-r-2xl flex items-center justify-center">
         <button onClick={() => onDelete(task)} className="text-white text-xs font-medium">削除</button>
       </div>
       {/* Card */}
       <div
-        className="relative bg-white transition-transform"
+        className="relative transition-transform"
         style={{ transform: `translateX(${swipeX}px)` }}
         onTouchStart={(e) => { onTouchStartSwipe(e); onTouchStartDrag(e); }}
         onTouchMove={(e) => { onTouchMoveSwipe(e); onTouchMoveCancelDrag(e); }}
@@ -114,9 +114,9 @@ export default function TaskRow({ task, cats, onComplete, onEdit, onDelete, idx,
         onContextMenu={handleContextMenu}
       >
         <div
-          className={`flex items-start gap-3 px-4 py-3.5 border-b border-gray-100 transition-colors ${
+          className={`surface-card flex items-start gap-3 px-4 py-3.5 transition-colors ${
             touchDrag.active && touchDrag.dragIdx === idx ? "opacity-50 bg-gray-100" : ""
-          } ${isOverdue ? "bg-red-50/70" : task.priority ? "bg-red-50/30" : ""}`}
+          } ${isOverdue ? "bg-rose-50/80" : task.priority ? "bg-rose-50/50" : ""}`}
           style={task.priority || isOverdue ? { borderLeft: "3px solid #CD2B31" } : { borderLeft: "3px solid transparent" }}
         >
           {/* Grip */}
@@ -128,22 +128,22 @@ export default function TaskRow({ task, cats, onComplete, onEdit, onDelete, idx,
           <div className="flex-1 min-w-0 cursor-pointer" onClick={() => !task.isGroupTask && onEdit(task)}>
             <div className="flex items-center gap-2">
               {task.priority && <IconFlag filled size={13} />}
-              <span className={`text-sm font-medium truncate ${isOverdue ? "text-red-700" : "text-gray-900"}`}>{task.title}</span>
+              <span className={`text-sm font-semibold truncate ${isOverdue ? "text-rose-700" : "text-slate-900"}`}>{task.title}</span>
               {task.recurrence && task.recurrence !== "none" && <IconRepeat size={12} stroke="#889096" />}
               {task.isGroupTask && <span className="text-[9px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded flex-shrink-0">{task.groupName}</span>}
             </div>
             <div className="flex items-center gap-2 mt-1">
               <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
-              <span className="text-xs text-gray-400">{cat.label}</span>
-              <span className="text-xs text-gray-300">|</span>
-              <span className="text-xs text-gray-400">{fmt(task.deadline)}</span>
+              <span className="text-xs text-slate-500">{cat.label}</span>
+              <span className="text-xs text-slate-300">•</span>
+              <span className="text-xs text-slate-500">{fmt(task.deadline)}</span>
               <span className="text-xs font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: uc.bg, color: uc.fg }}>
                 {rem.u >= 4 ? rem.t : `あと${rem.t}`}
               </span>
             </div>
             {/* Memo preview */}
             {hasMemo && (
-              <div className="mt-1.5 text-xs text-gray-400 leading-relaxed" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } as React.CSSProperties}>
+              <div className="mt-1.5 text-xs text-slate-500 leading-relaxed" style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } as React.CSSProperties}>
                 {task.memo}
               </div>
             )}

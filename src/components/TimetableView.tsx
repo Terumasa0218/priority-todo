@@ -4,6 +4,9 @@ import { IconPencil } from "@/components/Icons";
 import { Category, Task, TimetableConfig, TimetableItem } from "@/lib/types";
 import { PALETTE } from "@/lib/constants";
 import { uid } from "@/lib/utils";
+import SurfaceCard from "./ui/SurfaceCard";
+import SectionHeader from "./ui/SectionHeader";
+import EmptyState from "./ui/EmptyState";
 
 const DAYS = [
   { value: 1, label: "月" },
@@ -183,16 +186,35 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
   const linkedTasks = detailCourse
     ? (() => { const cat = cats.find((c) => c.timetableId === detailCourse.id); return tasks.filter((t) => !t.completed && !!cat && t.category === cat.id).length; })()
     : 0;
+  const todayDay = ((new Date().getDay() + 6) % 7) + 1;
+  const todayClasses = normalizedItems.filter((it) => it.day === todayDay && !isOnDemandPeriod(it.period));
+  const todayPendingTasks = tasks.filter((t) => !t.completed && new Date(t.deadline).toDateString() === new Date().toDateString()).length;
+  const weekDone = tasks.filter((t) => t.completed && t.completedAt && (Date.now() - new Date(t.completedAt).getTime()) < 7 * 864e5).length;
 
   return (
     <div className="px-2 py-4">
+      <SectionHeader title="時間割" subtitle="授業を起点にタスク・出欠を管理" className="px-1 mb-2" />
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        {[
+          { label: "今日の授業", value: `${todayClasses.length}コマ` },
+          { label: "次の授業", value: todayClasses[0]?.name || "なし" },
+          { label: "今日締切", value: `${todayPendingTasks}件` },
+          { label: "今週の達成", value: `${weekDone}件` },
+        ].map((stat) => (
+          <SurfaceCard key={stat.label} className="px-3 py-2.5">
+            <div className="text-[11px] text-slate-500">{stat.label}</div>
+            <div className="text-sm font-semibold text-slate-900 mt-0.5 truncate">{stat.value}</div>
+          </SurfaceCard>
+        ))}
+      </div>
+
       <div className="flex items-center justify-end gap-2 mb-2">
         <button onClick={handleShare} disabled={items.length === 0 || sharing} className="px-3 py-2 min-h-11 text-xs rounded-md hover:bg-gray-100">{sharing ? "共有中..." : "共有"}</button>
         <button onClick={() => setShowCustomize(true)} className="px-3 py-2 min-h-11 text-xs rounded-md hover:bg-gray-100"><IconPencil size={13} />カスタム</button>
       </div>
       {shareMessage && <p className="mb-2 text-xs text-gray-500 text-right">{shareMessage}</p>}
 
-      <div className="border border-gray-300 rounded-xl overflow-hidden bg-white">
+      <SurfaceCard className="overflow-hidden !rounded-[22px]">
         <div className="grid" style={{ gridTemplateColumns: "62px repeat(5, minmax(0, 1fr))" }}>
           <div className="bg-gray-50 border-b border-r border-gray-300 h-11" />
           {DAYS.map((d) => <div key={d.value} className="h-11 border-b border-gray-300 text-center text-sm font-semibold text-gray-600 flex items-center justify-center bg-gray-50">{d.label}</div>)}
@@ -212,13 +234,13 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
             </React.Fragment>
           ))}
         </div>
-      </div>
+      </SurfaceCard>
 
       {config.showOnDemand && (
         <div className="mt-4">
-          <div className="text-sm font-semibold text-gray-700 mb-2">オンデマンド授業</div>
+          <SectionHeader title="オンデマンド授業" subtitle="配信授業をまとめて管理" className="mb-2 px-1" />
           <div className="flex gap-2 overflow-x-auto pb-2">
-            {onDemandItems.map((item) => (
+            {onDemandItems.length === 0 ? <EmptyState title="オンデマンド授業はまだありません" description="＋ボタンから追加できます" className="min-w-full" /> : onDemandItems.map((item) => (
               <button key={item.id} onClick={() => setDetailCourseId(item.id)} className="min-w-44 h-24 rounded-lg border p-3 text-left" style={{ backgroundColor: `${item.color}14`, borderColor: `${item.color}88` }}>
                 <span className="block font-medium text-sm truncate">{item.name}</span>
                 <span className="block text-xs text-gray-500 mt-1 truncate">{DAYS.find((d) => d.value === item.day)?.label}曜配信</span>
@@ -264,20 +286,30 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
         <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 bg-white border-b"><button onClick={() => setDetailCourseId(null)} className="text-sm text-blue-500">戻る</button><span className="text-sm font-semibold">授業詳細</span><button onClick={() => openEdit(detailCourse)} className="text-sm text-blue-500">編集</button></div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            <div className="bg-white rounded-xl border p-4 text-sm space-y-1"><div className="font-semibold">{detailCourse.name}</div><div>教室: {detailCourse.room || "未設定"}</div><div>教員: {detailCourse.teacher || "未設定"}</div></div>
-            <div className="bg-white rounded-xl border p-4 text-sm space-y-2">
-              <div className="font-semibold">出欠</div>
+            <SurfaceCard className="p-4">
+              <div className="text-lg font-semibold text-slate-900">{detailCourse.name}</div>
+              <div className="text-xs text-slate-500 mt-1">{DAYS.find((d) => d.value === detailCourse.day)?.label}曜 / {detailCourse.period}</div>
+              <div className="text-sm mt-3 text-slate-700">教室: {detailCourse.room || "未設定"}</div>
+              <div className="text-sm text-slate-700">教員: {detailCourse.teacher || "未設定"}</div>
+            </SurfaceCard>
+            <SurfaceCard className="p-4 text-sm space-y-2">
+              <div className="font-semibold text-slate-900">出欠</div>
               <div className="grid grid-cols-3 gap-2 text-center">
-                {(["attendancePresent", "attendanceAbsent", "attendanceLate"] as const).map((k, i) => <button key={k} onClick={() => updateDetail({ [k]: (detailCourse[k] || 0) + 1 })} className="border rounded-lg py-2">{["出席", "欠席", "遅刻"][i]} +<div>{detailCourse[k] || 0}</div></button>)}
+                {(["attendancePresent", "attendanceAbsent", "attendanceLate"] as const).map((k, i) => <button key={k} onClick={() => updateDetail({ [k]: (detailCourse[k] || 0) + 1 })} className="rounded-xl border border-slate-200 py-2.5 bg-slate-50">{["出席", "欠席", "遅刻"][i]}<div className="text-base font-semibold mt-0.5">{detailCourse[k] || 0}</div></button>)}
               </div>
-              <label className="text-xs block">欠席上限<input type="number" min={1} max={30} value={detailCourse.absenceLimit ?? 5} onChange={(e) => updateDetail({ absenceLimit: Number(e.target.value || 5) })} className="w-full mt-1 border rounded px-2 py-1" /></label>
-              <div className="text-xs text-gray-500">あと{Math.max((detailCourse.absenceLimit ?? 5) - (detailCourse.attendanceAbsent ?? 0), 0)}回休める</div>
-            </div>
-            <div className="bg-white rounded-xl border p-4 text-sm">
+              <label className="text-xs block text-slate-500">欠席上限<input type="number" min={1} max={30} value={detailCourse.absenceLimit ?? 5} onChange={(e) => updateDetail({ absenceLimit: Number(e.target.value || 5) })} className="w-full mt-1 border border-slate-200 rounded-xl px-3 py-2" /></label>
+              <div>
+                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-rose-300 rounded-full" style={{ width: `${Math.min(100, ((detailCourse.attendanceAbsent ?? 0) / Math.max(detailCourse.absenceLimit ?? 5, 1)) * 100)}%` }} />
+                </div>
+                <div className="text-xs text-slate-500 mt-1">あと{Math.max((detailCourse.absenceLimit ?? 5) - (detailCourse.attendanceAbsent ?? 0), 0)}回休める</div>
+              </div>
+            </SurfaceCard>
+            <SurfaceCard className="p-4 text-sm">
               <div className="font-semibold mb-2">この授業の未完了タスク</div>
-              <div className="text-xs text-gray-500">カテゴリ連携済みタスク: {linkedTasks}件</div>
-            </div>
-            <div className="bg-white rounded-xl border p-4 text-sm"><div className="font-semibold mb-2">メモ</div><textarea value={detailCourse.memo || ""} onChange={(e) => updateDetail({ memo: e.target.value })} rows={4} className="w-full border rounded p-2" /></div>
+              <div className="text-xs text-slate-500">カテゴリ連携済みタスク: {linkedTasks}件</div>
+            </SurfaceCard>
+            <SurfaceCard className="p-4 text-sm"><div className="font-semibold mb-2">メモ</div><textarea value={detailCourse.memo || ""} onChange={(e) => updateDetail({ memo: e.target.value })} rows={4} className="w-full border border-slate-200 rounded-xl p-2.5" /></SurfaceCard>
           </div>
         </div>
       )}
