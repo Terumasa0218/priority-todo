@@ -19,8 +19,9 @@ import { createTimetableShareToken, loadTimetableShareToken } from "@/lib/timeta
 import { AuthIssue, resolveAuthIssue } from "@/lib/authErrorCatalog";
 
 type View = "list" | "calendar" | "timetable" | "group" | "completed";
-const isInAppBrowser = () => /FBAN|FBAV|Instagram|Line|Twitter|wv/i.test(navigator.userAgent);
+const isInAppBrowser = () => /FBAN|FBAV|Instagram|Line|Twitter|wv|WebView|GSA|LinkedInApp|Slack|Discord|GitHub/i.test(navigator.userAgent);
 const isMobileDevice = () => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 const migratePeriod = (period: string | number): string => {
   if (typeof period === "string") {
@@ -59,6 +60,9 @@ export default function Home() {
   const [syncing, setSyncing] = useState(false);
   const [authIssue, setAuthIssue] = useState<AuthIssue | null>(null);
   const [authFlowMessage, setAuthFlowMessage] = useState<string | null>(null);
+  const [authBusy, setAuthBusy] = useState(false);
+  const inAppBrowser = useMemo(() => (typeof navigator !== "undefined" ? isInAppBrowser() : false), []);
+  const iosDevice = useMemo(() => (typeof navigator !== "undefined" ? isIOS() : false), []);
 
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -349,16 +353,17 @@ export default function Home() {
   };
 
   const handleGoogleLogin = async () => {
-    if (!auth || !googleProvider) return;
+    if (!auth || !googleProvider || authBusy) return;
+    setAuthBusy(true);
     setAuthIssue(null);
     setAuthFlowMessage(null);
-    if (isInAppBrowser()) {
-      setAuthIssue(resolveAuthIssue("auth/disallowed-useragent"));
-      return;
+    if (inAppBrowser) {
+      setAuthFlowMessage("アプリ内ブラウザです。失敗する場合は下の「Safari / Chromeで開く」を使ってください。");
     }
     try {
-      if (isMobileDevice()) {
+      if (isMobileDevice() || inAppBrowser) {
         await signInWithRedirect(auth, googleProvider);
+        return;
       } else {
         await signInWithPopup(auth, googleProvider);
       }
@@ -376,13 +381,44 @@ export default function Home() {
         return;
       }
       setAuthIssue(resolveAuthIssue(code));
+    } finally {
+      setAuthBusy(false);
     }
   };
 
-  const openInExternalBrowser = () => {
+  const copyCurrentUrlToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setAuthFlowMessage("URLをコピーしました。Safari / Chrome に貼り付けて開いてください。");
+    } catch {
+      setAuthFlowMessage("URLコピーに失敗しました。アドレスバーからURLをコピーしてSafari / Chromeで開いてください。");
+    }
+  };
+
+  const openInExternalBrowser = (target: "auto" | "safari" | "chrome" = "auto") => {
     const currentUrl = window.location.href;
     if (/Line/i.test(navigator.userAgent)) {
       window.location.href = `https://line.me/R/openExternalBrowser?url=${encodeURIComponent(currentUrl)}`;
+      return;
+    }
+    if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      if (target === "chrome") {
+        const chromeUrl = currentUrl.startsWith("https://")
+          ? currentUrl.replace(/^https:\/\//, "googlechromes://")
+          : currentUrl.replace(/^http:\/\//, "googlechrome://");
+        window.location.href = chromeUrl;
+        return;
+      }
+      window.location.href = `x-safari-${currentUrl}`;
+      return;
+    }
+    if (/Android/i.test(navigator.userAgent)) {
+      const withoutProtocol = currentUrl.replace(/^https?:\/\//, "");
+      window.location.href = `intent://${withoutProtocol}#Intent;scheme=https;package=com.android.chrome;end`;
+      return;
+    }
+    if (/GitHub|Instagram|FBAN|FBAV|Twitter|GSA|LinkedInApp|Slack|Discord/i.test(navigator.userAgent)) {
+      void copyCurrentUrlToClipboard();
       return;
     }
     window.open(currentUrl, "_blank", "noopener,noreferrer");
@@ -446,24 +482,43 @@ export default function Home() {
         <div>
           <h1 className="text-lg font-bold text-gray-900">PrioriTodoへようこそ</h1>
           <p className="text-sm text-gray-500 mt-2">Googleでログインして、クラウド同期を有効化してください。</p>
+          {inAppBrowser && (
+            <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-left">
+              <p className="text-xs text-amber-700 font-medium">このアプリ内ブラウザではGoogleログインできません。</p>
+              <p className="text-[11px] text-amber-700 mt-0.5">右上メニューからSafari / Chromeで開くか、URLをコピーして外部ブラウザで開いてください。</p>
+            </div>
+          )}
           {authFlowMessage && <p className="text-xs text-gray-500 mt-2">{authFlowMessage}</p>}
           {authIssue && (
             <div className="mt-2">
               <p className="text-xs text-red-500">ログインに失敗しました {authIssue.id}</p>
               <p className="text-[11px] text-red-400 mt-0.5">{authIssue.summary}</p>
               {authIssue.id === 407 && (
-                <button onClick={openInExternalBrowser} className="mt-2 text-[11px] font-medium text-blue-500 underline">
-                  Safari / Chromeで開く
-                </button>
+                <div className="mt-2 flex items-center gap-2">
+                  <button onClick={() => openInExternalBrowser("safari")} disabled={authBusy} className="text-[11px] font-medium text-blue-500 underline disabled:opacity-50">
+                    Safariで開く
+                  </button>
+                  {iosDevice && (
+                    <button onClick={() => openInExternalBrowser("chrome")} disabled={authBusy} className="text-[11px] font-medium text-blue-500 underline disabled:opacity-50">
+                      Chromeで開く
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}
-          <button
-            onClick={handleGoogleLogin}
-            className="mt-4 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-medium"
+            <button
+              onClick={handleGoogleLogin}
+            disabled={authBusy}
+            className="mt-4 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-medium disabled:opacity-60"
           >
-            Googleでログイン
+            {authBusy ? "ログイン処理中..." : "Googleでログイン"}
           </button>
+          {inAppBrowser && (
+            <button onClick={copyCurrentUrlToClipboard} disabled={authBusy} className="mt-2 px-4 py-2 rounded-lg border border-gray-300 text-xs font-medium text-gray-700 disabled:opacity-60">
+              URLをコピー
+            </button>
+          )}
         </div>
       </div>
     );
