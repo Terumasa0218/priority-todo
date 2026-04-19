@@ -36,3 +36,5 @@ body {
   -webkit-user-select: text;
   user-select: text;
 }
+
+.calendar-task-bar { border-radius: 3px; margin-bottom: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

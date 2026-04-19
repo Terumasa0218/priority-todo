@@ -107,7 +107,15 @@ export default function GroupView({ groups, setGroups }: GroupViewProps) {
 
   const removeMember = (gid: string, mid: string) => {
     setGroups((prev) =>
-      prev.map((g) => (g.id === gid ? { ...g, members: g.members.filter((m) => m.id !== mid) } : g))
+      prev.map((g) => {
+        if (g.id !== gid) return g;
+        const removed = g.members.find((m) => m.id === mid);
+        return {
+          ...g,
+          members: g.members.filter((m) => m.id !== mid),
+          tasks: g.tasks.map((t) => (removed && t.assignee === removed.name ? { ...t, assignee: null } : t)),
+        };
+      })
     );
   };
 
@@ -310,16 +318,16 @@ export default function GroupView({ groups, setGroups }: GroupViewProps) {
               <span className="text-sm font-semibold text-gray-900">{y}年 {mo + 1}月</span>
               <button onClick={() => setCalMonth(new Date(y, mo + 1))} className="p-2 hover:bg-gray-100 rounded-lg"><IconChevR size={16} /></button>
             </div>
-            <div className="grid grid-cols-7 mb-1">{DAY.map((d, i) => <div key={d} className={`text-center text-[11px] font-medium py-1 ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-gray-400"}`}>{d}</div>)}</div>
+            <div className="grid grid-cols-7 mb-1">{DAY.map((d, i) => <div key={d} className={`text-center text-xs font-semibold py-1.5 ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-gray-400"}`}>{d}</div>)}</div>
             <div className="grid grid-cols-7 gap-px bg-gray-100 border border-gray-100 rounded-lg overflow-hidden">
               {cells.map((day, idx) => {
                 const dt = day ? tasksOn(day) : [];
                 const tod = isToday(day);
                 const sel = isSel(day);
                 return (
-                  <div key={idx} onClick={() => day && setSelGrpDate(new Date(y, mo, day))} className={`min-h-[100px] p-1.5 transition-colors ${day ? "cursor-pointer" : ""}`} style={{ backgroundColor: sel ? "#111827" : tod ? "rgba(219,234,254,0.5)" : "#fff" }}>
-                    {day && <><div className={`text-[11px] leading-none mb-1.5 text-center font-medium ${sel ? "font-bold text-white" : tod ? "font-bold text-blue-600" : "text-gray-700"}`}>{day}</div>
-                      <div className="space-y-0.5">{dt.slice(0, 2).map((t) => { const mi = group.members.findIndex((m) => m.name === t.assignee); return <div key={t.id} className={`text-[8px] leading-tight truncate px-0.5 rounded ${sel ? "text-white/80" : "text-gray-500"}`} style={{ borderLeft: `2px solid ${sel ? "rgba(255,255,255,0.5)" : (mi >= 0 ? getMemberColor(mi) : "#889096")}` }}>{t.title}</div>; })}{dt.length > 2 && <span className={`text-[7px] px-0.5 ${sel ? "text-white/50" : "text-gray-400"}`}>+{dt.length - 2}</span>}</div>
+                  <div key={idx} onClick={() => day && setSelGrpDate(new Date(y, mo, day))} className={`min-h-[100px] p-1.5 transition-colors ${day ? "cursor-pointer" : ""}`} style={sel ? { border: "2px solid #111827", borderRadius: "4px", backgroundColor: "#fff" } : tod ? { backgroundColor: "rgba(219,234,254,0.4)" } : { backgroundColor: "#fff" }}>
+                    {day && <><div className={`text-[11px] leading-none mb-1.5 text-center ${sel ? "font-bold text-gray-900" : tod ? "font-bold text-blue-600" : "text-gray-700"}`}>{day}</div>
+                      <div className="space-y-0.5">{dt.slice(0, 2).map((t) => { const mi = group.members.findIndex((m) => m.name === t.assignee); return <div key={t.id} className="text-[10px] leading-tight truncate px-1 py-[1px] rounded text-white" style={{ backgroundColor: mi >= 0 ? getMemberColor(mi) : "#889096" }}>{t.title}</div>; })}{dt.length > 2 && <span className={`text-[9px] px-0.5 text-gray-400`}>+{dt.length - 2}</span>}</div>
                     </>}
                   </div>
                 );
