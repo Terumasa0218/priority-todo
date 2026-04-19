@@ -1,7 +1,7 @@
 "use client";
 import React, { useMemo, useState } from "react";
 import { IconPencil } from "@/components/Icons";
-import { Category, TimetableConfig, TimetableItem } from "@/lib/types";
+import { Category, Task, TimetableConfig, TimetableItem } from "@/lib/types";
 import { PALETTE } from "@/lib/constants";
 import { uid } from "@/lib/utils";
 
@@ -20,6 +20,8 @@ interface TimetableViewProps {
   config: TimetableConfig;
   setConfig: React.Dispatch<React.SetStateAction<TimetableConfig>>;
   onShare: () => Promise<string | null>;
+  tasks: Task[];
+  cats: Category[];
 }
 
 interface EditingState {
@@ -39,22 +41,22 @@ const buildPeriods = (maxPeriod: number) => {
   });
 };
 
-export default function TimetableView({ items, setItems, setCats, config, setConfig, onShare }: TimetableViewProps) {
+export default function TimetableView({ items, setItems, setCats, config, setConfig, onShare, tasks, cats }: TimetableViewProps) {
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [showError, setShowError] = useState(false);
   const [showCustomize, setShowCustomize] = useState(false);
-  const [sharing, setSharing] = useState(false);
-  const [shareMessage, setShareMessage] = useState<string | null>(null);
+  const [detailCourseId, setDetailCourseId] = useState<string | null>(null);
 
-  const periodOptions = useMemo(() => buildPeriods(config.maxPeriod), [config.maxPeriod]);
-  const onDemandSlotsByDay = DAYS.map((_, idx) => {
-    const value = Number(config.onDemandSlotsByDay?.[idx] ?? 0);
-    return Number.isFinite(value) ? Math.max(0, Math.min(20, Math.floor(value))) : 0;
-  });
+  const periodOptions = useMemo(() => buildPeriodGroups(config.maxPeriod), [config.maxPeriod]);
+
+  const normalizedItems = useMemo(
+    () => items.map((it) => ({ ...it, period: normalizePeriod(it.period), memo: it.memo || "", absenceLimit: it.absenceLimit ?? 5, attendanceAbsent: it.attendanceAbsent ?? 0, attendanceLate: it.attendanceLate ?? 0, attendancePresent: it.attendancePresent ?? 0 })),
+    [items]
+  );
 
   const cellMap = useMemo(() => {
     const map = new Map<string, TimetableItem>();
-    items.forEach((it) => {
+    normalizedItems.forEach((it) => {
       if (isOnDemandPeriod(it.period)) return;
       if (it.day < 1 || it.day > 5) return;
       const normalized = normalizePeriod(it.period);
@@ -77,34 +79,10 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
       map.set(day, list.sort((a, b) => getOnDemandSlotIndex(a.period) - getOnDemandSlotIndex(b.period)));
     });
     return map;
-  }, [items]);
+  }, [normalizedItems]);
 
-  const getNextOnDemandPeriod = (day: number) => {
-    const dayItems = onDemandMap.get(day) ?? [];
-    const nextIdx = dayItems.length === 0 ? 0 : Math.max(...dayItems.map((it) => getOnDemandSlotIndex(it.period))) + 1;
-    return ON_DEMAND_PERIOD + nextIdx;
-  };
-
-  const openCreate = (day: number, period: number) => {
-    setEditing({
-      mode: "create",
-      item: {
-        id: uid(),
-        name: "",
-        day,
-        period,
-        teacher: "",
-        room: "",
-        color: PALETTE[4],
-      },
-    });
-    setShowError(false);
-  };
-
-  const openEdit = (item: TimetableItem) => {
-    setEditing({ mode: "edit", item: { ...item, period: isOnDemandPeriod(item.period) ? item.period : normalizePeriod(item.period) } });
-    setShowError(false);
-  };
+  const onDemandItems = useMemo(() => normalizedItems.filter((it) => isOnDemandPeriod(it.period)), [normalizedItems]);
+  const detailCourse = normalizedItems.find((it) => it.id === detailCourseId) || null;
 
   const upsertCategoryByTimetable = (item: TimetableItem) => {
     setCats((prev) => {
@@ -118,37 +96,25 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
     setCats((prev) => prev.filter((c) => c.timetableId !== timetableId));
   };
 
+  const openCreate = (day: number, period: string) => setEditing({ mode: "create", item: { id: uid(), name: "", day, period, teacher: "", room: "", color: PALETTE[4], absenceLimit: 5, attendanceAbsent: 0, attendanceLate: 0, attendancePresent: 0, memo: "" } });
+  const openEdit = (item: TimetableItem) => setEditing({ mode: "edit", item: { ...item } });
+
   const handleSave = () => {
     if (!editing) return;
-    if (!editing.item.name.trim()) {
-      setShowError(true);
-      return;
-    }
-
-    const nextItem = {
-      ...editing.item,
-      period: isOnDemandPeriod(editing.item.period) ? editing.item.period : normalizePeriod(editing.item.period),
-      name: editing.item.name.trim(),
-    };
-
+    if (!editing.item.name.trim()) return setShowError(true);
+    const nextItem = { ...editing.item, name: editing.item.name.trim(), period: normalizePeriod(editing.item.period) };
     setItems((prev) => {
-      const filtered = prev.filter((it) => {
-        if (it.id === nextItem.id) return false;
-        if (isOnDemandPeriod(nextItem.period)) return true;
-        return !(it.day === nextItem.day && !isOnDemandPeriod(it.period) && normalizePeriod(it.period) === nextItem.period);
-      });
-      return [...filtered, nextItem];
+      const normalizedPrev = prev.map((it) => ({ ...it, period: normalizePeriod(it.period) }));
+      return [...normalizedPrev.filter((it) => (it.id !== nextItem.id) && (isOnDemandPeriod(nextItem.period) || it.day !== nextItem.day || it.period !== nextItem.period)), nextItem];
     });
-
     upsertCategoryByTimetable(nextItem);
     setEditing(null);
   };
 
   const handleDelete = () => {
     if (!editing || editing.mode !== "edit") return;
-    const id = editing.item.id;
-    setItems((prev) => prev.filter((it) => it.id !== id));
-    removeCategoryByTimetable(id);
+    setItems((prev) => prev.filter((it) => it.id !== editing.item.id));
+    removeCategoryByTimetable(editing.item.id);
     setEditing(null);
   };
 
@@ -189,202 +155,104 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
     }
   };
 
+  const linkedTasks = detailCourse
+    ? (() => { const cat = cats.find((c) => c.timetableId === detailCourse.id); return tasks.filter((t) => !t.completed && !!cat && t.category === cat.id).length; })()
+    : 0;
+
   return (
     <div className="px-2 py-4">
       <div className="flex items-center justify-end gap-2 mb-2">
-        <button onClick={handleShare} disabled={sharing || items.length === 0} className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 px-2 py-1 rounded-md hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-          共有
-        </button>
-        <button onClick={() => setShowCustomize(true)} className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 px-2 py-1 rounded-md hover:bg-gray-100 transition-colors">
-          <IconPencil size={13} />カスタム
-        </button>
+        <button onClick={() => onShare()} disabled={items.length === 0} className="px-3 py-2 min-h-11 text-xs rounded-md hover:bg-gray-100">共有</button>
+        <button onClick={() => setShowCustomize(true)} className="px-3 py-2 min-h-11 text-xs rounded-md hover:bg-gray-100"><IconPencil size={13} />カスタム</button>
       </div>
-      {shareMessage && <div className="mb-2 text-[11px] text-right text-gray-500">{shareMessage}</div>}
 
       <div className="border border-gray-300 rounded-xl overflow-hidden bg-white">
-        <div className="grid" style={{ gridTemplateColumns: "50px repeat(5, minmax(0, 1fr))" }}>
-          <div className="bg-gray-50 border-b border-r border-gray-300 h-9" />
-          {DAYS.map((d) => (
-            <div key={d.value} className="h-9 border-b border-gray-300 text-center text-xs font-semibold text-gray-600 flex items-center justify-center bg-gray-50">{d.label}</div>
-          ))}
-
-          {periodOptions.map((slot) => (
-            <React.Fragment key={slot.value}>
-              <div className="h-20 border-r border-b border-gray-300 flex items-center justify-center text-[11px] text-gray-500 bg-gray-50">{slot.label}</div>
+        <div className="grid" style={{ gridTemplateColumns: "62px repeat(5, minmax(0, 1fr))" }}>
+          <div className="bg-gray-50 border-b border-r border-gray-300 h-11" />
+          {DAYS.map((d) => <div key={d.value} className="h-11 border-b border-gray-300 text-center text-sm font-semibold text-gray-600 flex items-center justify-center bg-gray-50">{d.label}</div>)}
+          {periodOptions.map((label) => (
+            <React.Fragment key={label}>
+              <div className="h-28 border-r border-b border-gray-300 flex items-center justify-center text-xs text-gray-600 bg-gray-50">{label}</div>
               {DAYS.map((d) => {
-                const key = `${d.value}-${slot.value}`;
+                const key = `${d.value}-${label}`;
                 const item = cellMap.get(key);
-                if (!item) {
-                  return <button key={key} onClick={() => openCreate(d.value, slot.value)} className="h-20 border-b border-gray-300 flex items-center justify-center text-gray-300 hover:text-gray-500 hover:bg-gray-50 transition-colors">＋</button>;
-                }
-                return (
-                  <button key={key} onClick={() => openEdit(item)} className="h-20 border-b border-gray-300 p-1.5 text-left transition-colors hover:brightness-95" style={{ backgroundColor: `${item.color}20`, borderLeft: `3px solid ${item.color}` }}>
-                    <div className="text-[11px] font-semibold text-gray-900 leading-tight line-clamp-3">{item.name}</div>
-                    <div className="text-[10px] text-gray-500 truncate mt-1">{item.room || "教室未設定"}</div>
+                return item ? (
+                  <button key={key} onClick={() => setDetailCourseId(item.id)} className="h-28 border-b border-gray-300 p-2 text-left" style={{ backgroundColor: `${item.color}20`, borderLeft: `4px solid ${item.color}` }}>
+                    <div className="text-xs font-semibold line-clamp-3">{item.name}</div>
+                    <div className="text-[11px] text-gray-600 mt-1 truncate">{item.room || "教室未設定"}</div>
                   </button>
-                );
+                ) : <button key={key} onClick={() => openCreate(d.value, label)} className="h-28 border-b border-gray-300 text-gray-300 hover:bg-gray-50">＋</button>;
               })}
             </React.Fragment>
           ))}
-
-          {config.showOnDemand && (
-            <>
-              <div className="min-h-20 border-r border-b border-gray-300 flex items-center justify-center text-xs text-gray-500 bg-gray-50 font-medium px-2">オンデマンド</div>
-              {DAYS.map((d, idx) => {
-                const minimumSlots = onDemandSlotsByDay[idx];
-                const dayItems = onDemandMap.get(d.value) ?? [];
-                const slotCount = Math.max(minimumSlots, dayItems.length);
-                return (
-                  <div key={d.value} className="min-h-20 border-b border-gray-300 p-1.5">
-                    <div className="space-y-1">
-                      {Array.from({ length: slotCount }, (_, slotIdx) => {
-                        const item = dayItems.find((it) => getOnDemandSlotIndex(it.period) === slotIdx) ?? null;
-                        return (
-                          <button
-                            key={`${d.value}-${slotIdx}`}
-                            onClick={() => (item ? openEdit(item) : openCreate(d.value, ON_DEMAND_PERIOD + slotIdx))}
-                            className={`w-full h-11 rounded-md border text-[11px] px-2 text-left transition-colors ${item ? "hover:brightness-95" : "border-dashed border-gray-300 text-gray-400 hover:bg-gray-50"}`}
-                            style={item ? { backgroundColor: `${item.color}18`, borderColor: `${item.color}88` } : undefined}
-                          >
-                            <span className="block text-[10px] text-gray-500 mb-0.5">{d.label}曜 {slotIdx + 1}</span>
-                            <span className="block truncate">{item ? item.name : "未設定"}</span>
-                          </button>
-                        );
-                      })}
-                      <button onClick={() => openCreate(d.value, getNextOnDemandPeriod(d.value))} className="w-full h-8 rounded-md border border-dashed border-gray-300 text-[11px] text-gray-400 hover:bg-gray-50 transition-colors">＋追加</button>
-                    </div>
-                  </div>
-                );
-              })}
-            </>
-          )}
         </div>
       </div>
 
       {config.showOnDemand && (
         <div className="mt-4">
           <div className="text-sm font-semibold text-gray-700 mb-2">オンデマンド授業</div>
-          <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}>
-            {DAYS.map((d) => {
-              const dayItems = onDemandMap.get(d.value) ?? [];
-              return (
-                <div key={d.value} className="space-y-2">
-                  {dayItems.length === 0 ? (
-                    <div className="h-14 rounded-md border border-gray-200 bg-gray-50 text-[10px] text-gray-300 flex items-center justify-center">-</div>
-                  ) : (
-                    dayItems.map((item, idx) => (
-                      <button key={item.id} onClick={() => openEdit(item)} className="w-full rounded-md border px-2 py-2 text-left text-[11px] hover:brightness-95 transition-colors" style={{ backgroundColor: `${item.color}14`, borderColor: `${item.color}88` }}>
-                        <span className="block text-[10px] text-gray-500">{d.label}曜配信 {idx + 1}</span>
-                        <span className="block font-medium text-gray-800 truncate">{item.name}</span>
-                      </button>
-                    ))
-                  )}
-                </div>
-              );
-            })}
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {onDemandItems.map((item) => (
+              <button key={item.id} onClick={() => setDetailCourseId(item.id)} className="min-w-44 h-24 rounded-lg border p-3 text-left" style={{ backgroundColor: `${item.color}14`, borderColor: `${item.color}88` }}>
+                <span className="block font-medium text-sm truncate">{item.name}</span>
+                <span className="block text-xs text-gray-500 mt-1 truncate">{DAYS.find((d) => d.value === item.day)?.label}曜配信</span>
+              </button>
+            ))}
+            <button onClick={() => openCreate(1, `オンデマンド${onDemandItems.length + 1}`)} className="min-w-24 h-24 rounded-lg border border-dashed text-gray-400">＋</button>
           </div>
         </div>
       )}
 
       {showCustomize && (
-        <div className="fixed inset-0 z-50 bg-gray-50/95 flex flex-col" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
+        <div className="fixed inset-0 z-50 bg-gray-50/95 flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
-            <button onClick={() => setShowCustomize(false)} className="text-sm text-blue-500 font-medium">キャンセル</button>
-            <span className="text-sm font-semibold text-gray-900">時間割のカスタム</span>
-            <button
-              onClick={() => {
-                const periodInput = document.getElementById("max-period-input") as HTMLInputElement | null;
-                const toggle = document.getElementById("ondemand-toggle") as HTMLInputElement | null;
-                const slotInputs = DAYS.map((d) => {
-                  const input = document.getElementById(`ondemand-slots-day-${d.value}`) as HTMLInputElement | null;
-                  return Number(input?.value ?? config.onDemandSlotsByDay?.[d.value - 1] ?? 0);
-                });
-                applyCustomize(Number(periodInput?.value || config.maxPeriod), !!toggle?.checked, slotInputs);
-              }}
-              className="text-sm font-semibold text-blue-500"
-            >保存</button>
+            <button onClick={() => setShowCustomize(false)} className="text-sm text-blue-500 font-medium">キャンセル</button><span className="text-sm font-semibold">時間割のカスタム</span>
+            <button onClick={() => {
+              const periodInput = document.getElementById("max-period-input") as HTMLInputElement | null;
+              const toggle = document.getElementById("ondemand-toggle") as HTMLInputElement | null;
+              applyCustomize(Number(periodInput?.value || config.maxPeriod), !!toggle?.checked);
+            }} className="text-sm font-semibold text-blue-500">保存</button>
           </div>
-          <div className="mt-4 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
-            <div className="px-4 py-3 border-b border-gray-100">
-              <div className="text-sm text-gray-900 mb-1">最大時限</div>
-              <input id="max-period-input" type="number" min={2} max={20} step={2} defaultValue={config.maxPeriod} className="w-full px-3 py-2 rounded-md border border-gray-200 text-sm" />
-              <p className="text-[11px] text-gray-400 mt-1">偶数で入力（例: 6 / 8 / 10）。1・2限、3・4限のセットで表示します。</p>
-            </div>
-            <label className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <span className="text-sm text-gray-900">下部にオンデマンド枠を表示</span>
-              <input id="ondemand-toggle" type="checkbox" defaultChecked={config.showOnDemand} className="w-4 h-4" />
-            </label>
-            <div className="px-4 py-3">
-              <div className="text-sm text-gray-900 mb-2">オンデマンド枠数（曜日ごと）</div>
-              <div className="grid grid-cols-5 gap-2">
-                {DAYS.map((d, idx) => (
-                  <label key={d.value} className="space-y-1">
-                    <span className="text-[11px] text-gray-500">{d.label}曜</span>
-                    <input id={`ondemand-slots-day-${d.value}`} type="number" min={0} max={20} step={1} defaultValue={config.onDemandSlotsByDay?.[idx] ?? 0} className="w-full px-2 py-1.5 rounded-md border border-gray-200 text-sm" />
-                  </label>
-                ))}
-              </div>
-              <p className="text-[11px] text-gray-400 mt-2">設定した枠数は初期プレースホルダーとして表示されます。実際のオンデマンド授業は下段の＋追加で無制限に追加できます。</p>
-            </div>
+          <div className="mt-4 mx-4 bg-white rounded-xl border border-gray-100 p-4 space-y-3">
+            <label className="block text-sm">最大時限<input id="max-period-input" type="number" min={2} max={18} step={2} defaultValue={config.maxPeriod} className="w-full mt-1 px-3 py-2 rounded-md border border-gray-200" /></label>
+            <label className="flex items-center justify-between text-sm">オンデマンド表示<input id="ondemand-toggle" type="checkbox" defaultChecked={config.showOnDemand} /></label>
           </div>
         </div>
       )}
 
       {editing && (
-        <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
-          <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
-            <button onClick={() => setEditing(null)} className="text-sm text-blue-500 font-medium">キャンセル</button>
-            <span className="text-sm font-semibold text-gray-900">{editing.mode === "edit" ? "授業の編集" : "授業の追加"}</span>
-            <button onClick={handleSave} className="text-sm font-semibold text-blue-500">保存</button>
+        <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
+          <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200"><button onClick={() => setEditing(null)} className="text-sm text-blue-500">キャンセル</button><span className="text-sm font-semibold">{editing.mode === "edit" ? "授業の編集" : "授業の追加"}</span><button onClick={handleSave} className="text-sm text-blue-500 font-semibold">保存</button></div>
+          <div className="flex-1 overflow-y-auto mt-4 mx-4 bg-white rounded-xl border border-gray-100">
+            <input type="text" value={editing.item.name} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, name: e.target.value } } : prev)} placeholder="授業名" className="w-full px-4 py-3 border-b" />
+            {!isOnDemandPeriod(editing.item.period) && <div className="px-4 py-3 border-b flex items-center justify-between"><span className="text-sm">時限</span><select value={editing.item.period} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, period: e.target.value } } : prev)}>{periodOptions.map((p) => <option key={p} value={p}>{p}</option>)}</select></div>}
+            <input type="text" value={editing.item.teacher} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, teacher: e.target.value } } : prev)} placeholder="教員名" className="w-full px-4 py-3 border-b" />
+            <input type="text" value={editing.item.room} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, room: e.target.value } } : prev)} placeholder="教室" className="w-full px-4 py-3 border-b" />
           </div>
-          <div className="flex-1 overflow-y-auto">
-            <div className="mt-4 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
-              <input
-                type="text"
-                value={editing.item.name}
-                onChange={(e) => {
-                  setEditing((prev) => prev ? { ...prev, item: { ...prev.item, name: e.target.value } } : prev);
-                  if (e.target.value.trim()) setShowError(false);
-                }}
-                placeholder="授業名を入力"
-                className={`w-full px-4 py-3.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none border-b ${showError && !editing.item.name.trim() ? "border-red-300 bg-red-50/50" : "border-gray-100"}`}
-                autoFocus
-              />
-              {showError && !editing.item.name.trim() && <div className="px-4 py-2 text-xs text-red-500 bg-red-50/50">授業名を入力してください</div>}
-              {!isOnDemandPeriod(editing.item.period) && (
-                <>
-                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                    <span className="text-sm text-gray-900">曜日</span>
-                    <select value={editing.item.day} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, day: Number(e.target.value) } } : prev)} className="text-sm text-gray-500 bg-transparent focus:outline-none">
-                      {DAYS.map((d) => <option key={d.value} value={d.value}>{d.label}曜</option>)}
-                    </select>
-                  </div>
-                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                    <span className="text-sm text-gray-900">時限</span>
-                    <select value={editing.item.period} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, period: Number(e.target.value) } } : prev)} className="text-sm text-gray-500 bg-transparent focus:outline-none">
-                      {periodOptions.map((slot) => <option key={slot.value} value={slot.value}>{slot.label}</option>)}
-                    </select>
-                  </div>
-                </>
-              )}
-              {isOnDemandPeriod(editing.item.period) && <div className="px-4 py-3 border-b border-gray-100 text-sm text-gray-500">オンデマンド枠 {DAYS.find((d) => d.value === editing.item.day)?.label}曜 {getOnDemandSlotIndex(editing.item.period) + 1}</div>}
-              <input type="text" value={editing.item.teacher} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, teacher: e.target.value } } : prev)} placeholder="教員名（任意）" className="w-full px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none border-b border-gray-100" />
-              <input type="text" value={editing.item.room} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, room: e.target.value } } : prev)} placeholder="教室（任意）" className="w-full px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none border-b border-gray-100" />
-              <div className="px-4 py-3">
-                <span className="text-sm text-gray-900 block mb-2">色</span>
-                <div className="flex gap-1.5 flex-wrap">
-                  {PALETTE.map((co) => (
-                    <button key={co} onClick={() => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, color: co } } : prev)} className={`w-6 h-6 rounded-full transition-all ${editing.item.color === co ? "ring-2 ring-offset-1 ring-gray-900 scale-110" : ""}`} style={{ backgroundColor: co }} />
-                  ))}
-                </div>
+          {editing.mode === "edit" && <div className="px-4 py-3 bg-white border-t"><button onClick={handleDelete} className="text-sm text-red-500">削除</button></div>}
+          {showError && <p className="px-4 py-2 text-xs text-red-500">授業名を入力してください</p>}
+        </div>
+      )}
+
+      {detailCourse && (
+        <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
+          <div className="flex items-center justify-between px-4 py-3 bg-white border-b"><button onClick={() => setDetailCourseId(null)} className="text-sm text-blue-500">戻る</button><span className="text-sm font-semibold">授業詳細</span><button onClick={() => openEdit(detailCourse)} className="text-sm text-blue-500">編集</button></div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div className="bg-white rounded-xl border p-4 text-sm space-y-1"><div className="font-semibold">{detailCourse.name}</div><div>教室: {detailCourse.room || "未設定"}</div><div>教員: {detailCourse.teacher || "未設定"}</div></div>
+            <div className="bg-white rounded-xl border p-4 text-sm space-y-2">
+              <div className="font-semibold">出欠</div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                {(["attendancePresent", "attendanceAbsent", "attendanceLate"] as const).map((k, i) => <button key={k} onClick={() => updateDetail({ [k]: (detailCourse[k] || 0) + 1 })} className="border rounded-lg py-2">{["出席", "欠席", "遅刻"][i]} +<div>{detailCourse[k] || 0}</div></button>)}
               </div>
+              <label className="text-xs block">欠席上限<input type="number" min={1} max={30} value={detailCourse.absenceLimit ?? 5} onChange={(e) => updateDetail({ absenceLimit: Number(e.target.value || 5) })} className="w-full mt-1 border rounded px-2 py-1" /></label>
+              <div className="text-xs text-gray-500">あと{Math.max((detailCourse.absenceLimit ?? 5) - (detailCourse.attendanceAbsent ?? 0), 0)}回休める</div>
             </div>
+            <div className="bg-white rounded-xl border p-4 text-sm">
+              <div className="font-semibold mb-2">この授業の未完了タスク</div>
+              <div className="text-xs text-gray-500">カテゴリ連携済みタスク: {linkedTasks}件</div>
+            </div>
+            <div className="bg-white rounded-xl border p-4 text-sm"><div className="font-semibold mb-2">メモ</div><textarea value={detailCourse.memo || ""} onChange={(e) => updateDetail({ memo: e.target.value })} rows={4} className="w-full border rounded p-2" /></div>
           </div>
-          {editing.mode === "edit" && (
-            <div className="flex items-center justify-end px-4 py-3 bg-white border-t border-gray-200">
-              <button onClick={handleDelete} className="text-sm text-red-500 font-medium">削除</button>
-            </div>
-          )}
         </div>
       )}
     </div>

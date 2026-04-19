@@ -44,6 +44,8 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const [offsetDays, setOffsetDays] = useState<number>(task?.offsetDays ?? 0);
   const [offsetTime, setOffsetTime] = useState(task?.offsetTime || "23:59");
   const [showError, setShowError] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [biweeklyInterval, setBiweeklyInterval] = useState<number>(task?.biweeklyInterval ?? 2);
 
   useEffect(() => {
     if (recurrence === "none") {
@@ -56,6 +58,9 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     setRepeatEndDate(d.toISOString().slice(0, 10));
   }, [recurrence, deadline, repeatEndDate]);
 
+  const selectedCat = cats.find((c) => c.id === category);
+  const isTimetableCourse = !!selectedCat?.timetableId;
+
   useEffect(() => {
     const c = cats.find((x) => x.id === category);
     if (!c?.timetableId || recurrence === "monthly") return;
@@ -64,14 +69,14 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   }, [category, cats, timetable, recurrence]);
 
   const preview = useMemo(() => {
-    if (recurrence !== "weekly" && recurrence !== "biweekly") return "";
+    if (!isTimetableCourse || (recurrence !== "weekly" && recurrence !== "biweekly")) return "";
     const base = new Date(deadline);
     const diff = (classDayOfWeek - base.getDay() + 7) % 7;
     base.setDate(base.getDate() + diff + offsetDays);
     const [h, m] = offsetTime.split(":").map(Number);
     base.setHours(h || 0, m || 0, 0, 0);
     return `${base.getMonth() + 1}/${base.getDate()}(${DAY[base.getDay()]}) ${String(base.getHours()).padStart(2, "0")}:${String(base.getMinutes()).padStart(2, "0")}`;
-  }, [recurrence, deadline, classDayOfWeek, offsetDays, offsetTime]);
+  }, [recurrence, deadline, classDayOfWeek, offsetDays, offsetTime, isTimetableCourse]);
 
   const occurrenceCount = useMemo(() => {
     if (recurrence === "none" || !repeatEndDate) return 1;
@@ -96,11 +101,15 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       classDayOfWeek,
       offsetDays,
       offsetTime,
+      biweeklyInterval,
     });
-  }, [recurrence, repeatEndDate, task, title, deadline, category, priority, reminder, memo, url, classDayOfWeek, offsetDays, offsetTime]);
+  }, [recurrence, repeatEndDate, task, title, deadline, category, priority, reminder, memo, url, classDayOfWeek, offsetDays, offsetTime, biweeklyInterval]);
 
   const handleSave = () => {
-    if (!title.trim()) { setShowError(true); return; }
+    if (!title.trim()) { setShowError(true); setFormError("タイトルを入力してください"); return; }
+    if (recurrence !== "none" && repeatEndDate && new Date(repeatEndDate).getTime() < new Date(deadline).getTime()) { setFormError("終了日は開始日以降に設定してください"); return; }
+    if (recurrence === "biweekly" && (biweeklyInterval < 2 || biweeklyInterval > 8)) { setFormError("隔週の間隔は2〜8週間で入力してください"); return; }
+    setFormError("");
     onSave({
       id: task?.parentId || task?.id || uid(),
       title: title.trim(),
@@ -118,9 +127,10 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       completedOccurrences: task?.completedOccurrences || [],
       order: task?.order ?? null,
       createdAt: task?.createdAt || new Date().toISOString(),
-      classDayOfWeek: recurrence === "weekly" || recurrence === "biweekly" ? classDayOfWeek : undefined,
-      offsetDays: recurrence === "weekly" || recurrence === "biweekly" ? offsetDays : undefined,
-      offsetTime: recurrence === "weekly" || recurrence === "biweekly" ? offsetTime : undefined,
+      offsetTime: isTimetableCourse && (recurrence === "weekly" || recurrence === "biweekly") ? offsetTime : undefined,
+      classDayOfWeek: isTimetableCourse && (recurrence === "weekly" || recurrence === "biweekly") ? classDayOfWeek : undefined,
+      offsetDays: isTimetableCourse && (recurrence === "weekly" || recurrence === "biweekly") ? offsetDays : undefined,
+      biweeklyInterval: recurrence === "biweekly" ? biweeklyInterval : undefined,
     });
   };
 
@@ -147,18 +157,26 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
               {RECUR.map((r) => <button key={r.id} onClick={() => setRecurrence(r.id)} className={`px-2.5 py-1.5 rounded-lg text-xs ${recurrence === r.id ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"}`}>{r.label}</button>)}
             </div>
           </div>
-          {(recurrence === "weekly" || recurrence === "biweekly") && (
+          {isTimetableCourse && (recurrence === "weekly" || recurrence === "biweekly") && (
             <>
               <div className="px-4 py-3 border-b border-gray-100">
-                <div className="text-sm mb-2">授業曜日</div>
-                <div className="flex gap-1.5">{[1,2,3,4,5].map((d) => <button key={d} onClick={() => setClassDayOfWeek(d)} className={`px-3 py-1.5 rounded-md text-xs ${classDayOfWeek === d ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"}`}>{DAY[d]}</button>)}</div>
+                <div className="text-sm mb-1">授業曜日（時間割から自動）</div>
+                <div className="text-xs text-gray-500">{DAY[classDayOfWeek]}曜日</div>
               </div>
               <div className="px-4 py-3 border-b border-gray-100 grid grid-cols-3 gap-2 items-end">
-                <label className="text-xs text-gray-500">授業日の何日後<input type="number" min={0} max={30} value={offsetDays} onChange={(e) => setOffsetDays(Number(e.target.value || 0))} className="w-full mt-1 px-2 py-1.5 rounded border border-gray-200" /></label>
-                <label className="text-xs text-gray-500 col-span-2">締切時刻<input type="time" value={offsetTime} onChange={(e) => setOffsetTime(e.target.value)} className="w-full mt-1 px-2 py-1.5 rounded border border-gray-200" /></label>
+                <label className="text-xs text-gray-500">授業日の何日後<input type="number" min={0} max={30} value={offsetDays} onChange={(e) => setOffsetDays(Number(e.target.value || 0))} className="w-full mt-1 px-2 py-2 rounded border border-gray-200" /></label>
+                <label className="text-xs text-gray-500 col-span-2">締切時刻<input type="time" value={offsetTime} onChange={(e) => setOffsetTime(e.target.value)} className="w-full mt-1 px-2 py-2 rounded border border-gray-200" /></label>
                 <div className="col-span-3 text-xs text-gray-500">初回締切: {preview}</div>
               </div>
             </>
+          )}
+          {recurrence === "biweekly" && (
+            <div className="px-4 py-3 border-b border-gray-100">
+              <label className="text-sm">間隔</label>
+              <div className="mt-1 flex items-center gap-2 text-sm">
+                <input type="number" min={2} max={8} value={biweeklyInterval} onChange={(e) => setBiweeklyInterval(Number(e.target.value || 2))} className="w-20 text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />週間おき
+              </div>
+            </div>
           )}
           {recurrence !== "none" && (
             <div className="px-4 py-3 border-b border-gray-100">
@@ -169,6 +187,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
           )}
           <div className="px-4 py-3 flex items-center justify-between"><span className="text-sm">通知アラーム</span><select value={reminder} onChange={(e) => setReminder(e.target.value)} className="text-sm">{REMINDERS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}</select></div>
         </div>
+        {formError && <div className="mt-3 mx-4 text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{formError}</div>}
         <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100"><div className="flex items-center gap-2"><IconFlag filled={priority} /><span className="text-sm">最優先</span></div><button onClick={() => setPriority(!priority)} className={`w-12 h-7 rounded-full relative ${priority ? "bg-red-500" : "bg-gray-300"}`}><div className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white ${priority ? "translate-x-5" : ""}`} /></button></div>
           <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="URL" className="w-full px-4 py-3 text-sm border-b border-gray-100" />
