@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { FILTERS, DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG, WEEKDAY_LABELS } from "@/lib/constants";
 import { expandRecurring, remaining, uid } from "@/lib/utils";
 import { Category, Group, Task, TimetableConfig, TimetableItem, TouchDragState } from "@/lib/types";
-import { IconArchive, IconBook, IconCalendar, IconClock, IconList, IconPalette, IconPlus, IconSettings, IconUsers } from "@/components/Icons";
+import { IconBook, IconList, IconPalette, IconPlus, IconSettings } from "@/components/Icons";
 import TaskRow from "@/components/TaskRow";
 import TaskForm from "@/components/TaskForm";
 import CategoryManager from "@/components/CategoryManager";
@@ -12,6 +12,9 @@ import CalendarView from "@/components/CalendarView";
 import CompletedList from "@/components/CompletedList";
 import GroupView from "@/components/GroupView";
 import TimetableView from "@/components/TimetableView";
+import SegmentedTabs from "@/components/ui/SegmentedTabs";
+import SurfaceCard from "@/components/ui/SurfaceCard";
+import EmptyState from "@/components/ui/EmptyState";
 import { auth, firebaseEnabled, googleProvider } from "@/lib/firebase";
 import { signInWithPopup, signOut, onAuthStateChanged, signInWithRedirect, User, browserLocalPersistence, getRedirectResult, setPersistence } from "firebase/auth";
 import { deleteCloudSnapshot, loadCloudSnapshot, migrateLocalToCloudOnce, saveCloudSnapshot } from "@/lib/cloudStorage";
@@ -19,8 +22,9 @@ import { createTimetableShareToken, loadTimetableShareToken } from "@/lib/timeta
 import { AuthIssue, resolveAuthIssue } from "@/lib/authErrorCatalog";
 
 type View = "list" | "calendar" | "timetable" | "group" | "completed";
-const isInAppBrowser = () => /FBAN|FBAV|Instagram|Line|Twitter|wv/i.test(navigator.userAgent);
+const isInAppBrowser = () => /FBAN|FBAV|Instagram|Line|Twitter|wv|WebView|GSA|LinkedInApp|Slack|Discord|GitHub/i.test(navigator.userAgent);
 const isMobileDevice = () => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 const migratePeriod = (period: string | number): string => {
   if (typeof period === "string") {
@@ -42,7 +46,11 @@ export default function Home() {
   const [timetable, setTimetable] = useState<TimetableItem[]>([]);
   const [timetableConfig, setTimetableConfig] = useState<TimetableConfig>(DEFAULT_TIMETABLE_CONFIG);
   const [view, setView] = useState<View>("list");
-  const [filter, setFilter] = useState("week");
+  const [activeFilter, setActiveFilter] = useState("week");
+  // Backward-compatible aliases for in-progress refactors in this file.
+  // This prevents accidental unresolved references when `filter` names remain.
+  const filter = activeFilter;
+  const setFilter = setActiveFilter;
   const [catFilter, setCatFilter] = useState("all");
   const [showCourseFilters, setShowCourseFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -59,6 +67,9 @@ export default function Home() {
   const [syncing, setSyncing] = useState(false);
   const [authIssue, setAuthIssue] = useState<AuthIssue | null>(null);
   const [authFlowMessage, setAuthFlowMessage] = useState<string | null>(null);
+  const [authBusy, setAuthBusy] = useState(false);
+  const inAppBrowser = useMemo(() => (typeof navigator !== "undefined" ? isInAppBrowser() : false), []);
+  const iosDevice = useMemo(() => (typeof navigator !== "undefined" ? isIOS() : false), []);
 
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -349,16 +360,17 @@ export default function Home() {
   };
 
   const handleGoogleLogin = async () => {
-    if (!auth || !googleProvider) return;
+    if (!auth || !googleProvider || authBusy) return;
+    setAuthBusy(true);
     setAuthIssue(null);
     setAuthFlowMessage(null);
-    if (isInAppBrowser()) {
-      setAuthIssue(resolveAuthIssue("auth/disallowed-useragent"));
-      return;
+    if (inAppBrowser) {
+      setAuthFlowMessage("アプリ内ブラウザです。失敗する場合は下の「Safari / Chromeで開く」を使ってください。");
     }
     try {
-      if (isMobileDevice()) {
+      if (isMobileDevice() || inAppBrowser) {
         await signInWithRedirect(auth, googleProvider);
+        return;
       } else {
         await signInWithPopup(auth, googleProvider);
       }
@@ -376,13 +388,44 @@ export default function Home() {
         return;
       }
       setAuthIssue(resolveAuthIssue(code));
+    } finally {
+      setAuthBusy(false);
     }
   };
 
-  const openInExternalBrowser = () => {
+  const copyCurrentUrlToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setAuthFlowMessage("URLをコピーしました。Safari / Chrome に貼り付けて開いてください。");
+    } catch {
+      setAuthFlowMessage("URLコピーに失敗しました。アドレスバーからURLをコピーしてSafari / Chromeで開いてください。");
+    }
+  };
+
+  const openInExternalBrowser = (target: "auto" | "safari" | "chrome" = "auto") => {
     const currentUrl = window.location.href;
     if (/Line/i.test(navigator.userAgent)) {
       window.location.href = `https://line.me/R/openExternalBrowser?url=${encodeURIComponent(currentUrl)}`;
+      return;
+    }
+    if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      if (target === "chrome") {
+        const chromeUrl = currentUrl.startsWith("https://")
+          ? currentUrl.replace(/^https:\/\//, "googlechromes://")
+          : currentUrl.replace(/^http:\/\//, "googlechrome://");
+        window.location.href = chromeUrl;
+        return;
+      }
+      window.location.href = `x-safari-${currentUrl}`;
+      return;
+    }
+    if (/Android/i.test(navigator.userAgent)) {
+      const withoutProtocol = currentUrl.replace(/^https?:\/\//, "");
+      window.location.href = `intent://${withoutProtocol}#Intent;scheme=https;package=com.android.chrome;end`;
+      return;
+    }
+    if (/GitHub|Instagram|FBAN|FBAV|Twitter|GSA|LinkedInApp|Slack|Discord/i.test(navigator.userAgent)) {
+      void copyCurrentUrlToClipboard();
       return;
     }
     window.open(currentUrl, "_blank", "noopener,noreferrer");
@@ -446,32 +489,74 @@ export default function Home() {
         <div>
           <h1 className="text-lg font-bold text-gray-900">PrioriTodoへようこそ</h1>
           <p className="text-sm text-gray-500 mt-2">Googleでログインして、クラウド同期を有効化してください。</p>
+          {inAppBrowser && (
+            <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-left">
+              <p className="text-xs text-amber-700 font-medium">このアプリ内ブラウザではGoogleログインできません。</p>
+              <p className="text-[11px] text-amber-700 mt-0.5">右上メニューからSafari / Chromeで開くか、URLをコピーして外部ブラウザで開いてください。</p>
+            </div>
+          )}
           {authFlowMessage && <p className="text-xs text-gray-500 mt-2">{authFlowMessage}</p>}
           {authIssue && (
             <div className="mt-2">
               <p className="text-xs text-red-500">ログインに失敗しました {authIssue.id}</p>
               <p className="text-[11px] text-red-400 mt-0.5">{authIssue.summary}</p>
               {authIssue.id === 407 && (
-                <button onClick={openInExternalBrowser} className="mt-2 text-[11px] font-medium text-blue-500 underline">
-                  Safari / Chromeで開く
-                </button>
+                <div className="mt-2 flex items-center gap-2">
+                  <button onClick={() => openInExternalBrowser("safari")} disabled={authBusy} className="text-[11px] font-medium text-blue-500 underline disabled:opacity-50">
+                    Safariで開く
+                  </button>
+                  {iosDevice && (
+                    <button onClick={() => openInExternalBrowser("chrome")} disabled={authBusy} className="text-[11px] font-medium text-blue-500 underline disabled:opacity-50">
+                      Chromeで開く
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}
-          <button
-            onClick={handleGoogleLogin}
-            className="mt-4 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-medium"
+            <button
+              onClick={handleGoogleLogin}
+            disabled={authBusy}
+            className="mt-4 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-medium disabled:opacity-60"
           >
-            Googleでログイン
+            {authBusy ? "ログイン処理中..." : "Googleでログイン"}
           </button>
+          {inAppBrowser && (
+            <button onClick={copyCurrentUrlToClipboard} disabled={authBusy} className="mt-2 px-4 py-2 rounded-lg border border-gray-300 text-xs font-medium text-gray-700 disabled:opacity-60">
+              URLをコピー
+            </button>
+          )}
         </div>
       </div>
     );
   }
 
+  const renderSortedTasks = () => (
+    <div ref={listRef}>
+      {sorted.map((t, i) => {
+        const now = Date.now();
+        const deadlineTime = new Date(t.deadline).getTime();
+        const isOverdueTask = deadlineTime < now;
+        const prevIsOverdueTask = i > 0 && new Date(sorted[i - 1].deadline).getTime() < now;
+        const showOverdueLabel = i === 0 && isOverdueTask;
+        const showPriorityLabel = !isOverdueTask && t.priority && (i === 0 || (prevIsOverdueTask && !isOverdueTask) || (i > 0 && !sorted[i - 1].priority && new Date(sorted[i - 1].deadline).getTime() >= now));
+        const showNormalLabel = !isOverdueTask && !t.priority && i > 0 && (new Date(sorted[i - 1].deadline).getTime() < now || sorted[i - 1].priority);
+
+        return (
+          <div key={t.id} data-task-idx={i} style={dragActive && dragIdx === i ? { transform: `translateY(${dragY}px)` } : {}}>
+            {showOverdueLabel && <div className="px-4 pt-2 pb-1"><span className="text-[10px] font-semibold text-red-500 tracking-widest uppercase">期限超過</span></div>}
+            {showPriorityLabel && <div className="px-4 pt-3 pb-1"><span className="text-[10px] font-semibold text-red-500 tracking-widest uppercase">最優先</span></div>}
+            {showNormalLabel && <div className="px-4 pt-3 pb-1"><span className="text-[10px] font-semibold text-gray-400 tracking-widest uppercase">その他</span></div>}
+            <TaskRow task={t} cats={cats} idx={i} touchDrag={touchDrag} onComplete={handleComplete} onEdit={(task) => { setEditTask(task); setPrefillDate(null); setShowForm(true); }} onDelete={handleDeleteTask} />
+          </div>
+        );
+      })}
+    </div>
+  );
+
   return (
-    <div className="h-[100dvh] flex flex-col overflow-hidden bg-white prioritodo-app" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-100">
+    <div className="h-[100dvh] flex flex-col overflow-hidden bg-background prioritodo-app">
+      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-100">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
           <div><h1 className="text-base font-bold text-gray-900 tracking-tight">PrioriTodo</h1><p className="text-[10px] text-gray-400 tracking-wide">次にやることが、すぐ分かる</p></div>
           <div className="flex items-center gap-2">
@@ -486,28 +571,30 @@ export default function Home() {
       </header>
 
       <div className="max-w-lg mx-auto px-4 pt-3">
-        <div className="flex border-b border-gray-100 overflow-x-auto">
-          {[
-            { id: "list", label: "タスク", icon: <IconList size={14} /> },
-            { id: "calendar", label: "カレンダー", icon: <IconCalendar size={14} /> },
-            { id: "timetable", label: "時間割", icon: <IconClock size={14} /> },
-            { id: "group", label: "グループ", icon: <IconUsers size={14} /> },
-            { id: "completed", label: "達成済み", icon: <IconArchive size={14} />, count: completed.length },
-          ].map((tab) => (
-            <button key={tab.id} onClick={() => setView(tab.id as View)} className={`flex items-center gap-1 px-3 py-2.5 text-[11px] font-medium transition-colors border-b-2 whitespace-nowrap ${view === tab.id ? "border-gray-900 text-gray-900" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
-              {tab.icon}{tab.label}{(tab.count || 0) > 0 && <span className="text-[10px] ml-0.5 text-gray-300">{tab.count}</span>}
-            </button>
-          ))}
-        </div>
+        <SegmentedTabs
+          value={view}
+          onChange={(id) => setView(id as View)}
+          items={[
+            { id: "list", label: "タスク" },
+            { id: "calendar", label: "カレンダー" },
+            { id: "timetable", label: "時間割" },
+            { id: "group", label: "グループ" },
+            { id: "completed", label: "達成済み", count: completed.length },
+          ]}
+        />
       </div>
 
       <div className="max-w-lg mx-auto w-full flex-1 overflow-y-auto pb-24">
         {view === "list" && (
           <>
-            <div className="px-4 pt-3 pb-1 flex gap-1.5 overflow-x-auto">
-              {FILTERS.map((f) => <button key={f.id} onClick={() => setFilter(f.id)} className={`px-3 py-1.5 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${filter === f.id ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-500 hover:bg-gray-100"}`}>{f.label}</button>)}
+            <div className="px-4 pt-3 pb-1">
+              <SegmentedTabs
+                value={filter}
+                onChange={setFilter}
+                items={FILTERS.map((f) => ({ id: f.id, label: f.label }))}
+              />
             </div>
-            <div className="px-4 py-2 border-b border-gray-100 space-y-1.5">
+            <SurfaceCard className="mx-4 mb-2 px-3 py-2 space-y-1.5 !rounded-2xl">
               <div className="flex gap-1.5 overflow-x-auto">
                 <button onClick={() => setCatFilter("all")} className={`px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === "all" ? "bg-gray-200 text-gray-900" : "text-gray-400 hover:text-gray-600"}`}>すべて</button>
                 <button onClick={() => setCatFilter("default")} className={`px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === "default" ? "bg-gray-200 text-gray-900" : "text-gray-400 hover:text-gray-600"}`}>未分類</button>
@@ -525,29 +612,13 @@ export default function Home() {
                   ))}
                 </div>
               )}
-            </div>
+            </SurfaceCard>
             {sorted.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-gray-400"><IconList size={32} stroke="#ddd" /><p className="text-sm mt-3">タスクなし</p><p className="text-xs mt-1 text-gray-300">右下の + から追加</p></div>
-            ) : (
-              <div ref={listRef}>
-                {sorted.map((t, i) => {
-                  const now = Date.now();
-                  const tTime = new Date(t.deadline).getTime();
-                  const isOD = tTime < now;
-                  const prevIsOD = i > 0 && new Date(sorted[i - 1].deadline).getTime() < now;
-                  const showODLabel = i === 0 && isOD;
-                  const showPriLabel = !isOD && t.priority && (i === 0 || (prevIsOD && !isOD) || (i > 0 && !sorted[i - 1].priority && new Date(sorted[i - 1].deadline).getTime() >= now));
-                  const showNormLabel = !isOD && !t.priority && i > 0 && (new Date(sorted[i - 1].deadline).getTime() < now || sorted[i - 1].priority);
-                  return (
-                    <div key={t.id} data-task-idx={i} style={dragActive && dragIdx === i ? { transform: `translateY(${dragY}px)` } : {}}>
-                      {showODLabel && <div className="px-4 pt-2 pb-1"><span className="text-[10px] font-semibold text-red-500 tracking-widest uppercase">期限超過</span></div>}
-                      {showPriLabel && <div className="px-4 pt-3 pb-1"><span className="text-[10px] font-semibold text-red-500 tracking-widest uppercase">最優先</span></div>}
-                      {showNormLabel && <div className="px-4 pt-3 pb-1"><span className="text-[10px] font-semibold text-gray-400 tracking-widest uppercase">その他</span></div>}
-                      <TaskRow task={t} cats={cats} idx={i} touchDrag={touchDrag} onComplete={handleComplete} onEdit={(task) => { setEditTask(task); setPrefillDate(null); setShowForm(true); }} onDelete={handleDeleteTask} />
-                    </div>
-                  );
-                })}
+              <div className="px-4 py-8">
+                <EmptyState title="タスクなし" description="右下の + から追加して、今日の流れを作りましょう。" icon={<IconList size={20} stroke="#94A3B8" />} />
               </div>
+            ) : (
+              renderSortedTasks()
             )}
             {sorted.length > 0 && (
               <div className="px-4 py-4">
