@@ -14,13 +14,26 @@ import GroupView from "@/components/GroupView";
 import TimetableView from "@/components/TimetableView";
 import { auth, firebaseEnabled, googleProvider } from "@/lib/firebase";
 import { signInWithPopup, signOut, onAuthStateChanged, signInWithRedirect, User, browserLocalPersistence, getRedirectResult, setPersistence } from "firebase/auth";
-import { loadCloudSnapshot, migrateLocalToCloudOnce, saveCloudSnapshot } from "@/lib/cloudStorage";
+import { deleteCloudSnapshot, loadCloudSnapshot, migrateLocalToCloudOnce, saveCloudSnapshot } from "@/lib/cloudStorage";
 import { createTimetableShareToken, loadTimetableShareToken } from "@/lib/timetableShare";
 import { AuthIssue, resolveAuthIssue } from "@/lib/authErrorCatalog";
 
 type View = "list" | "calendar" | "timetable" | "group" | "completed";
 const isInAppBrowser = () => /FBAN|FBAV|Instagram|Line|Twitter|wv/i.test(navigator.userAgent);
 const isMobileDevice = () => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+const migratePeriod = (period: string | number): string => {
+  if (typeof period === "string") {
+    if (period === "1限" || period === "2限") return "1・2限";
+    if (period === "3限" || period === "4限") return "3・4限";
+    if (period === "5限" || period === "6限") return "5・6限";
+    return period;
+  }
+  if (period <= 2) return "1・2限";
+  if (period <= 4) return "3・4限";
+  if (period <= 6) return "5・6限";
+  return `オンデマンド${period}`;
+};
 
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -31,6 +44,7 @@ export default function Home() {
   const [view, setView] = useState<View>("list");
   const [filter, setFilter] = useState("week");
   const [catFilter, setCatFilter] = useState("all");
+  const [showCourseFilters, setShowCourseFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [showCatMgr, setShowCatMgr] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -152,7 +166,7 @@ export default function Home() {
         setTasks(snapshot.tasks);
         setCats(snapshot.cats);
         setGroups(snapshot.groups);
-        setTimetable(snapshot.timetable);
+        setTimetable(snapshot.timetable.map((it) => ({ ...it, period: migratePeriod(it.period as string | number) })));
         setTimetableConfig(snapshot.timetableConfig);
         setReady(true);
       } finally {
@@ -186,11 +200,31 @@ export default function Home() {
     if (view !== "calendar") setSelectedDate(null);
   }, [view]);
 
+  useEffect(() => {
+    setCats((prev) => {
+      const timetableIds = new Set(timetable.map((it) => it.id));
+      const trimmed = prev.filter((c) => !c.timetableId || timetableIds.has(c.timetableId));
+      const existing = new Set(trimmed.filter((c) => c.timetableId).map((c) => c.timetableId));
+      const appended = timetable
+        .filter((it) => !existing.has(it.id))
+        .map((it) => ({ id: uid(), label: it.name, color: it.color, timetableId: it.id }));
+      const renamed = trimmed.map((c) => {
+        if (!c.timetableId) return c;
+        const it = timetable.find((x) => x.id === c.timetableId);
+        return it ? { ...c, label: it.name, color: it.color } : c;
+      });
+      return [...renamed, ...appended];
+    });
+  }, [timetable, setCats]);
+
   const active = useMemo(() => tasks.filter((t) => !t.completed), [tasks]);
   const completed = useMemo(
     () => tasks.filter((t) => t.completed).sort((a, b) => new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime()),
     [tasks]
   );
+
+  const timetableCats = useMemo(() => cats.filter((c) => !!c.timetableId), [cats]);
+  const normalCats = useMemo(() => cats.filter((c) => !c.timetableId), [cats]);
 
   const allExpanded = useMemo(() => {
     const horizon = new Date();
@@ -235,7 +269,12 @@ export default function Home() {
     allExpanded.filter((t) => new Date(t.deadline).getTime() < now).forEach((t) => {
       if (!list.find((l) => l.id === t.id)) list.push(t);
     });
-    if (catFilter !== "all") list = list.filter((t) => t.category === catFilter);
+    if (catFilter === "timetable_group") {
+      const timetableIds = new Set(timetableCats.map((c) => c.id));
+      list = list.filter((t) => timetableIds.has(t.category));
+    } else if (catFilter !== "all") {
+      list = list.filter((t) => t.category === catFilter);
+    }
 
     const overdue = list.filter((t) => new Date(t.deadline).getTime() < now).sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
     const notOverdue = list.filter((t) => new Date(t.deadline).getTime() >= now);
@@ -250,7 +289,7 @@ export default function Home() {
       return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
     });
     return [...overdue, ...pri, ...norm];
-  }, [allExpanded, filter, catFilter]);
+  }, [allExpanded, filter, catFilter, timetableCats]);
 
   const sortedRef = useRef<Task[]>(sorted);
   useEffect(() => {
@@ -359,6 +398,21 @@ export default function Home() {
     setTimetableConfig(DEFAULT_TIMETABLE_CONFIG);
   };
 
+  const handleResetAllData = async () => {
+    const first = window.confirm("すべてのデータを削除しますか？この操作は取り消せません。");
+    if (!first) return;
+    const second = window.confirm("本当に削除しますか？タスク・時間割・カテゴリがすべて消えます。");
+    if (!second) return;
+    if (user) await deleteCloudSnapshot(user.uid);
+    localStorage.clear();
+    setTasks([]);
+    setCats(DEFAULT_CATS);
+    setGroups([]);
+    setTimetable([]);
+    setTimetableConfig(DEFAULT_TIMETABLE_CONFIG);
+    window.location.reload();
+  };
+
   const handleShareTimetable = async (): Promise<string | null> => {
     if (timetable.length === 0) return null;
     const token = createTimetableShareToken(timetable);
@@ -416,7 +470,7 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-white prioritodo-app" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
+    <div className="h-[100dvh] flex flex-col overflow-hidden bg-white prioritodo-app" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-100">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
           <div><h1 className="text-base font-bold text-gray-900 tracking-tight">PrioriTodo</h1><p className="text-[10px] text-gray-400 tracking-wide">次にやることが、すぐ分かる</p></div>
@@ -447,15 +501,30 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="max-w-lg mx-auto pb-24">
+      <div className="max-w-lg mx-auto w-full flex-1 overflow-y-auto pb-24">
         {view === "list" && (
           <>
             <div className="px-4 pt-3 pb-1 flex gap-1.5 overflow-x-auto">
               {FILTERS.map((f) => <button key={f.id} onClick={() => setFilter(f.id)} className={`px-3 py-1.5 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${filter === f.id ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-500 hover:bg-gray-100"}`}>{f.label}</button>)}
             </div>
-            <div className="px-4 py-2 flex gap-1.5 overflow-x-auto border-b border-gray-100">
-              <button onClick={() => setCatFilter("all")} className={`px-2.5 py-1 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === "all" ? "bg-gray-200 text-gray-900" : "text-gray-400 hover:text-gray-600"}`}>すべて</button>
-              {cats.map((c) => <button key={c.id} onClick={() => setCatFilter(c.id)} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === c.id ? "text-white" : "text-gray-500 hover:bg-gray-50"}`} style={catFilter === c.id ? { backgroundColor: c.color } : {}}><span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: catFilter === c.id ? "rgba(255,255,255,0.7)" : c.color }} />{c.label}</button>)}
+            <div className="px-4 py-2 border-b border-gray-100 space-y-1.5">
+              <div className="flex gap-1.5 overflow-x-auto">
+                <button onClick={() => setCatFilter("all")} className={`px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === "all" ? "bg-gray-200 text-gray-900" : "text-gray-400 hover:text-gray-600"}`}>すべて</button>
+                <button onClick={() => setCatFilter("default")} className={`px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === "default" ? "bg-gray-200 text-gray-900" : "text-gray-400 hover:text-gray-600"}`}>未分類</button>
+                {timetableCats.length > 0 && (
+                  <button onClick={() => { setShowCourseFilters((prev) => !prev); setCatFilter("timetable_group"); }} className={`px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === "timetable_group" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"}`}>授業 {showCourseFilters ? "▲" : "▼"}</button>
+                )}
+                {normalCats.filter((c) => c.id !== "default").map((c) => <button key={c.id} onClick={() => setCatFilter(c.id)} className={`flex items-center gap-1.5 px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === c.id ? "text-white" : "text-gray-500 hover:bg-gray-50"}`} style={catFilter === c.id ? { backgroundColor: c.color } : {}}><span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: catFilter === c.id ? "rgba(255,255,255,0.7)" : c.color }} />{c.label}</button>)}
+              </div>
+              {showCourseFilters && timetableCats.length > 0 && (
+                <div className="flex gap-1.5 overflow-x-auto pb-1">
+                  {timetableCats.map((c) => (
+                    <button key={c.id} onClick={() => setCatFilter(c.id)} className={`flex items-center gap-1.5 px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === c.id ? "text-white" : "text-gray-500 hover:bg-gray-50"}`} style={catFilter === c.id ? { backgroundColor: c.color } : {}}>
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: catFilter === c.id ? "rgba(255,255,255,0.7)" : c.color }} />{c.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             {sorted.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-gray-400"><IconList size={32} stroke="#ddd" /><p className="text-sm mt-3">タスクなし</p><p className="text-xs mt-1 text-gray-300">右下の + から追加</p></div>
@@ -493,7 +562,7 @@ export default function Home() {
         )}
 
         {view === "calendar" && <div className="px-4 py-4"><CalendarView tasks={allExpanded} cats={cats} month={calMonth} setMonth={setCalMonth} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onAddClick={(d) => openNew(d)} onEditTask={(t) => { setEditTask(t); setPrefillDate(null); setShowForm(true); }} /></div>}
-        {view === "timetable" && <TimetableView items={timetable} setItems={setTimetable} setCats={setCats} config={timetableConfig} setConfig={setTimetableConfig} onShare={handleShareTimetable} />}
+        {view === "timetable" && <TimetableView items={timetable} setItems={setTimetable} setCats={setCats} config={timetableConfig} setConfig={setTimetableConfig} onShare={handleShareTimetable} tasks={tasks} cats={cats} />}
         {view === "group" && <GroupView groups={groups} setGroups={setGroups} />}
         {view === "completed" && <div><div className="px-4 py-3 flex items-center justify-between"><span className="text-sm font-semibold text-gray-900">達成済み</span><span className="text-[11px] text-gray-400">{completed.length}件</span></div><CompletedList tasks={completed} cats={cats} onRestore={handleRestore} /></div>}
       </div>
@@ -509,13 +578,13 @@ export default function Home() {
             <h3 className="text-sm font-semibold text-gray-900">時間割をインポート</h3>
             <p className="text-xs text-gray-500 mt-2">含まれる授業：</p>
             <ul className="mt-1 text-xs text-gray-600 space-y-1 max-h-40 overflow-y-auto">
-              {pendingImport.items.map((it, idx) => <li key={`${it.name}-${idx}`}>・{it.name}（{WEEKDAY_LABELS[it.day]}{it.period}限）</li>)}
+              {pendingImport.items.map((it, idx) => <li key={`${it.name}-${idx}`}>・{it.name}（{WEEKDAY_LABELS[it.day]} {migratePeriod(it.period)}）</li>)}
             </ul>
             <p className="text-[11px] text-gray-400 mt-2">※現在の時間割は置き換えられます</p>
             <div className="mt-4 flex justify-end gap-2">
               <button onClick={() => { setPendingImport(null); clearShareQuery(); }} className="px-3 py-1.5 text-xs rounded bg-gray-100 text-gray-600">キャンセル</button>
               <button onClick={() => {
-                const next = pendingImport.items.map((it) => ({ id: uid(), name: it.name, day: Number(it.day), period: Number(it.period), teacher: it.teacher || "", room: it.room || "", color: it.color || "#889096" }));
+                const next = pendingImport.items.map((it) => ({ id: uid(), name: it.name, day: Number(it.day), period: migratePeriod(it.period), teacher: it.teacher || "", room: it.room || "", color: it.color || "#889096", absenceLimit: 5, attendanceAbsent: 0, attendanceLate: 0, attendancePresent: 0, memo: "" }));
                 setTimetable(next);
                 setCats((prev) => {
                   const withoutTimetable = prev.filter((c) => !c.timetableId);
@@ -540,7 +609,7 @@ export default function Home() {
               <div className="px-4 py-3.5 border-b border-gray-100 flex items-center justify-between"><span className="text-sm text-gray-900">完了エフェクト</span><span className="text-sm text-gray-400">近日公開</span></div>
               <div className="px-4 py-3.5 flex items-center justify-between"><span className="text-sm text-gray-900">言語</span><span className="text-sm text-gray-400">日本語</span></div>
             </div>
-            <p className="px-4 pt-3 text-xs text-gray-400">今後のアップデートで壁紙テーマやパーティクルエフェクトのカスタマイズが追加されます。</p>
+            <div className="mx-4 mt-4"><button onClick={handleResetAllData} className="text-sm text-red-600 font-semibold min-h-11">データを初期化</button></div><p className="px-4 pt-3 text-xs text-gray-400">今後のアップデートで壁紙テーマやパーティクルエフェクトのカスタマイズが追加されます。</p>
           </div>
         </div>
       )}
