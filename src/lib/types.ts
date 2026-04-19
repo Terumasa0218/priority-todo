@@ -4,6 +4,11 @@ export interface Task {
   deadline: string; // ISO
   category: string; // カテゴリID
   priority: boolean;
+  taskType?: "single" | "mid" | "long" | "daily";
+  estimatedMinutes?: number;
+  loggedMinutes?: number;
+  importance?: 1 | 2 | 3;
+  lastWorkedAt?: string | null;
   recurrence: "none" | "daily" | "weekly" | "biweekly" | "monthly";
   classDayOfWeek?: number; // 0-6
   offsetDays?: number;
