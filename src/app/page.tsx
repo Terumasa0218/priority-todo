@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { FILTERS, DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG, WEEKDAY_LABELS } from "@/lib/constants";
+import { DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG, WEEKDAY_LABELS } from "@/lib/constants";
 import { expandRecurring, remaining, uid } from "@/lib/utils";
 import { Category, Group, Task, TimetableConfig, TimetableItem, TouchDragState } from "@/lib/types";
 import { IconBook, IconList, IconPalette, IconPlus, IconSettings } from "@/components/Icons";
@@ -38,6 +38,18 @@ const migratePeriod = (period: string | number): string => {
   if (period <= 6) return "5・6限";
   return `オンデマンド${period}`;
 };
+
+const startOfToday = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
+
+const withTaskDefaults = (task: Task): Task => ({
+  ...task,
+  taskType: task.taskType || "single",
+  estimatedMinutes: task.estimatedMinutes ?? undefined,
+  loggedMinutes: task.loggedMinutes ?? 0,
+  importance: task.importance ?? (task.priority ? 3 : 2),
+  lastWorkedAt: task.lastWorkedAt ?? null,
+});
+
 
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -170,7 +182,7 @@ export default function Home() {
         await migrateLocalToCloudOnce(user.uid);
         const snapshot = await loadCloudSnapshot(user.uid);
         if (!mounted) return;
-        setTasks(snapshot.tasks);
+        setTasks(snapshot.tasks.map(withTaskDefaults));
         setCats(snapshot.cats);
         setGroups(snapshot.groups);
         setTimetable(snapshot.timetable.map((it) => ({ ...it, period: migratePeriod(it.period as string | number) })));
@@ -312,7 +324,8 @@ export default function Home() {
   const handleSave = useCallback((data: Task) => {
     setTasks((prev) => {
       const ex = prev.find((t) => t.id === data.id);
-      return ex ? prev.map((t) => (t.id === data.id ? { ...t, ...data } : t)) : [...prev, data];
+      const payload = withTaskDefaults(data);
+      return ex ? prev.map((t) => (t.id === data.id ? { ...t, ...payload } : t)) : [...prev, payload];
     });
     setShowForm(false);
     setEditTask(null);
@@ -593,11 +606,7 @@ export default function Home() {
             <SurfaceCard className="mx-4 mb-2 px-3 py-2 space-y-1.5 !rounded-2xl">
               <div className="flex gap-1.5 overflow-x-auto">
                 <button onClick={() => setCatFilter("all")} className={`px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === "all" ? "bg-gray-200 text-gray-900" : "text-gray-400 hover:text-gray-600"}`}>すべて</button>
-                <button onClick={() => setCatFilter("default")} className={`px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === "default" ? "bg-gray-200 text-gray-900" : "text-gray-400 hover:text-gray-600"}`}>未分類</button>
-                {timetableCats.length > 0 && (
-                  <button onClick={() => { setShowCourseFilters((prev) => !prev); setCatFilter("timetable_group"); }} className={`px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === "timetable_group" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"}`}>授業 {showCourseFilters ? "▲" : "▼"}</button>
-                )}
-                {normalCats.filter((c) => c.id !== "default").map((c) => <button key={c.id} onClick={() => setCatFilter(c.id)} className={`flex items-center gap-1.5 px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === c.id ? "text-white" : "text-gray-500 hover:bg-gray-50"}`} style={catFilter === c.id ? { backgroundColor: c.color } : {}}><span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: catFilter === c.id ? "rgba(255,255,255,0.7)" : c.color }} />{c.label}</button>)}
+                {cats.map((c) => <button key={c.id} onClick={() => setCatFilter(c.id)} className={`flex items-center gap-1.5 px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === c.id ? "text-white" : "text-gray-500 hover:bg-gray-50"}`} style={catFilter === c.id ? { backgroundColor: c.color } : {}}><span className="w-2 h-2 rounded-full" style={{ backgroundColor: catFilter === c.id ? "rgba(255,255,255,0.7)" : c.color }} />{c.label}</button>)}
               </div>
               {showCourseFilters && timetableCats.length > 0 && (
                 <div className="flex gap-1.5 overflow-x-auto pb-1">
@@ -616,13 +625,10 @@ export default function Home() {
             ) : (
               renderSortedTasks()
             )}
-            {sorted.length > 0 && (
-              <div className="px-4 py-4">
-                <div className="flex items-center justify-between text-[11px] text-gray-400 mb-2">
-                  <span>表示中 {sorted.length}件 / 全{allExpanded.length}件</span>
-                  <span>今週の達成率 {Math.round((weekDone / Math.max(weekDone + active.length, 1)) * 100)}%</span>
-                </div>
-                <div className="h-1 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-gray-900 rounded-full transition-all duration-700" style={{ width: `${Math.min(100, (weekDone / Math.max(weekDone + active.length, 1)) * 100)}%` }} /></div>
+
+            {listMode === "all" && (
+              <div ref={listRef}>
+                {sorted.map((t, i) => <TaskRow key={t.id} task={t} cats={cats} idx={i} touchDrag={touchDrag} onComplete={handleComplete} onEdit={(task) => { setEditTask(task); setPrefillDate(null); setShowForm(true); }} onDelete={handleDeleteTask} />)}
               </div>
             )}
           </>
