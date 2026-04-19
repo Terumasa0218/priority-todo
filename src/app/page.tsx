@@ -21,6 +21,7 @@ import { AuthIssue, resolveAuthIssue } from "@/lib/authErrorCatalog";
 type View = "list" | "calendar" | "timetable" | "group" | "completed";
 const isInAppBrowser = () => /FBAN|FBAV|Instagram|Line|Twitter|wv|WebView|GSA|LinkedInApp|Slack|Discord|GitHub/i.test(navigator.userAgent);
 const isMobileDevice = () => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 const migratePeriod = (period: string | number): string => {
   if (typeof period === "string") {
@@ -61,6 +62,7 @@ export default function Home() {
   const [authFlowMessage, setAuthFlowMessage] = useState<string | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
   const inAppBrowser = useMemo(() => (typeof navigator !== "undefined" ? isInAppBrowser() : false), []);
+  const iosDevice = useMemo(() => (typeof navigator !== "undefined" ? isIOS() : false), []);
 
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -393,13 +395,20 @@ export default function Home() {
     }
   };
 
-  const openInExternalBrowser = () => {
+  const openInExternalBrowser = (target: "auto" | "safari" | "chrome" = "auto") => {
     const currentUrl = window.location.href;
     if (/Line/i.test(navigator.userAgent)) {
       window.location.href = `https://line.me/R/openExternalBrowser?url=${encodeURIComponent(currentUrl)}`;
       return;
     }
     if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      if (target === "chrome") {
+        const chromeUrl = currentUrl.startsWith("https://")
+          ? currentUrl.replace(/^https:\/\//, "googlechromes://")
+          : currentUrl.replace(/^http:\/\//, "googlechrome://");
+        window.location.href = chromeUrl;
+        return;
+      }
       window.location.href = `x-safari-${currentUrl}`;
       return;
     }
@@ -485,9 +494,16 @@ export default function Home() {
               <p className="text-xs text-red-500">ログインに失敗しました {authIssue.id}</p>
               <p className="text-[11px] text-red-400 mt-0.5">{authIssue.summary}</p>
               {authIssue.id === 407 && (
-                <button onClick={openInExternalBrowser} disabled={authBusy} className="mt-2 text-[11px] font-medium text-blue-500 underline disabled:opacity-50">
-                  Safari / Chromeで開く
-                </button>
+                <div className="mt-2 flex items-center gap-2">
+                  <button onClick={() => openInExternalBrowser("safari")} disabled={authBusy} className="text-[11px] font-medium text-blue-500 underline disabled:opacity-50">
+                    Safariで開く
+                  </button>
+                  {iosDevice && (
+                    <button onClick={() => openInExternalBrowser("chrome")} disabled={authBusy} className="text-[11px] font-medium text-blue-500 underline disabled:opacity-50">
+                      Chromeで開く
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}
