@@ -14,13 +14,27 @@ import GroupView from "@/components/GroupView";
 import TimetableView from "@/components/TimetableView";
 import { auth, firebaseEnabled, googleProvider } from "@/lib/firebase";
 import { signInWithPopup, signOut, onAuthStateChanged, signInWithRedirect, User, browserLocalPersistence, getRedirectResult, setPersistence } from "firebase/auth";
-import { loadCloudSnapshot, migrateLocalToCloudOnce, saveCloudSnapshot } from "@/lib/cloudStorage";
+import { deleteCloudSnapshot, loadCloudSnapshot, migrateLocalToCloudOnce, saveCloudSnapshot } from "@/lib/cloudStorage";
 import { createTimetableShareToken, loadTimetableShareToken } from "@/lib/timetableShare";
 import { AuthIssue, resolveAuthIssue } from "@/lib/authErrorCatalog";
 
 type View = "list" | "calendar" | "timetable" | "group" | "completed";
-const isInAppBrowser = () => /FBAN|FBAV|Instagram|Line|Twitter|wv/i.test(navigator.userAgent);
+const isInAppBrowser = () => /FBAN|FBAV|Instagram|Line|Twitter|wv|WebView|GSA|LinkedInApp|Slack|Discord|GitHub/i.test(navigator.userAgent);
 const isMobileDevice = () => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+const migratePeriod = (period: string | number): string => {
+  if (typeof period === "string") {
+    if (period === "1限" || period === "2限") return "1・2限";
+    if (period === "3限" || period === "4限") return "3・4限";
+    if (period === "5限" || period === "6限") return "5・6限";
+    return period;
+  }
+  if (period <= 2) return "1・2限";
+  if (period <= 4) return "3・4限";
+  if (period <= 6) return "5・6限";
+  return `オンデマンド${period}`;
+};
 
 const startOfToday = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
 
@@ -44,6 +58,7 @@ export default function Home() {
   const [listMode, setListMode] = useState<"today" | "near" | "all">("today");
   const [nearWindow, setNearWindow] = useState<7 | 30>(7);
   const [catFilter, setCatFilter] = useState("all");
+  const [showCourseFilters, setShowCourseFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [showCatMgr, setShowCatMgr] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -58,6 +73,9 @@ export default function Home() {
   const [syncing, setSyncing] = useState(false);
   const [authIssue, setAuthIssue] = useState<AuthIssue | null>(null);
   const [authFlowMessage, setAuthFlowMessage] = useState<string | null>(null);
+  const [authBusy, setAuthBusy] = useState(false);
+  const inAppBrowser = useMemo(() => (typeof navigator !== "undefined" ? isInAppBrowser() : false), []);
+  const iosDevice = useMemo(() => (typeof navigator !== "undefined" ? isIOS() : false), []);
 
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -165,7 +183,7 @@ export default function Home() {
         setTasks(snapshot.tasks.map(withTaskDefaults));
         setCats(snapshot.cats);
         setGroups(snapshot.groups);
-        setTimetable(snapshot.timetable);
+        setTimetable(snapshot.timetable.map((it) => ({ ...it, period: migratePeriod(it.period as string | number) })));
         setTimetableConfig(snapshot.timetableConfig);
         setReady(true);
       } finally {
@@ -199,11 +217,31 @@ export default function Home() {
     if (view !== "calendar") setSelectedDate(null);
   }, [view]);
 
+  useEffect(() => {
+    setCats((prev) => {
+      const timetableIds = new Set(timetable.map((it) => it.id));
+      const trimmed = prev.filter((c) => !c.timetableId || timetableIds.has(c.timetableId));
+      const existing = new Set(trimmed.filter((c) => c.timetableId).map((c) => c.timetableId));
+      const appended = timetable
+        .filter((it) => !existing.has(it.id))
+        .map((it) => ({ id: uid(), label: it.name, color: it.color, timetableId: it.id }));
+      const renamed = trimmed.map((c) => {
+        if (!c.timetableId) return c;
+        const it = timetable.find((x) => x.id === c.timetableId);
+        return it ? { ...c, label: it.name, color: it.color } : c;
+      });
+      return [...renamed, ...appended];
+    });
+  }, [timetable, setCats]);
+
   const active = useMemo(() => tasks.filter((t) => !t.completed), [tasks]);
   const completed = useMemo(
     () => tasks.filter((t) => t.completed).sort((a, b) => new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime()),
     [tasks]
   );
+
+  const timetableCats = useMemo(() => cats.filter((c) => !!c.timetableId), [cats]);
+  const normalCats = useMemo(() => cats.filter((c) => !c.timetableId), [cats]);
 
   const allExpanded = useMemo(() => {
     const horizon = new Date();
@@ -387,16 +425,17 @@ export default function Home() {
   };
 
   const handleGoogleLogin = async () => {
-    if (!auth || !googleProvider) return;
+    if (!auth || !googleProvider || authBusy) return;
+    setAuthBusy(true);
     setAuthIssue(null);
     setAuthFlowMessage(null);
-    if (isInAppBrowser()) {
-      setAuthIssue(resolveAuthIssue("auth/disallowed-useragent"));
-      return;
+    if (inAppBrowser) {
+      setAuthFlowMessage("アプリ内ブラウザです。失敗する場合は下の「Safari / Chromeで開く」を使ってください。");
     }
     try {
-      if (isMobileDevice()) {
+      if (isMobileDevice() || inAppBrowser) {
         await signInWithRedirect(auth, googleProvider);
+        return;
       } else {
         await signInWithPopup(auth, googleProvider);
       }
@@ -414,13 +453,44 @@ export default function Home() {
         return;
       }
       setAuthIssue(resolveAuthIssue(code));
+    } finally {
+      setAuthBusy(false);
     }
   };
 
-  const openInExternalBrowser = () => {
+  const copyCurrentUrlToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setAuthFlowMessage("URLをコピーしました。Safari / Chrome に貼り付けて開いてください。");
+    } catch {
+      setAuthFlowMessage("URLコピーに失敗しました。アドレスバーからURLをコピーしてSafari / Chromeで開いてください。");
+    }
+  };
+
+  const openInExternalBrowser = (target: "auto" | "safari" | "chrome" = "auto") => {
     const currentUrl = window.location.href;
     if (/Line/i.test(navigator.userAgent)) {
       window.location.href = `https://line.me/R/openExternalBrowser?url=${encodeURIComponent(currentUrl)}`;
+      return;
+    }
+    if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      if (target === "chrome") {
+        const chromeUrl = currentUrl.startsWith("https://")
+          ? currentUrl.replace(/^https:\/\//, "googlechromes://")
+          : currentUrl.replace(/^http:\/\//, "googlechrome://");
+        window.location.href = chromeUrl;
+        return;
+      }
+      window.location.href = `x-safari-${currentUrl}`;
+      return;
+    }
+    if (/Android/i.test(navigator.userAgent)) {
+      const withoutProtocol = currentUrl.replace(/^https?:\/\//, "");
+      window.location.href = `intent://${withoutProtocol}#Intent;scheme=https;package=com.android.chrome;end`;
+      return;
+    }
+    if (/GitHub|Instagram|FBAN|FBAV|Twitter|GSA|LinkedInApp|Slack|Discord/i.test(navigator.userAgent)) {
+      void copyCurrentUrlToClipboard();
       return;
     }
     window.open(currentUrl, "_blank", "noopener,noreferrer");
@@ -434,6 +504,21 @@ export default function Home() {
     setGroups([]);
     setTimetable([]);
     setTimetableConfig(DEFAULT_TIMETABLE_CONFIG);
+  };
+
+  const handleResetAllData = async () => {
+    const first = window.confirm("すべてのデータを削除しますか？この操作は取り消せません。");
+    if (!first) return;
+    const second = window.confirm("本当に削除しますか？タスク・時間割・カテゴリがすべて消えます。");
+    if (!second) return;
+    if (user) await deleteCloudSnapshot(user.uid);
+    localStorage.clear();
+    setTasks([]);
+    setCats(DEFAULT_CATS);
+    setGroups([]);
+    setTimetable([]);
+    setTimetableConfig(DEFAULT_TIMETABLE_CONFIG);
+    window.location.reload();
   };
 
   const handleShareTimetable = async (): Promise<string | null> => {
@@ -469,31 +554,50 @@ export default function Home() {
         <div>
           <h1 className="text-lg font-bold text-gray-900">PrioriTodoへようこそ</h1>
           <p className="text-sm text-gray-500 mt-2">Googleでログインして、クラウド同期を有効化してください。</p>
+          {inAppBrowser && (
+            <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-left">
+              <p className="text-xs text-amber-700 font-medium">このアプリ内ブラウザではGoogleログインできません。</p>
+              <p className="text-[11px] text-amber-700 mt-0.5">右上メニューからSafari / Chromeで開くか、URLをコピーして外部ブラウザで開いてください。</p>
+            </div>
+          )}
           {authFlowMessage && <p className="text-xs text-gray-500 mt-2">{authFlowMessage}</p>}
           {authIssue && (
             <div className="mt-2">
               <p className="text-xs text-red-500">ログインに失敗しました {authIssue.id}</p>
               <p className="text-[11px] text-red-400 mt-0.5">{authIssue.summary}</p>
               {authIssue.id === 407 && (
-                <button onClick={openInExternalBrowser} className="mt-2 text-[11px] font-medium text-blue-500 underline">
-                  Safari / Chromeで開く
-                </button>
+                <div className="mt-2 flex items-center gap-2">
+                  <button onClick={() => openInExternalBrowser("safari")} disabled={authBusy} className="text-[11px] font-medium text-blue-500 underline disabled:opacity-50">
+                    Safariで開く
+                  </button>
+                  {iosDevice && (
+                    <button onClick={() => openInExternalBrowser("chrome")} disabled={authBusy} className="text-[11px] font-medium text-blue-500 underline disabled:opacity-50">
+                      Chromeで開く
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}
-          <button
-            onClick={handleGoogleLogin}
-            className="mt-4 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-medium"
+            <button
+              onClick={handleGoogleLogin}
+            disabled={authBusy}
+            className="mt-4 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-medium disabled:opacity-60"
           >
-            Googleでログイン
+            {authBusy ? "ログイン処理中..." : "Googleでログイン"}
           </button>
+          {inAppBrowser && (
+            <button onClick={copyCurrentUrlToClipboard} disabled={authBusy} className="mt-2 px-4 py-2 rounded-lg border border-gray-300 text-xs font-medium text-gray-700 disabled:opacity-60">
+              URLをコピー
+            </button>
+          )}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white prioritodo-app" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
+    <div className="h-[100dvh] flex flex-col overflow-hidden bg-white prioritodo-app" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-100">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
           <div><h1 className="text-base font-bold text-gray-900 tracking-tight">PrioriTodo</h1><p className="text-[10px] text-gray-400 tracking-wide">次にやることが、すぐ分かる</p></div>
@@ -524,7 +628,7 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="max-w-lg mx-auto pb-24">
+      <div className="max-w-lg mx-auto w-full flex-1 overflow-y-auto pb-24">
         {view === "list" && (
           <>
             <div className="px-4 pt-3 pb-1 flex gap-1.5 overflow-x-auto">
@@ -581,7 +685,7 @@ export default function Home() {
         )}
 
         {view === "calendar" && <div className="px-4 py-4"><CalendarView tasks={allExpanded} cats={cats} month={calMonth} setMonth={setCalMonth} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onAddClick={(d) => openNew(d)} onEditTask={(t) => { setEditTask(t); setPrefillDate(null); setShowForm(true); }} /></div>}
-        {view === "timetable" && <TimetableView items={timetable} setItems={setTimetable} setCats={setCats} config={timetableConfig} setConfig={setTimetableConfig} onShare={handleShareTimetable} />}
+        {view === "timetable" && <TimetableView items={timetable} setItems={setTimetable} setCats={setCats} config={timetableConfig} setConfig={setTimetableConfig} onShare={handleShareTimetable} tasks={tasks} cats={cats} />}
         {view === "group" && <GroupView groups={groups} setGroups={setGroups} />}
         {view === "completed" && <div><div className="px-4 py-3 flex items-center justify-between"><span className="text-sm font-semibold text-gray-900">達成済み</span><span className="text-[11px] text-gray-400">{completed.length}件</span></div><CompletedList tasks={completed} cats={cats} onRestore={handleRestore} /></div>}
       </div>
@@ -597,13 +701,13 @@ export default function Home() {
             <h3 className="text-sm font-semibold text-gray-900">時間割をインポート</h3>
             <p className="text-xs text-gray-500 mt-2">含まれる授業：</p>
             <ul className="mt-1 text-xs text-gray-600 space-y-1 max-h-40 overflow-y-auto">
-              {pendingImport.items.map((it, idx) => <li key={`${it.name}-${idx}`}>・{it.name}（{WEEKDAY_LABELS[it.day]}{it.period}限）</li>)}
+              {pendingImport.items.map((it, idx) => <li key={`${it.name}-${idx}`}>・{it.name}（{WEEKDAY_LABELS[it.day]} {migratePeriod(it.period)}）</li>)}
             </ul>
             <p className="text-[11px] text-gray-400 mt-2">※現在の時間割は置き換えられます</p>
             <div className="mt-4 flex justify-end gap-2">
               <button onClick={() => { setPendingImport(null); clearShareQuery(); }} className="px-3 py-1.5 text-xs rounded bg-gray-100 text-gray-600">キャンセル</button>
               <button onClick={() => {
-                const next = pendingImport.items.map((it) => ({ id: uid(), name: it.name, day: Number(it.day), period: Number(it.period), teacher: it.teacher || "", room: it.room || "", color: it.color || "#889096" }));
+                const next = pendingImport.items.map((it) => ({ id: uid(), name: it.name, day: Number(it.day), period: migratePeriod(it.period), teacher: it.teacher || "", room: it.room || "", color: it.color || "#889096", absenceLimit: 5, attendanceAbsent: 0, attendanceLate: 0, attendancePresent: 0, memo: "" }));
                 setTimetable(next);
                 setCats((prev) => {
                   const withoutTimetable = prev.filter((c) => !c.timetableId);
@@ -628,7 +732,7 @@ export default function Home() {
               <div className="px-4 py-3.5 border-b border-gray-100 flex items-center justify-between"><span className="text-sm text-gray-900">完了エフェクト</span><span className="text-sm text-gray-400">近日公開</span></div>
               <div className="px-4 py-3.5 flex items-center justify-between"><span className="text-sm text-gray-900">言語</span><span className="text-sm text-gray-400">日本語</span></div>
             </div>
-            <p className="px-4 pt-3 text-xs text-gray-400">今後のアップデートで壁紙テーマやパーティクルエフェクトのカスタマイズが追加されます。</p>
+            <div className="mx-4 mt-4"><button onClick={handleResetAllData} className="text-sm text-red-600 font-semibold min-h-11">データを初期化</button></div><p className="px-4 pt-3 text-xs text-gray-400">今後のアップデートで壁紙テーマやパーティクルエフェクトのカスタマイズが追加されます。</p>
           </div>
         </div>
       )}

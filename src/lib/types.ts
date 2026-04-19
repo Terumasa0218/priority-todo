@@ -13,6 +13,7 @@ export interface Task {
   classDayOfWeek?: number; // 0-6
   offsetDays?: number;
   offsetTime?: string;
+  biweeklyInterval?: number;
   repeatCount: number | null;
   repeatEndDate: string | null;
   reminder: string;
@@ -41,9 +42,14 @@ export interface TimetableItem {
   id: string;
   name: string;
   day: number; // 1=月, 2=火, ..., 5=金
-  period: number; // 1-6
+  period: string; // "1・2限" 等、または "オンデマンドN"
   teacher: string;
   room: string;
+  attendancePresent?: number;
+  attendanceAbsent?: number;
+  attendanceLate?: number;
+  absenceLimit?: number;
+  memo?: string;
   color: string;
 }
 

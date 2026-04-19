@@ -15,6 +15,12 @@ body {
   color: var(--foreground);
 }
 
+html,
+body {
+  height: 100dvh;
+  overflow: hidden;
+}
+
 @keyframes taskShrink {
   0% { transform: scale(1); opacity: 1; }
   100% { transform: scale(0); opacity: 0; height: 0; padding: 0; margin: 0; border: none; overflow: hidden; }
