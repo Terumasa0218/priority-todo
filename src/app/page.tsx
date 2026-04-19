@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { FILTERS, DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG, WEEKDAY_LABELS } from "@/lib/constants";
+import { DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG, WEEKDAY_LABELS } from "@/lib/constants";
 import { expandRecurring, remaining, uid } from "@/lib/utils";
 import { Category, Group, Task, TimetableConfig, TimetableItem, TouchDragState } from "@/lib/types";
 import { IconArchive, IconBook, IconCalendar, IconClock, IconList, IconPalette, IconPlus, IconSettings, IconUsers } from "@/components/Icons";
@@ -36,6 +36,18 @@ const migratePeriod = (period: string | number): string => {
   return `オンデマンド${period}`;
 };
 
+const startOfToday = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
+
+const withTaskDefaults = (task: Task): Task => ({
+  ...task,
+  taskType: task.taskType || "single",
+  estimatedMinutes: task.estimatedMinutes ?? undefined,
+  loggedMinutes: task.loggedMinutes ?? 0,
+  importance: task.importance ?? (task.priority ? 3 : 2),
+  lastWorkedAt: task.lastWorkedAt ?? null,
+});
+
+
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [cats, setCats] = useState<Category[]>(DEFAULT_CATS);
@@ -43,7 +55,8 @@ export default function Home() {
   const [timetable, setTimetable] = useState<TimetableItem[]>([]);
   const [timetableConfig, setTimetableConfig] = useState<TimetableConfig>(DEFAULT_TIMETABLE_CONFIG);
   const [view, setView] = useState<View>("list");
-  const [filter, setFilter] = useState("week");
+  const [listMode, setListMode] = useState<"today" | "near" | "all">("today");
+  const [nearWindow, setNearWindow] = useState<7 | 30>(7);
   const [catFilter, setCatFilter] = useState("all");
   const [showCourseFilters, setShowCourseFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -167,7 +180,7 @@ export default function Home() {
         await migrateLocalToCloudOnce(user.uid);
         const snapshot = await loadCloudSnapshot(user.uid);
         if (!mounted) return;
-        setTasks(snapshot.tasks);
+        setTasks(snapshot.tasks.map(withTaskDefaults));
         setCats(snapshot.cats);
         setGroups(snapshot.groups);
         setTimetable(snapshot.timetable.map((it) => ({ ...it, period: migratePeriod(it.period as string | number) })));
@@ -264,21 +277,8 @@ export default function Home() {
 
   const sorted = useMemo(() => {
     const now = Date.now();
-    const fDays = FILTERS.find((f) => f.id === filter)?.days ?? 7;
     let list = [...allExpanded];
-    if (fDays !== Infinity) {
-      const end = filter === "today" ? new Date(new Date().setHours(23, 59, 59, 999)).getTime() : now + fDays * 864e5;
-      list = list.filter((t) => new Date(t.deadline).getTime() <= end);
-    }
-    allExpanded.filter((t) => new Date(t.deadline).getTime() < now).forEach((t) => {
-      if (!list.find((l) => l.id === t.id)) list.push(t);
-    });
-    if (catFilter === "timetable_group") {
-      const timetableIds = new Set(timetableCats.map((c) => c.id));
-      list = list.filter((t) => timetableIds.has(t.category));
-    } else if (catFilter !== "all") {
-      list = list.filter((t) => t.category === catFilter);
-    }
+    if (catFilter !== "all") list = list.filter((t) => t.category === catFilter);
 
     const overdue = list.filter((t) => new Date(t.deadline).getTime() < now).sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
     const notOverdue = list.filter((t) => new Date(t.deadline).getTime() >= now);
@@ -293,7 +293,78 @@ export default function Home() {
       return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
     });
     return [...overdue, ...pri, ...norm];
-  }, [allExpanded, filter, catFilter, timetableCats]);
+  }, [allExpanded, catFilter]);
+
+  const todayView = useMemo(() => {
+    const start = startOfToday();
+    const end = new Date(start); end.setDate(end.getDate() + 1);
+    const dueToday = sorted.filter((t) => {
+      const due = new Date(t.deadline);
+      return due >= start && due < end;
+    }).sort((a, b) => {
+      const aw = (a.taskType === "long" ? 50 : a.taskType === "mid" ? 30 : a.taskType === "daily" ? 20 : 10);
+      const bw = (b.taskType === "long" ? 50 : b.taskType === "mid" ? 30 : b.taskType === "daily" ? 20 : 10);
+      if (aw !== bw) return bw - aw;
+      return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+    });
+
+    const candidates = sorted.filter((t) => {
+      if (dueToday.find((d) => d.id === t.id)) return false;
+      const dueDays = Math.ceil((new Date(t.deadline).getTime() - Date.now()) / 86400000);
+      const unstartedDays = t.lastWorkedAt ? Math.floor((Date.now() - new Date(t.lastWorkedAt).getTime()) / 86400000) : 99;
+      return t.taskType === "daily" || dueDays <= 3 || unstartedDays >= 2 || (t.importance ?? 2) === 3;
+    });
+
+    const scored = candidates.map((t) => {
+      const base = t.taskType === "long" ? 50 : t.taskType === "mid" ? 30 : t.taskType === "daily" ? 20 : 10;
+      const est = t.estimatedMinutes ?? (t.taskType === "long" ? 300 : t.taskType === "mid" ? 120 : t.taskType === "daily" ? 20 : 30);
+      const logged = t.loggedMinutes ?? 0;
+      const progress = Math.max(0, Math.min(1, logged / Math.max(est, 1)));
+      const effectiveLoad = Math.ceil(base * (1 - progress));
+      const dueDays = Math.max(1, Math.ceil((new Date(t.deadline).getTime() - Date.now()) / 86400000));
+      const remainingMinutes = Math.max(est - logged, 0);
+      const todayRequiredMinutes = Math.ceil(remainingMinutes / dueDays);
+      const unstartedDays = t.lastWorkedAt ? Math.floor((Date.now() - new Date(t.lastWorkedAt).getTime()) / 86400000) : 99;
+      let urgency = dueDays <= 0 ? 130 : dueDays === 1 ? 100 : dueDays === 2 ? 80 : dueDays <= 3 ? 60 : dueDays <= 7 ? 35 : 10;
+      if (todayRequiredMinutes > 0 && !t.lastWorkedAt) urgency += 10;
+      if ((t.importance ?? 2) === 3) urgency += 10;
+      const priorityScore = urgency + ((t.importance ?? 2) === 3 ? 10 : (t.importance ?? 2) === 2 ? 5 : 0) + Math.min(unstartedDays * 3, 15) + (todayRequiredMinutes > 0 ? 15 : 0);
+      let weightedLoad = effectiveLoad;
+      if (dueDays <= 3) weightedLoad += 10;
+      if (unstartedDays >= 2) weightedLoad += 10;
+      if ((t.importance ?? 2) === 3) weightedLoad += 10;
+      if (progress >= 0.8) weightedLoad -= 20;
+      else if (progress >= 0.5) weightedLoad -= 10;
+      weightedLoad = Math.max(5, Math.min(100, weightedLoad));
+      const reasons = [`締切${dueDays <= 0 ? "超過" : `${dueDays}日`}`, `今日${todayRequiredMinutes}分目安`, `進捗${Math.round(progress * 100)}%`];
+      return { t, priorityScore, weightedLoad, reasons };
+    }).sort((a,b)=>b.priorityScore-a.priorityScore);
+
+    const recommended: typeof scored = [];
+    const alternatives: typeof scored = [];
+    let budget = 100;
+    let overflowUsed = false;
+    scored.forEach((entry) => {
+      if (entry.weightedLoad <= budget) {
+        recommended.push(entry); budget -= entry.weightedLoad; return;
+      }
+      if (!overflowUsed && entry.priorityScore >= 80) {
+        recommended.push(entry); overflowUsed = true; return;
+      }
+      if (entry.weightedLoad <= 20) alternatives.push(entry);
+    });
+
+    return { dueToday, recommended, alternatives, budgetLeft: budget };
+  }, [sorted]);
+
+  const nearTasks = useMemo(() => {
+    const limit = Date.now() + nearWindow * 86400000;
+    return sorted.filter((t) => new Date(t.deadline).getTime() <= limit).sort((a,b)=>new Date(a.deadline).getTime()-new Date(b.deadline).getTime());
+  }, [sorted, nearWindow]);
+
+  const logWork = (task: Task, minutes: number) => {
+    setTasks((prev) => prev.map((t) => t.id === task.id ? { ...t, loggedMinutes: Math.max(0, (t.loggedMinutes || 0) + minutes), lastWorkedAt: new Date().toISOString() } : t));
+  };
 
   const sortedRef = useRef<Task[]>(sorted);
   useEffect(() => {
@@ -309,7 +380,8 @@ export default function Home() {
   const handleSave = useCallback((data: Task) => {
     setTasks((prev) => {
       const ex = prev.find((t) => t.id === data.id);
-      return ex ? prev.map((t) => (t.id === data.id ? { ...t, ...data } : t)) : [...prev, data];
+      const payload = withTaskDefaults(data);
+      return ex ? prev.map((t) => (t.id === data.id ? { ...t, ...payload } : t)) : [...prev, payload];
     });
     setShowForm(false);
     setEditTask(null);
@@ -560,57 +632,53 @@ export default function Home() {
         {view === "list" && (
           <>
             <div className="px-4 pt-3 pb-1 flex gap-1.5 overflow-x-auto">
-              {FILTERS.map((f) => <button key={f.id} onClick={() => setFilter(f.id)} className={`px-3 py-1.5 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${filter === f.id ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-500 hover:bg-gray-100"}`}>{f.label}</button>)}
+              {[{id:"today",label:"今日"},{id:"near",label:"近いうち"},{id:"all",label:"全体"}].map((m)=><button key={m.id} onClick={()=>setListMode(m.id as "today" | "near" | "all")} className={`px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap ${listMode===m.id?"bg-gray-900 text-white":"bg-gray-50 text-gray-500"}`}>{m.label}</button>)}
+              {listMode === "near" && (
+                <>
+                  <button onClick={() => setNearWindow(7)} className={`px-3 py-2 min-h-11 rounded-md text-[11px] ${nearWindow===7?"bg-gray-200 text-gray-900":"text-gray-500"}`}>7日</button>
+                  <button onClick={() => setNearWindow(30)} className={`px-3 py-2 min-h-11 rounded-md text-[11px] ${nearWindow===30?"bg-gray-200 text-gray-900":"text-gray-500"}`}>30日</button>
+                </>
+              )}
             </div>
             <div className="px-4 py-2 border-b border-gray-100 space-y-1.5">
               <div className="flex gap-1.5 overflow-x-auto">
                 <button onClick={() => setCatFilter("all")} className={`px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === "all" ? "bg-gray-200 text-gray-900" : "text-gray-400 hover:text-gray-600"}`}>すべて</button>
-                <button onClick={() => setCatFilter("default")} className={`px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === "default" ? "bg-gray-200 text-gray-900" : "text-gray-400 hover:text-gray-600"}`}>未分類</button>
-                {timetableCats.length > 0 && (
-                  <button onClick={() => { setShowCourseFilters((prev) => !prev); setCatFilter("timetable_group"); }} className={`px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === "timetable_group" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"}`}>授業 {showCourseFilters ? "▲" : "▼"}</button>
-                )}
-                {normalCats.filter((c) => c.id !== "default").map((c) => <button key={c.id} onClick={() => setCatFilter(c.id)} className={`flex items-center gap-1.5 px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === c.id ? "text-white" : "text-gray-500 hover:bg-gray-50"}`} style={catFilter === c.id ? { backgroundColor: c.color } : {}}><span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: catFilter === c.id ? "rgba(255,255,255,0.7)" : c.color }} />{c.label}</button>)}
+                {cats.map((c) => <button key={c.id} onClick={() => setCatFilter(c.id)} className={`flex items-center gap-1.5 px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === c.id ? "text-white" : "text-gray-500 hover:bg-gray-50"}`} style={catFilter === c.id ? { backgroundColor: c.color } : {}}><span className="w-2 h-2 rounded-full" style={{ backgroundColor: catFilter === c.id ? "rgba(255,255,255,0.7)" : c.color }} />{c.label}</button>)}
               </div>
-              {showCourseFilters && timetableCats.length > 0 && (
-                <div className="flex gap-1.5 overflow-x-auto pb-1">
-                  {timetableCats.map((c) => (
-                    <button key={c.id} onClick={() => setCatFilter(c.id)} className={`flex items-center gap-1.5 px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === c.id ? "text-white" : "text-gray-500 hover:bg-gray-50"}`} style={catFilter === c.id ? { backgroundColor: c.color } : {}}>
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: catFilter === c.id ? "rgba(255,255,255,0.7)" : c.color }} />{c.label}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
-            {sorted.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-gray-400"><IconList size={32} stroke="#ddd" /><p className="text-sm mt-3">タスクなし</p><p className="text-xs mt-1 text-gray-300">右下の + から追加</p></div>
-            ) : (
-              <div ref={listRef}>
-                {sorted.map((t, i) => {
-                  const now = Date.now();
-                  const tTime = new Date(t.deadline).getTime();
-                  const isOD = tTime < now;
-                  const prevIsOD = i > 0 && new Date(sorted[i - 1].deadline).getTime() < now;
-                  const showODLabel = i === 0 && isOD;
-                  const showPriLabel = !isOD && t.priority && (i === 0 || (prevIsOD && !isOD) || (i > 0 && !sorted[i - 1].priority && new Date(sorted[i - 1].deadline).getTime() >= now));
-                  const showNormLabel = !isOD && !t.priority && i > 0 && (new Date(sorted[i - 1].deadline).getTime() < now || sorted[i - 1].priority);
-                  return (
-                    <div key={t.id} data-task-idx={i} style={dragActive && dragIdx === i ? { transform: `translateY(${dragY}px)` } : {}}>
-                      {showODLabel && <div className="px-4 pt-2 pb-1"><span className="text-[10px] font-semibold text-red-500 tracking-widest uppercase">期限超過</span></div>}
-                      {showPriLabel && <div className="px-4 pt-3 pb-1"><span className="text-[10px] font-semibold text-red-500 tracking-widest uppercase">最優先</span></div>}
-                      {showNormLabel && <div className="px-4 pt-3 pb-1"><span className="text-[10px] font-semibold text-gray-400 tracking-widest uppercase">その他</span></div>}
-                      <TaskRow task={t} cats={cats} idx={i} touchDrag={touchDrag} onComplete={handleComplete} onEdit={(task) => { setEditTask(task); setPrefillDate(null); setShowForm(true); }} onDelete={handleDeleteTask} />
+
+            {listMode === "today" && (
+              <div className="px-4 py-3 space-y-4">
+                <section>
+                  <div className="text-xs font-semibold text-red-500 mb-2">本日締切</div>
+                  {todayView.dueToday.length === 0 ? <div className="text-xs text-gray-400">本日締切はありません</div> : todayView.dueToday.map((t) => <TaskRow key={t.id} task={t} cats={cats} idx={0} touchDrag={touchDrag} onComplete={handleComplete} onEdit={(task) => { setEditTask(task); setShowForm(true); }} onDelete={handleDeleteTask} />)}
+                </section>
+                <section>
+                  <div className="text-xs font-semibold text-gray-700 mb-2">今日の推薦（予算残り {todayView.budgetLeft}）</div>
+                  {todayView.recommended.map(({ t, reasons, weightedLoad }) => (
+                    <div key={t.id} className="bg-white border border-gray-100 rounded-lg px-3 py-2">
+                      <div className="flex items-center justify-between"><button onClick={() => { setEditTask(t); setShowForm(true); }} className="text-sm font-medium text-left">{t.title}</button><span className="text-[10px] text-gray-500">負荷{weightedLoad}</span></div>
+                      <div className="text-[11px] text-gray-500 mt-1">{reasons.join(" / ")}</div>
+                      <div className="mt-2 flex gap-2"><button onClick={() => logWork(t, 15)} className="px-2 py-1 text-[11px] rounded bg-gray-100">+15分</button><button onClick={() => logWork(t, 30)} className="px-2 py-1 text-[11px] rounded bg-gray-100">+30分</button></div>
                     </div>
-                  );
-                })}
+                  ))}
+                </section>
+                <section>
+                  <div className="text-xs font-semibold text-gray-500 mb-2">代替タスク</div>
+                  {todayView.alternatives.slice(0, 5).map(({ t, weightedLoad }) => <div key={t.id} className="text-xs text-gray-600 py-1">・{t.title}（負荷{weightedLoad}）</div>)}
+                </section>
               </div>
             )}
-            {sorted.length > 0 && (
-              <div className="px-4 py-4">
-                <div className="flex items-center justify-between text-[11px] text-gray-400 mb-2">
-                  <span>表示中 {sorted.length}件 / 全{allExpanded.length}件</span>
-                  <span>今週の達成率 {Math.round((weekDone / Math.max(weekDone + active.length, 1)) * 100)}%</span>
-                </div>
-                <div className="h-1 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-gray-900 rounded-full transition-all duration-700" style={{ width: `${Math.min(100, (weekDone / Math.max(weekDone + active.length, 1)) * 100)}%` }} /></div>
+
+            {listMode === "near" && (
+              <div ref={listRef}>
+                {nearTasks.map((t, i) => <TaskRow key={t.id} task={t} cats={cats} idx={i} touchDrag={touchDrag} onComplete={handleComplete} onEdit={(task) => { setEditTask(task); setPrefillDate(null); setShowForm(true); }} onDelete={handleDeleteTask} />)}
+              </div>
+            )}
+
+            {listMode === "all" && (
+              <div ref={listRef}>
+                {sorted.map((t, i) => <TaskRow key={t.id} task={t} cats={cats} idx={i} touchDrag={touchDrag} onComplete={handleComplete} onEdit={(task) => { setEditTask(task); setPrefillDate(null); setShowForm(true); }} onDelete={handleDeleteTask} />)}
               </div>
             )}
           </>

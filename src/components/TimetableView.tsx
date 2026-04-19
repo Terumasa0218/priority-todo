@@ -29,33 +29,22 @@ interface EditingState {
   item: TimetableItem;
 }
 
-const ON_DEMAND_PREFIX = "オンデマンド";
-const isOnDemandPeriod = (period: string) => String(period).startsWith(ON_DEMAND_PREFIX);
-const getOnDemandSlotIndex = (period: string) => {
-  const m = String(period).match(/^オンデマンド(\d+)$/);
-  return m ? Math.max(0, Number(m[1]) - 1) : 0;
-};
-const normalizePeriod = (period: string) => {
-  if (isOnDemandPeriod(period)) return period;
-  const m = String(period).match(/^(\d+)(?:・(\d+))?限$/);
-  if (!m) return period;
-  const start = Number(m[1]);
-  const normalizedStart = start % 2 === 0 ? start - 1 : start;
-  return `${normalizedStart}・${normalizedStart + 1}限`;
-};
+const ON_DEMAND_PERIOD = 999;
+const isOnDemandPeriod = (period: number) => period >= ON_DEMAND_PERIOD;
+const getOnDemandSlotIndex = (period: number) => Math.max(0, period - ON_DEMAND_PERIOD);
+const normalizePeriod = (period: number) => (period % 2 === 0 ? period - 1 : period);
 const buildPeriods = (maxPeriod: number) => {
   const safeMax = Math.max(2, maxPeriod % 2 === 0 ? maxPeriod : maxPeriod + 1);
   return Array.from({ length: safeMax / 2 }, (_, idx) => {
     const start = idx * 2 + 1;
-    const label = `${start}・${start + 1}限`;
-    return { value: label, label };
+    return { value: start, label: `${start}・${start + 1}限` };
   });
 };
 
 // Backward-compatible alias for historical references.
 const buildPeriodGroups = (maxPeriod: number) => buildPeriods(maxPeriod);
 
-export default function TimetableView({ items, setItems, setCats, config, setConfig, onShare, tasks, cats }: TimetableViewProps) {
+export default function TimetableView({ items, setItems, setCats, config, setConfig, onShare }: TimetableViewProps) {
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [showError, setShowError] = useState(false);
   const [showCustomize, setShowCustomize] = useState(false);
@@ -64,7 +53,6 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
   const [shareMessage, setShareMessage] = useState<string | null>(null);
 
   const periodOptions = useMemo(() => buildPeriodGroups(config.maxPeriod), [config.maxPeriod]);
-  const normalizedItems = useMemo(() => items.map((it) => ({ ...it, period: normalizePeriod(String(it.period)) })), [items]);
   const onDemandSlotsByDay = DAYS.map((_, idx) => {
     const value = Number(config.onDemandSlotsByDay?.[idx] ?? 0);
     return Number.isFinite(value) ? Math.max(0, Math.min(20, Math.floor(value))) : 0;
@@ -76,7 +64,8 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
       if (isOnDemandPeriod(it.period)) return;
       if (it.day < 1 || it.day > 5) return;
       const normalized = normalizePeriod(it.period);
-      if (!periodOptions.some((option) => option.value === normalized)) return;
+      const maxStart = Math.max(1, (Math.floor(config.maxPeriod / 2) * 2) - 1);
+      if (normalized < 1 || normalized > maxStart) return;
       map.set(`${it.day}-${normalized}`, { ...it, period: normalized });
     });
     return map;
@@ -137,7 +126,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
     setEditing(null);
   };
 
-  const applyCustomize = (maxPeriodInput: number, showOnDemandInput: boolean, onDemandSlotsInput: number[] = onDemandSlotsByDay) => {
+  const applyCustomize = (maxPeriodInput: number, showOnDemandInput: boolean, onDemandSlotsInput: number[]) => {
     const evenMax = Math.max(2, Math.min(20, maxPeriodInput % 2 === 0 ? maxPeriodInput : maxPeriodInput + 1));
     const nextOnDemandSlotsByDay = DAYS.map((_, idx) => {
       const value = Number(onDemandSlotsInput[idx] ?? 0);
