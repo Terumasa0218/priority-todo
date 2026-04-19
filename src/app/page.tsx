@@ -59,6 +59,10 @@ export default function Home() {
   const [timetableConfig, setTimetableConfig] = useState<TimetableConfig>(DEFAULT_TIMETABLE_CONFIG);
   const [view, setView] = useState<View>("list");
   const [activeFilter, setActiveFilter] = useState("week");
+  // Backward-compatible aliases for in-progress refactors in this file.
+  // This prevents accidental unresolved references when `filter` names remain.
+  const filter = activeFilter;
+  const setFilter = setActiveFilter;
   const [catFilter, setCatFilter] = useState("all");
   const [showCourseFilters, setShowCourseFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -598,8 +602,8 @@ export default function Home() {
           <>
             <div className="px-4 pt-3 pb-1">
               <SegmentedTabs
-                value={activeFilter}
-                onChange={setActiveFilter}
+                value={filter}
+                onChange={setFilter}
                 items={FILTERS.map((f) => ({ id: f.id, label: f.label }))}
               />
             </div>
