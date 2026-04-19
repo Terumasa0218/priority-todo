@@ -5,6 +5,9 @@ export interface Task {
   category: string; // カテゴリID
   priority: boolean;
   recurrence: "none" | "daily" | "weekly" | "biweekly" | "monthly";
+  classDayOfWeek?: number; // 0-6
+  offsetDays?: number;
+  offsetTime?: string;
   repeatCount: number | null;
   repeatEndDate: string | null;
   reminder: string;
@@ -33,7 +36,7 @@ export interface TimetableItem {
   id: string;
   name: string;
   day: number; // 1=月, 2=火, ..., 5=金
-  period: number; // 1,3,5 ... (連続2コマの先頭時限)
+  period: number; // 1-6
   teacher: string;
   room: string;
   color: string;

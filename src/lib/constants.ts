@@ -11,8 +11,7 @@ export const PALETTE = [
 
 export const RECUR = [
   { id: "none", label: "なし" },
-  { id: "daily", label: "毎日" },
-  { id: "weekly", label: "毎週" },
+    { id: "weekly", label: "毎週" },
   { id: "biweekly", label: "隔週" },
   { id: "monthly", label: "毎月" },
 ] as const;
