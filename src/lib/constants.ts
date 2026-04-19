@@ -1,6 +1,7 @@
 import { Category, TimetableConfig } from "./types";
 
 export const DAY = ["日", "月", "火", "水", "木", "金", "土"];
+export const WEEKDAY_LABELS = ["", "月", "火", "水", "木", "金"] as const;
 
 export const PALETTE = [
   "#CD2B31", "#D4440C", "#E5A500", "#30A46C", "#5B5BD6",

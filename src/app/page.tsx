@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { FILTERS, DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG } from "@/lib/constants";
+import { FILTERS, DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG, WEEKDAY_LABELS } from "@/lib/constants";
 import { expandRecurring, remaining, uid } from "@/lib/utils";
 import { Category, Group, Task, TimetableConfig, TimetableItem, TouchDragState } from "@/lib/types";
 import { IconArchive, IconBook, IconCalendar, IconClock, IconList, IconPalette, IconPlus, IconSettings, IconUsers } from "@/components/Icons";
@@ -509,7 +509,7 @@ export default function Home() {
             <h3 className="text-sm font-semibold text-gray-900">時間割をインポート</h3>
             <p className="text-xs text-gray-500 mt-2">含まれる授業：</p>
             <ul className="mt-1 text-xs text-gray-600 space-y-1 max-h-40 overflow-y-auto">
-              {pendingImport.items.map((it, idx) => <li key={`${it.name}-${idx}`}>・{it.name}（{DAY[it.day]}{it.period}限）</li>)}
+              {pendingImport.items.map((it, idx) => <li key={`${it.name}-${idx}`}>・{it.name}（{WEEKDAY_LABELS[it.day]}{it.period}限）</li>)}
             </ul>
             <p className="text-[11px] text-gray-400 mt-2">※現在の時間割は置き換えられます</p>
             <div className="mt-4 flex justify-end gap-2">
