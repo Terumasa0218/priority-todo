@@ -49,7 +49,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
   const periodOptions = useMemo(() => buildPeriods(config.maxPeriod), [config.maxPeriod]);
   const onDemandSlotsByDay = DAYS.map((_, idx) => {
     const value = Number(config.onDemandSlotsByDay?.[idx] ?? 0);
-    return Number.isFinite(value) ? Math.max(0, Math.min(5, Math.floor(value))) : 0;
+    return Number.isFinite(value) ? Math.max(0, Math.min(20, Math.floor(value))) : 0;
   });
 
   const cellMap = useMemo(() => {
@@ -67,19 +67,23 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
 
   const onDemandMap = useMemo(() => {
     const map = new Map<number, TimetableItem[]>();
-    items
-      .filter((it) => isOnDemandPeriod(it.period))
-      .forEach((it) => {
-        if (it.day < 1 || it.day > 5) return;
-        const list = map.get(it.day) ?? [];
-        list.push({ ...it, day: it.day });
-        map.set(it.day, list);
-      });
+    items.filter((it) => isOnDemandPeriod(it.period)).forEach((it) => {
+      if (it.day < 1 || it.day > 5) return;
+      const list = map.get(it.day) ?? [];
+      list.push(it);
+      map.set(it.day, list);
+    });
     map.forEach((list, day) => {
       map.set(day, list.sort((a, b) => getOnDemandSlotIndex(a.period) - getOnDemandSlotIndex(b.period)));
     });
     return map;
   }, [items]);
+
+  const getNextOnDemandPeriod = (day: number) => {
+    const dayItems = onDemandMap.get(day) ?? [];
+    const nextIdx = dayItems.length === 0 ? 0 : Math.max(...dayItems.map((it) => getOnDemandSlotIndex(it.period))) + 1;
+    return ON_DEMAND_PERIOD + nextIdx;
+  };
 
   const openCreate = (day: number, period: number) => {
     setEditing({
@@ -130,10 +134,8 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
     setItems((prev) => {
       const filtered = prev.filter((it) => {
         if (it.id === nextItem.id) return false;
-        if (isOnDemandPeriod(nextItem.period)) {
-          return !(isOnDemandPeriod(it.period) && it.day === nextItem.day && getOnDemandSlotIndex(it.period) === getOnDemandSlotIndex(nextItem.period));
-        }
-        return !(it.day === nextItem.day && normalizePeriod(it.period) === nextItem.period);
+        if (isOnDemandPeriod(nextItem.period)) return true;
+        return !(it.day === nextItem.day && !isOnDemandPeriod(it.period) && normalizePeriod(it.period) === nextItem.period);
       });
       return [...filtered, nextItem];
     });
@@ -154,15 +156,12 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
     const evenMax = 6;
     const nextOnDemandSlotsByDay = DAYS.map((_, idx) => {
       const value = Number(onDemandSlotsInput[idx] ?? 0);
-      return Number.isFinite(value) ? Math.max(0, Math.min(5, Math.floor(value))) : 0;
+      return Number.isFinite(value) ? Math.max(0, Math.min(20, Math.floor(value))) : 0;
     });
     setConfig({ maxPeriod: evenMax, showOnDemand: showOnDemandInput, onDemandSlotsByDay: nextOnDemandSlotsByDay });
     setItems((prev) => prev.filter((it) => {
-      if (isOnDemandPeriod(it.period)) {
-        if (it.day < 1 || it.day > 5) return false;
-        return getOnDemandSlotIndex(it.period) < nextOnDemandSlotsByDay[it.day - 1];
-      }
-      return it.day >= 1 && it.day <= 5 && normalizePeriod(it.period) <= 6;
+      if (isOnDemandPeriod(it.period)) return it.day >= 1 && it.day <= 5;
+      return it.day >= 1 && it.day <= 5 && normalizePeriod(it.period) <= evenMax - 1;
     }));
     setShowCustomize(false);
   };
@@ -228,34 +227,32 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
             </React.Fragment>
           ))}
 
-          {config.showOnDemand && onDemandSlotsByDay.some((count) => count > 0) && (
+          {config.showOnDemand && (
             <>
-              <div className="min-h-16 border-r border-b border-gray-300 flex items-center justify-center text-xs text-gray-500 bg-gray-50 font-medium px-2">オンデマンド</div>
+              <div className="min-h-20 border-r border-b border-gray-300 flex items-center justify-center text-xs text-gray-500 bg-gray-50 font-medium px-2">オンデマンド</div>
               {DAYS.map((d, idx) => {
-                const count = onDemandSlotsByDay[idx];
+                const minimumSlots = onDemandSlotsByDay[idx];
                 const dayItems = onDemandMap.get(d.value) ?? [];
+                const slotCount = Math.max(minimumSlots, dayItems.length);
                 return (
-                  <div key={d.value} className="min-h-16 border-b border-gray-300 p-1.5">
-                    {count > 0 ? (
-                      <div className="space-y-1">
-                        {Array.from({ length: count }, (_, slotIdx) => {
-                          const item = dayItems.find((it) => getOnDemandSlotIndex(it.period) === slotIdx) ?? null;
-                          return (
-                            <button
-                              key={`${d.value}-${slotIdx}`}
-                              onClick={() => (item ? openEdit(item) : openCreate(d.value, ON_DEMAND_PERIOD + slotIdx))}
-                              className={`w-full h-12 rounded-md border text-[11px] px-2 text-left transition-colors ${item ? "hover:brightness-95" : "border-dashed border-gray-300 text-gray-400 hover:bg-gray-50"}`}
-                              style={item ? { backgroundColor: `${item.color}20`, borderColor: `${item.color}88` } : undefined}
-                            >
-                              <span className="block text-[10px] text-gray-500 mb-0.5">{d.label}曜 {slotIdx + 1}</span>
-                              <span className="block truncate">{item ? item.name : "未設定"}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="w-full h-12 rounded-md border border-gray-200 bg-gray-50 text-[10px] text-gray-300 flex items-center justify-center">-</div>
-                    )}
+                  <div key={d.value} className="min-h-20 border-b border-gray-300 p-1.5">
+                    <div className="space-y-1">
+                      {Array.from({ length: slotCount }, (_, slotIdx) => {
+                        const item = dayItems.find((it) => getOnDemandSlotIndex(it.period) === slotIdx) ?? null;
+                        return (
+                          <button
+                            key={`${d.value}-${slotIdx}`}
+                            onClick={() => (item ? openEdit(item) : openCreate(d.value, ON_DEMAND_PERIOD + slotIdx))}
+                            className={`w-full h-11 rounded-md border text-[11px] px-2 text-left transition-colors ${item ? "hover:brightness-95" : "border-dashed border-gray-300 text-gray-400 hover:bg-gray-50"}`}
+                            style={item ? { backgroundColor: `${item.color}18`, borderColor: `${item.color}88` } : undefined}
+                          >
+                            <span className="block text-[10px] text-gray-500 mb-0.5">{d.label}曜 {slotIdx + 1}</span>
+                            <span className="block truncate">{item ? item.name : "未設定"}</span>
+                          </button>
+                        );
+                      })}
+                      <button onClick={() => openCreate(d.value, getNextOnDemandPeriod(d.value))} className="w-full h-8 rounded-md border border-dashed border-gray-300 text-[11px] text-gray-400 hover:bg-gray-50 transition-colors">＋追加</button>
+                    </div>
                   </div>
                 );
               })}
@@ -263,6 +260,31 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
           )}
         </div>
       </div>
+
+      {config.showOnDemand && (
+        <div className="mt-4">
+          <div className="text-sm font-semibold text-gray-700 mb-2">オンデマンド授業</div>
+          <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}>
+            {DAYS.map((d) => {
+              const dayItems = onDemandMap.get(d.value) ?? [];
+              return (
+                <div key={d.value} className="space-y-2">
+                  {dayItems.length === 0 ? (
+                    <div className="h-14 rounded-md border border-gray-200 bg-gray-50 text-[10px] text-gray-300 flex items-center justify-center">-</div>
+                  ) : (
+                    dayItems.map((item, idx) => (
+                      <button key={item.id} onClick={() => openEdit(item)} className="w-full rounded-md border px-2 py-2 text-left text-[11px] hover:brightness-95 transition-colors" style={{ backgroundColor: `${item.color}14`, borderColor: `${item.color}88` }}>
+                        <span className="block text-[10px] text-gray-500">{d.label}曜配信 {idx + 1}</span>
+                        <span className="block font-medium text-gray-800 truncate">{item.name}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {showCustomize && (
         <div className="fixed inset-0 z-50 bg-gray-50/95 flex flex-col" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
@@ -298,11 +320,11 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
                 {DAYS.map((d, idx) => (
                   <label key={d.value} className="space-y-1">
                     <span className="text-[11px] text-gray-500">{d.label}曜</span>
-                    <input id={`ondemand-slots-day-${d.value}`} type="number" min={0} max={5} step={1} defaultValue={config.onDemandSlotsByDay?.[idx] ?? 0} className="w-full px-2 py-1.5 rounded-md border border-gray-200 text-sm" />
+                    <input id={`ondemand-slots-day-${d.value}`} type="number" min={0} max={20} step={1} defaultValue={config.onDemandSlotsByDay?.[idx] ?? 0} className="w-full px-2 py-1.5 rounded-md border border-gray-200 text-sm" />
                   </label>
                 ))}
               </div>
-              <p className="text-[11px] text-gray-400 mt-2">例: 月曜2・火曜3 のように、曜日ごとに最下段へ表示する枠数を設定できます（最大5）。</p>
+              <p className="text-[11px] text-gray-400 mt-2">設定した枠数は初期プレースホルダーとして表示されます。実際のオンデマンド授業は下段の＋追加で無制限に追加できます。</p>
             </div>
           </div>
         </div>
