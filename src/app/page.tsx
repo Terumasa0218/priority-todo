@@ -354,12 +354,10 @@ export default function Home() {
     setAuthIssue(null);
     setAuthFlowMessage(null);
     if (inAppBrowser) {
-      setAuthIssue(resolveAuthIssue("auth/disallowed-useragent"));
-      setAuthFlowMessage("アプリ内ブラウザではログインできません。Safari / Chrome で開いてください。");
-      return;
+      setAuthFlowMessage("アプリ内ブラウザです。失敗する場合は下の「Safari / Chromeで開く」を使ってください。");
     }
     try {
-      if (isMobileDevice()) {
+      if (isMobileDevice() || inAppBrowser) {
         await signInWithRedirect(auth, googleProvider);
       } else {
         await signInWithPopup(auth, googleProvider);
@@ -394,6 +392,15 @@ export default function Home() {
     const currentUrl = window.location.href;
     if (/Line/i.test(navigator.userAgent)) {
       window.location.href = `https://line.me/R/openExternalBrowser?url=${encodeURIComponent(currentUrl)}`;
+      return;
+    }
+    if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      window.location.href = `x-safari-${currentUrl}`;
+      return;
+    }
+    if (/Android/i.test(navigator.userAgent)) {
+      const withoutProtocol = currentUrl.replace(/^https?:\/\//, "");
+      window.location.href = `intent://${withoutProtocol}#Intent;scheme=https;package=com.android.chrome;end`;
       return;
     }
     if (/GitHub|Instagram|FBAN|FBAV|Twitter|GSA|LinkedInApp|Slack|Discord/i.test(navigator.userAgent)) {
