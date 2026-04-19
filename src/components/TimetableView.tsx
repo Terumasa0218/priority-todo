@@ -29,24 +29,16 @@ interface EditingState {
   item: TimetableItem;
 }
 
-const periodLabelFromIndex = (idx: number) => `${idx * 2 + 1}・${idx * 2 + 2}限`;
-const buildPeriodGroups = (maxPeriod: number) => {
-  const normalized = Math.min(18, Math.max(6, Math.floor(maxPeriod / 2) * 2));
-  return Array.from({ length: normalized / 2 }, (_, idx) => periodLabelFromIndex(idx));
-};
-const isOnDemandPeriod = (period: string) => period.startsWith("オンデマンド");
-const normalizePeriod = (period: string | number): string => {
-  if (typeof period === "string") {
-    if (period === "1限" || period === "2限") return "1・2限";
-    if (period === "3限" || period === "4限") return "3・4限";
-    if (period === "5限" || period === "6限") return "5・6限";
-    return period;
-  }
-  if (period <= 2) return "1・2限";
-  if (period <= 4) return "3・4限";
-  if (period <= 6) return "5・6限";
-  const idx = Math.max(0, Math.floor((period - 1) / 2));
-  return periodLabelFromIndex(idx);
+const ON_DEMAND_PERIOD = 999;
+const isOnDemandPeriod = (period: number) => period >= ON_DEMAND_PERIOD;
+const getOnDemandSlotIndex = (period: number) => Math.max(0, period - ON_DEMAND_PERIOD);
+const normalizePeriod = (period: number) => (period % 2 === 0 ? period - 1 : period);
+const buildPeriods = (maxPeriod: number) => {
+  const safeMax = Math.max(2, maxPeriod % 2 === 0 ? maxPeriod : maxPeriod + 1);
+  return Array.from({ length: safeMax / 2 }, (_, idx) => {
+    const start = idx * 2 + 1;
+    return { value: start, label: `${start}・${start + 1}限` };
+  });
 };
 
 export default function TimetableView({ items, setItems, setCats, config, setConfig, onShare, tasks, cats }: TimetableViewProps) {
@@ -66,7 +58,25 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
     const map = new Map<string, TimetableItem>();
     normalizedItems.forEach((it) => {
       if (isOnDemandPeriod(it.period)) return;
-      map.set(`${it.day}-${it.period}`, it);
+      if (it.day < 1 || it.day > 5) return;
+      const normalized = normalizePeriod(it.period);
+      const maxStart = Math.max(1, (Math.floor(config.maxPeriod / 2) * 2) - 1);
+      if (normalized < 1 || normalized > maxStart) return;
+      map.set(`${it.day}-${normalized}`, { ...it, period: normalized });
+    });
+    return map;
+  }, [items, config.maxPeriod]);
+
+  const onDemandMap = useMemo(() => {
+    const map = new Map<number, TimetableItem[]>();
+    items.filter((it) => isOnDemandPeriod(it.period)).forEach((it) => {
+      if (it.day < 1 || it.day > 5) return;
+      const list = map.get(it.day) ?? [];
+      list.push(it);
+      map.set(it.day, list);
+    });
+    map.forEach((list, day) => {
+      map.set(day, list.sort((a, b) => getOnDemandSlotIndex(a.period) - getOnDemandSlotIndex(b.period)));
     });
     return map;
   }, [normalizedItems]);
@@ -108,17 +118,41 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
     setEditing(null);
   };
 
-  const applyCustomize = (maxPeriodInput: number, showOnDemandInput: boolean) => {
-    const evenMax = Math.min(18, Math.max(6, Math.floor(maxPeriodInput / 2) * 2));
-    setConfig({ ...config, maxPeriod: evenMax, showOnDemand: showOnDemandInput });
-    const allowed = new Set(buildPeriodGroups(evenMax));
-    setItems((prev) => prev.filter((it) => isOnDemandPeriod(normalizePeriod(it.period)) || allowed.has(normalizePeriod(it.period))).map((it) => ({ ...it, period: normalizePeriod(it.period) })));
+  const applyCustomize = (maxPeriodInput: number, showOnDemandInput: boolean, onDemandSlotsInput: number[]) => {
+    const evenMax = Math.max(2, Math.min(20, maxPeriodInput % 2 === 0 ? maxPeriodInput : maxPeriodInput + 1));
+    const nextOnDemandSlotsByDay = DAYS.map((_, idx) => {
+      const value = Number(onDemandSlotsInput[idx] ?? 0);
+      return Number.isFinite(value) ? Math.max(0, Math.min(20, Math.floor(value))) : 0;
+    });
+    setConfig({ maxPeriod: evenMax, showOnDemand: showOnDemandInput, onDemandSlotsByDay: nextOnDemandSlotsByDay });
+    setItems((prev) => prev.filter((it) => {
+      if (isOnDemandPeriod(it.period)) return it.day >= 1 && it.day <= 5;
+      return it.day >= 1 && it.day <= 5 && normalizePeriod(it.period) <= evenMax - 1;
+    }));
     setShowCustomize(false);
   };
 
-  const updateDetail = (patch: Partial<TimetableItem>) => {
-    if (!detailCourse) return;
-    setItems((prev) => prev.map((it) => (it.id === detailCourse.id ? { ...it, ...patch } : it)));
+  const handleShare = async () => {
+    setSharing(true);
+    setShareMessage(null);
+    try {
+      const link = await onShare();
+      if (!link) {
+        setShareMessage("共有リンクを作成できませんでした");
+        return;
+      }
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link);
+        setShareMessage("リンクをコピーしました");
+      } else {
+        window.prompt("このリンクをコピーしてください", link);
+        setShareMessage("リンクを作成しました");
+      }
+    } catch {
+      setShareMessage("共有リンクの作成に失敗しました");
+    } finally {
+      setSharing(false);
+    }
   };
 
   const linkedTasks = detailCourse
