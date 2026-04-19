@@ -65,7 +65,7 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
       </div>
       <div className="grid grid-cols-7 mb-1">
         {DAY.map((d, i) => (
-          <div key={d} className={`text-center text-[11px] font-medium py-1 ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-gray-400"}`}>{d}</div>
+          <div key={d} className={`text-center text-xs font-semibold py-1.5 ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-gray-400"}`}>{d}</div>
         ))}
       </div>
       <div className="grid grid-cols-7 gap-px bg-gray-100 border border-gray-100 rounded-lg overflow-hidden">
@@ -78,22 +78,19 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
               key={idx}
               onClick={() => day && setSelectedDate(new Date(y, m, day))}
               className={`min-h-[100px] p-1.5 transition-colors ${day ? "cursor-pointer" : ""}`}
-              style={{ backgroundColor: sel ? "#111827" : tod ? "rgba(219,234,254,0.5)" : "#fff" }}
+              style={sel ? { border: "2px solid #111827", borderRadius: "4px", backgroundColor: "#fff" } : tod ? { backgroundColor: "rgba(219,234,254,0.4)" } : { backgroundColor: "#fff" }}
             >
               {day && (
                 <>
-                  <div className={`text-[11px] leading-none mb-1.5 text-center font-medium ${sel ? "font-bold text-white" : tod ? "font-bold text-blue-600" : "text-gray-700"}`}>{day}</div>
+                  <div className={`text-[11px] leading-none mb-1.5 text-center ${sel ? "font-bold text-gray-900" : tod ? "font-bold text-blue-600" : "text-gray-700"}`}>{day}</div>
                   <div className="space-y-0.5">
                     {dt.slice(0, 2).map((t) => {
                       const tc = cats.find((c) => c.id === t.category);
                       return (
-                        <div key={t.id}
-                          className={`text-[8px] leading-tight truncate px-0.5 rounded ${sel ? "text-white/80" : "text-gray-500"}`}
-                          style={!sel ? { borderLeft: `2px solid ${t.priority ? "#CD2B31" : (tc?.color || "#889096")}` } : { borderLeft: "2px solid rgba(255,255,255,0.5)" }}
-                        >{t.title}</div>
+                        <div key={t.id} className="calendar-task-bar text-[10px] leading-tight truncate px-1 py-[1px] rounded text-white" style={{ backgroundColor: t.priority ? "#CD2B31" : (tc?.color || "#889096") }}>{t.title}</div>
                       );
                     })}
-                    {dt.length > 2 && <div className={`text-[8px] px-0.5 ${sel ? "text-white/50" : "text-gray-400"}`}>+{dt.length - 2}</div>}
+                    {dt.length > 2 && <div className="text-[9px] px-0.5 text-gray-400">+{dt.length - 2}件</div>}
                   </div>
                 </>
               )}

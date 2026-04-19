@@ -15,11 +15,12 @@ import TimetableView from "@/components/TimetableView";
 import { auth, firebaseEnabled, googleProvider } from "@/lib/firebase";
 import { signInWithPopup, signOut, onAuthStateChanged, signInWithRedirect, User, browserLocalPersistence, getRedirectResult, setPersistence } from "firebase/auth";
 import { loadCloudSnapshot, migrateLocalToCloudOnce, saveCloudSnapshot } from "@/lib/cloudStorage";
-import { createTimetablePresetToken, loadTimetablePresetFromToken } from "@/lib/timetableShare";
+import { createTimetableShareToken, loadTimetableShareToken } from "@/lib/timetableShare";
 import { AuthIssue, resolveAuthIssue } from "@/lib/authErrorCatalog";
 
 type View = "list" | "calendar" | "timetable" | "group" | "completed";
 const isInAppBrowser = () => /FBAN|FBAV|Instagram|Line|Twitter|wv/i.test(navigator.userAgent);
+const isMobileDevice = () => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -51,6 +52,7 @@ export default function Home() {
   const dragStartY = useRef(0);
   const listRef = useRef<HTMLDivElement>(null);
   const importedPresetRef = useRef<string | null>(null);
+  const [pendingImport, setPendingImport] = useState<ReturnType<typeof loadTimetableShareToken> | null>(null);
 
   const touchDrag = useMemo<TouchDragState>(
     () => ({
@@ -165,39 +167,21 @@ export default function Home() {
 
   useEffect(() => {
     if (!ready || !user) return;
-    const timer = setTimeout(() => {
-      saveCloudSnapshot(user.uid, { tasks, cats, groups, timetable, timetableConfig });
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [tasks, cats, groups, timetable, timetableConfig, ready, user]);
-
-  useEffect(() => {
-    if (!ready || !user) return;
     const params = new URLSearchParams(window.location.search);
-    const presetId = params.get("preset");
-    if (!presetId || importedPresetRef.current === presetId) return;
-    importedPresetRef.current = presetId;
-    const preset = loadTimetablePresetFromToken(presetId);
-    if (!preset) return;
-    const nextTimetable = preset.timetable.map((it) => ({ ...it, id: uid() }));
-    setTimetable(nextTimetable);
-    setTimetableConfig(preset.timetableConfig);
-    setCats((prev) => {
-      const withoutTimetable = prev.filter((c) => !c.timetableId);
-      const fromTimetable = nextTimetable.map((it) => ({
-        id: uid(),
-        label: it.name,
-        color: it.color,
-        timetableId: it.id,
-      }));
-      return [...withoutTimetable, ...fromTimetable];
-    });
-    params.delete("preset");
+    const shareToken = params.get("t");
+    if (!shareToken || importedPresetRef.current === shareToken) return;
+    importedPresetRef.current = shareToken;
+    const parsed = loadTimetableShareToken(shareToken);
+    if (parsed) setPendingImport(parsed);
+  }, [ready, user]);
+
+  const clearShareQuery = () => {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("t");
     const nextQuery = params.toString();
     const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`;
     window.history.replaceState({}, "", nextUrl);
-  }, [ready, user]);
-
+  };
   useEffect(() => {
     if (view !== "calendar") setSelectedDate(null);
   }, [view]);
@@ -334,7 +318,11 @@ export default function Home() {
       return;
     }
     try {
-      await signInWithPopup(auth, googleProvider);
+      if (isMobileDevice()) {
+        await signInWithRedirect(auth, googleProvider);
+      } else {
+        await signInWithPopup(auth, googleProvider);
+      }
     } catch (e) {
       console.error("Login error:", e);
       const code = (e as { code?: string })?.code;
@@ -344,7 +332,7 @@ export default function Home() {
         code === "auth/cancelled-popup-request" ||
         code === "auth/operation-not-supported-in-this-environment"
       ) {
-        setAuthFlowMessage("ポップアップに失敗したため、リダイレクトで再試行します...");
+        setAuthFlowMessage("ポップアップに失敗したため、リダイレクトで再試行します…");
         await signInWithRedirect(auth, googleProvider);
         return;
       }
@@ -372,12 +360,9 @@ export default function Home() {
   };
 
   const handleShareTimetable = async (): Promise<string | null> => {
-    if (!user || timetable.length === 0) return null;
-    const presetId = createTimetablePresetToken({
-      timetable,
-      timetableConfig,
-    });
-    return `${window.location.origin}?preset=${presetId}`;
+    if (timetable.length === 0) return null;
+    const token = createTimetableShareToken(timetable);
+    return `${window.location.origin}/?t=${token}`;
   };
 
   if (!firebaseEnabled) {
@@ -514,9 +499,35 @@ export default function Home() {
       </div>
 
       <button onClick={() => openNew(null)} className="fixed bottom-6 right-6 z-40 w-12 h-12 bg-gray-900 hover:bg-gray-800 text-white rounded-xl shadow-lg hover:shadow-xl transition-all active:scale-95 flex items-center justify-center"><IconPlus size={20} sw={2.5} /></button>
-      {showForm && <TaskForm task={editTask} prefillDate={prefillDate} cats={cats} setCats={setCats} onSave={handleSave} onDelete={handleDeleteFromForm} onClose={() => { setShowForm(false); setEditTask(null); setPrefillDate(null); }} />}
-      {showCatMgr && <CategoryManager cats={cats} setCats={setCats} onClose={() => setShowCatMgr(false)} />}
+      {showForm && <TaskForm task={editTask} prefillDate={prefillDate} cats={cats} setCats={setCats} timetable={timetable} onSave={handleSave} onDelete={handleDeleteFromForm} onClose={() => { setShowForm(false); setEditTask(null); setPrefillDate(null); }} />}
+      {showCatMgr && <CategoryManager cats={cats} setCats={setCats} onDeleteCategory={(catId) => setTasks((prev) => prev.map((t) => (t.category === catId ? { ...t, category: "default" } : t)))} onClose={() => setShowCatMgr(false)} />}
 
+
+      {pendingImport && (
+        <div className="fixed inset-0 z-50 bg-black/20 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-white rounded-xl border border-gray-200 p-4">
+            <h3 className="text-sm font-semibold text-gray-900">時間割をインポート</h3>
+            <p className="text-xs text-gray-500 mt-2">含まれる授業：</p>
+            <ul className="mt-1 text-xs text-gray-600 space-y-1 max-h-40 overflow-y-auto">
+              {pendingImport.items.map((it, idx) => <li key={`${it.name}-${idx}`}>・{it.name}（{DAY[it.day]}{it.period}限）</li>)}
+            </ul>
+            <p className="text-[11px] text-gray-400 mt-2">※現在の時間割は置き換えられます</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => { setPendingImport(null); clearShareQuery(); }} className="px-3 py-1.5 text-xs rounded bg-gray-100 text-gray-600">キャンセル</button>
+              <button onClick={() => {
+                const next = pendingImport.items.map((it) => ({ id: uid(), name: it.name, day: Number(it.day), period: Number(it.period), teacher: it.teacher || "", room: it.room || "", color: it.color || "#889096" }));
+                setTimetable(next);
+                setCats((prev) => {
+                  const withoutTimetable = prev.filter((c) => !c.timetableId);
+                  const fromTimetable = next.map((it) => ({ id: uid(), label: it.name, color: it.color, timetableId: it.id }));
+                  return [...withoutTimetable, ...fromTimetable];
+                });
+                setPendingImport(null); clearShareQuery();
+              }} className="px-3 py-1.5 text-xs rounded bg-gray-900 text-white">インポート</button>
+            </div>
+          </div>
+        </div>
+      )}
       {showSettings && (
         <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
           <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
