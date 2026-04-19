@@ -59,6 +59,7 @@ export default function Home() {
   const [syncing, setSyncing] = useState(false);
   const [authIssue, setAuthIssue] = useState<AuthIssue | null>(null);
   const [authFlowMessage, setAuthFlowMessage] = useState<string | null>(null);
+  const [authBusy, setAuthBusy] = useState(false);
   const inAppBrowser = useMemo(() => (typeof navigator !== "undefined" ? isInAppBrowser() : false), []);
 
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -350,7 +351,8 @@ export default function Home() {
   };
 
   const handleGoogleLogin = async () => {
-    if (!auth || !googleProvider) return;
+    if (!auth || !googleProvider || authBusy) return;
+    setAuthBusy(true);
     setAuthIssue(null);
     setAuthFlowMessage(null);
     if (inAppBrowser) {
@@ -359,6 +361,7 @@ export default function Home() {
     try {
       if (isMobileDevice() || inAppBrowser) {
         await signInWithRedirect(auth, googleProvider);
+        return;
       } else {
         await signInWithPopup(auth, googleProvider);
       }
@@ -376,6 +379,17 @@ export default function Home() {
         return;
       }
       setAuthIssue(resolveAuthIssue(code));
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const copyCurrentUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setAuthFlowMessage("URLをコピーしました。Safari / Chrome に貼り付けて開いてください。");
+    } catch {
+      setAuthFlowMessage("URLコピーに失敗しました。アドレスバーからURLをコピーしてSafari / Chromeで開いてください。");
     }
   };
 
@@ -480,21 +494,21 @@ export default function Home() {
               <p className="text-xs text-red-500">ログインに失敗しました {authIssue.id}</p>
               <p className="text-[11px] text-red-400 mt-0.5">{authIssue.summary}</p>
               {authIssue.id === 407 && (
-                <button onClick={openInExternalBrowser} className="mt-2 text-[11px] font-medium text-blue-500 underline">
+                <button onClick={openInExternalBrowser} disabled={authBusy} className="mt-2 text-[11px] font-medium text-blue-500 underline disabled:opacity-50">
                   Safari / Chromeで開く
                 </button>
               )}
             </div>
           )}
-          <button
-            onClick={handleGoogleLogin}
-            disabled={inAppBrowser}
-            className="mt-4 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-medium"
+            <button
+              onClick={handleGoogleLogin}
+            disabled={authBusy}
+            className="mt-4 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-medium disabled:opacity-60"
           >
-            Googleでログイン
+            {authBusy ? "ログイン処理中..." : "Googleでログイン"}
           </button>
           {inAppBrowser && (
-            <button onClick={copyCurrentUrl} className="mt-2 px-4 py-2 rounded-lg border border-gray-300 text-xs font-medium text-gray-700">
+            <button onClick={copyCurrentUrl} disabled={authBusy} className="mt-2 px-4 py-2 rounded-lg border border-gray-300 text-xs font-medium text-gray-700 disabled:opacity-60">
               URLをコピー
             </button>
           )}
