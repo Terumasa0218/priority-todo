@@ -384,16 +384,7 @@ export default function Home() {
     }
   };
 
-  const copyCurrentUrl = async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      setAuthFlowMessage("URLをコピーしました。Safari / Chrome に貼り付けて開いてください。");
-    } catch {
-      setAuthFlowMessage("URLコピーに失敗しました。アドレスバーからURLをコピーしてSafari / Chromeで開いてください。");
-    }
-  };
-
-  const copyCurrentUrl = async () => {
+  const copyCurrentUrlToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
       setAuthFlowMessage("URLをコピーしました。Safari / Chrome に貼り付けて開いてください。");
@@ -418,7 +409,7 @@ export default function Home() {
       return;
     }
     if (/GitHub|Instagram|FBAN|FBAV|Twitter|GSA|LinkedInApp|Slack|Discord/i.test(navigator.userAgent)) {
-      void copyCurrentUrl();
+      void copyCurrentUrlToClipboard();
       return;
     }
     window.open(currentUrl, "_blank", "noopener,noreferrer");
@@ -508,7 +499,7 @@ export default function Home() {
             {authBusy ? "ログイン処理中..." : "Googleでログイン"}
           </button>
           {inAppBrowser && (
-            <button onClick={copyCurrentUrl} disabled={authBusy} className="mt-2 px-4 py-2 rounded-lg border border-gray-300 text-xs font-medium text-gray-700 disabled:opacity-60">
+            <button onClick={copyCurrentUrlToClipboard} disabled={authBusy} className="mt-2 px-4 py-2 rounded-lg border border-gray-300 text-xs font-medium text-gray-700 disabled:opacity-60">
               URLをコピー
             </button>
           )}
