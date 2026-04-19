@@ -22,7 +22,7 @@ export const FILTERS = [
   { id: "week", label: "1週間", days: 7 },
   { id: "2week", label: "2週間", days: 14 },
   { id: "month", label: "1ヶ月", days: 30 },
-  { id: "all", label: "すべて", days: Infinity },
+  { id: "all", label: "全体", days: Infinity },
 ] as const;
 
 export const REMINDERS = [

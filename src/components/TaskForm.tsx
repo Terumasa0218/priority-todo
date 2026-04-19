@@ -3,8 +3,8 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Task, Category, TimetableItem } from "@/lib/types";
 import { RECUR, REMINDERS, DAY } from "@/lib/constants";
 import { uid, calcOccurrenceCount } from "@/lib/utils";
+import { pickTaskTypeDefault } from "@/lib/scoring";
 import CategoryPicker from "./CategoryPicker";
-import { IconFlag } from "./Icons";
 
 interface TaskFormProps {
   task: Task | null;
@@ -16,6 +16,15 @@ interface TaskFormProps {
   setCats: React.Dispatch<React.SetStateAction<Category[]>>;
   timetable: TimetableItem[];
 }
+
+const ESTIMATE_CHIPS = [15, 30, 60, 90, 120, 180];
+
+const TASK_TYPES = [
+  { id: "single", label: "単発" },
+  { id: "mid", label: "中期" },
+  { id: "long", label: "長期" },
+  { id: "daily", label: "毎日" },
+] as const;
 
 export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate, cats, setCats, timetable }: TaskFormProps) {
   const isEdit = !!task;
@@ -34,13 +43,16 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const [title, setTitle] = useState(task?.title || "");
   const [deadline, setDeadline] = useState(task?.deadline ? new Date(task.deadline).toISOString().slice(0, 16) : getDefault());
   const [category, setCategory] = useState(task?.category || (cats[0]?.id || "default"));
-  const [priority, setPriority] = useState(task?.priority || false);
-  const [recurrence, setRecurrence] = useState(task?.recurrence || "none");
+  const [recurrence, setRecurrence] = useState<Task["recurrence"]>(task?.recurrence || "none");
   const [repeatEndDate, setRepeatEndDate] = useState(task?.repeatEndDate || "");
   const [reminder, setReminder] = useState(task?.reminder || "1day");
   const [memo, setMemo] = useState(task?.memo || "");
   const [url, setUrl] = useState(task?.url || "");
-  const [taskType, setTaskType] = useState<Task["taskType"]>(task?.taskType || undefined);
+  const [taskTypeOverride, setTaskTypeOverride] = useState<NonNullable<Task["taskType"]> | null>(task?.taskType || null);
+  const taskType: NonNullable<Task["taskType"]> = recurrence === "daily"
+    ? "daily"
+    : (taskTypeOverride || pickTaskTypeDefault(deadline));
+  const taskTypeTouched = taskTypeOverride !== null;
   const [estimatedMinutes, setEstimatedMinutes] = useState<number>(task?.estimatedMinutes || 0);
   const [importance, setImportance] = useState<1 | 2 | 3>(task?.importance || (task?.priority ? 3 : 2));
   const [classDayOfWeek, setClassDayOfWeek] = useState<number>(task?.classDayOfWeek ?? new Date(task?.deadline || deadline).getDay());
@@ -61,6 +73,17 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     setRepeatEndDate(d.toISOString().slice(0, 10));
   }, [recurrence, deadline, repeatEndDate]);
 
+  const chooseTaskType = (t: NonNullable<Task["taskType"]>) => {
+    setTaskTypeOverride(t);
+    if (t === "daily" && recurrence !== "daily") setRecurrence("daily");
+    if (t !== "daily" && recurrence === "daily") setRecurrence("none");
+  };
+
+  const chooseRecurrence = (r: Task["recurrence"]) => {
+    setRecurrence(r);
+    if (r === "daily") setTaskTypeOverride("daily");
+  };
+
   const selectedCat = cats.find((c) => c.id === category);
   const isTimetableCourse = !!selectedCat?.timetableId;
 
@@ -70,14 +93,6 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     const hit = timetable.find((t) => t.id === c.timetableId);
     if (hit) setClassDayOfWeek(hit.day);
   }, [category, cats, timetable, recurrence]);
-
-  useEffect(() => {
-    if (taskType) return;
-    const days = Math.ceil((new Date(deadline).getTime() - Date.now()) / 86400000);
-    if (days <= 1) setTaskType("single");
-    else if (days <= 6) setTaskType("mid");
-    else setTaskType("long");
-  }, [deadline, taskType]);
 
   const preview = useMemo(() => {
     if (!isTimetableCourse || (recurrence !== "weekly" && recurrence !== "biweekly")) return "";
@@ -97,13 +112,13 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       title,
       deadline: new Date(deadline).toISOString(),
       category,
-      priority,
-      taskType: taskType || "single",
+      priority: false,
+      taskType,
       estimatedMinutes: estimatedMinutes > 0 ? estimatedMinutes : undefined,
       loggedMinutes: task?.loggedMinutes || 0,
       importance,
       lastWorkedAt: task?.lastWorkedAt || null,
-      recurrence: recurrence as Task["recurrence"],
+      recurrence,
       repeatCount: task?.repeatCount || 15,
       repeatEndDate,
       reminder,
@@ -119,7 +134,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       offsetTime,
       biweeklyInterval,
     });
-  }, [recurrence, repeatEndDate, task, title, deadline, category, priority, reminder, memo, url, classDayOfWeek, offsetDays, offsetTime, biweeklyInterval]);
+  }, [recurrence, repeatEndDate, task, title, deadline, category, taskType, estimatedMinutes, importance, reminder, memo, url, classDayOfWeek, offsetDays, offsetTime, biweeklyInterval]);
 
   const handleSave = () => {
     if (!title.trim()) { setShowError(true); setFormError("タイトルを入力してください"); return; }
@@ -131,13 +146,13 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       title: title.trim(),
       deadline: new Date(deadline).toISOString(),
       category,
-      priority,
-      taskType: taskType || "single",
+      priority: importance === 3, // 後方互換のため同期
+      taskType,
       estimatedMinutes: estimatedMinutes > 0 ? estimatedMinutes : undefined,
       loggedMinutes: task?.loggedMinutes || 0,
       importance,
       lastWorkedAt: task?.lastWorkedAt || null,
-      recurrence: recurrence as Task["recurrence"],
+      recurrence,
       repeatCount: recurrence === "none" ? null : (task?.repeatCount || 15),
       repeatEndDate: recurrence === "none" ? null : repeatEndDate,
       reminder,
@@ -159,29 +174,100 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
       <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
         <button onClick={onClose} className="text-sm text-blue-500 font-medium">キャンセル</button>
-        <span className="text-sm font-semibold text-gray-900">{isEdit ? "予定の編集" : "新しい予定"}</span>
+        <span className="text-sm font-semibold text-gray-900">{isEdit ? "タスクの編集" : "新しいタスク"}</span>
         <button onClick={handleSave} className="text-sm font-semibold text-blue-500">保存</button>
       </div>
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pb-24">
         <div className="mt-4 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
-          <input type="text" value={title} onChange={(e) => { setTitle(e.target.value); if (e.target.value.trim()) setShowError(false); }} placeholder="タスク名を入力" className={`w-full px-4 py-3.5 text-sm ${showError && !title.trim() ? "border-red-300 bg-red-50/50" : "border-gray-100"}`} autoFocus />
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => { setTitle(e.target.value); if (e.target.value.trim()) setShowError(false); }}
+            placeholder="タスク名を入力"
+            className={`w-full px-4 py-3.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none border-b ${showError && !title.trim() ? "border-red-300 bg-red-50/50" : "border-gray-100"}`}
+            autoFocus
+          />
           <CategoryPicker cats={cats} setCats={setCats} selected={category} onSelect={setCategory} />
         </div>
+
         <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100 p-4">
-          <label className="block text-sm mb-2">締切</label>
+          <label className="block text-sm mb-2 text-gray-900">締切</label>
           <input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} className="w-full text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />
         </div>
+
         <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
           <div className="px-4 py-3 border-b border-gray-100">
-            <span className="text-sm mb-2 block">繰り返し</span>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-900">タスク種別</span>
+              {!taskTypeTouched && <span className="text-[10px] text-gray-400">自動提案中</span>}
+            </div>
+            <div className="mt-2 flex gap-1.5 flex-wrap">
+              {TASK_TYPES.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => chooseTaskType(t.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium ${taskType === t.id ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"}`}
+                >{t.label}</button>
+              ))}
+            </div>
+          </div>
+          <div className="px-4 py-3 border-b border-gray-100">
+            <span className="text-sm text-gray-900 block">見積時間</span>
+            <div className="mt-2 flex gap-1.5 flex-wrap">
+              {ESTIMATE_CHIPS.map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setEstimatedMinutes(m)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium ${estimatedMinutes === m ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"}`}
+                >{m}分</button>
+              ))}
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min={0}
+                  step={15}
+                  value={estimatedMinutes && !ESTIMATE_CHIPS.includes(estimatedMinutes) ? estimatedMinutes : ""}
+                  onChange={(e) => setEstimatedMinutes(Number(e.target.value || 0))}
+                  placeholder="その他"
+                  className="w-16 px-2 py-1.5 rounded-lg border border-gray-200 text-xs"
+                />
+                <span className="text-[11px] text-gray-400">分</span>
+              </div>
+            </div>
+          </div>
+          <div className="px-4 py-3 flex items-center justify-between">
+            <span className="text-sm text-gray-900">重要度</span>
+            <div className="flex items-center gap-1">
+              {[1, 2, 3].map((lv) => (
+                <button
+                  key={lv}
+                  onClick={() => setImportance(lv as 1 | 2 | 3)}
+                  aria-label={`重要度${lv}`}
+                  className="w-9 h-9 flex items-center justify-center"
+                >
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill={importance >= lv ? "#F5A524" : "none"} stroke={importance >= lv ? "#F5A524" : "#CBD5E1"} strokeWidth="2" strokeLinejoin="round">
+                    <polygon points="12,2 15,9 22,10 17,15 18,22 12,18.5 6,22 7,15 2,10 9,9" />
+                  </svg>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
+          <div className="px-4 py-3 border-b border-gray-100">
+            <span className="text-sm text-gray-900 mb-2 block">繰り返し</span>
             <div className="flex gap-1.5 flex-wrap">
-              {RECUR.map((r) => <button key={r.id} onClick={() => setRecurrence(r.id)} className={`px-2.5 py-1.5 rounded-lg text-xs ${recurrence === r.id ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"}`}>{r.label}</button>)}
+              {RECUR.map((r) => (
+                <button key={r.id} onClick={() => chooseRecurrence(r.id)} className={`px-2.5 py-1.5 rounded-lg text-xs ${recurrence === r.id ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"}`}>{r.label}</button>
+              ))}
+              <button onClick={() => chooseRecurrence("daily")} className={`px-2.5 py-1.5 rounded-lg text-xs ${recurrence === "daily" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"}`}>毎日</button>
             </div>
           </div>
           {isTimetableCourse && (recurrence === "weekly" || recurrence === "biweekly") && (
             <>
               <div className="px-4 py-3 border-b border-gray-100">
-                <div className="text-sm mb-1">授業曜日（時間割から自動）</div>
+                <div className="text-sm mb-1 text-gray-900">授業曜日（時間割から自動）</div>
                 <div className="text-xs text-gray-500">{DAY[classDayOfWeek]}曜日</div>
               </div>
               <div className="px-4 py-3 border-b border-gray-100 grid grid-cols-3 gap-2 items-end">
@@ -193,7 +279,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
           )}
           {recurrence === "biweekly" && (
             <div className="px-4 py-3 border-b border-gray-100">
-              <label className="text-sm">間隔</label>
+              <label className="text-sm text-gray-900">間隔</label>
               <div className="mt-1 flex items-center gap-2 text-sm">
                 <input type="number" min={2} max={8} value={biweeklyInterval} onChange={(e) => setBiweeklyInterval(Number(e.target.value || 2))} className="w-20 text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />週間おき
               </div>
@@ -201,30 +287,21 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
           )}
           {recurrence !== "none" && (
             <div className="px-4 py-3 border-b border-gray-100">
-              <label className="text-sm">終了日</label>
+              <label className="text-sm text-gray-900">終了日</label>
               <input type="date" value={repeatEndDate} onChange={(e) => setRepeatEndDate(e.target.value)} className="w-full mt-1 text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />
               <div className="text-xs text-gray-400 mt-1">全{occurrenceCount}回</div>
             </div>
           )}
-          <div className="px-4 py-3 flex items-center justify-between"><span className="text-sm">通知アラーム</span><select value={reminder} onChange={(e) => setReminder(e.target.value)} className="text-sm">{REMINDERS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}</select></div>
-        </div>
-        {formError && <div className="mt-3 mx-4 text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{formError}</div>}
-        <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <span className="text-sm">タスク種別</span>
-            <select value={taskType || "single"} onChange={(e) => setTaskType(e.target.value as Task["taskType"])} className="text-sm">
-              <option value="single">単発</option><option value="mid">中期</option><option value="long">長期</option><option value="daily">毎日</option>
+          <div className="px-4 py-3 flex items-center justify-between">
+            <span className="text-sm text-gray-900">通知アラーム</span>
+            <select value={reminder} onChange={(e) => setReminder(e.target.value)} className="text-sm">
+              {REMINDERS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
             </select>
           </div>
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <span className="text-sm">見積時間（分）</span>
-            <input type="number" min={0} step={15} value={estimatedMinutes} onChange={(e) => setEstimatedMinutes(Number(e.target.value || 0))} className="w-28 px-2 py-1.5 rounded border border-gray-200 text-sm" />
-          </div>
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <span className="text-sm">重要度</span>
-            <select value={importance} onChange={(e) => setImportance(Number(e.target.value) as 1 | 2 | 3)} className="text-sm"><option value={1}>低</option><option value={2}>中</option><option value={3}>高</option></select>
-          </div>
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100"><div className="flex items-center gap-2"><IconFlag filled={priority} /><span className="text-sm">最優先</span></div><button onClick={() => setPriority(!priority)} className={`w-12 h-7 rounded-full relative ${priority ? "bg-red-500" : "bg-gray-300"}`}><div className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white ${priority ? "translate-x-5" : ""}`} /></button></div>
+        </div>
+        {formError && <div className="mt-3 mx-4 text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{formError}</div>}
+
+        <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
           <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="URL" className="w-full px-4 py-3 text-sm border-b border-gray-100" />
           <textarea value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="メモ" rows={3} className="w-full px-4 py-3 text-sm resize-none" />
         </div>

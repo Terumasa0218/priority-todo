@@ -3,7 +3,7 @@ export interface Task {
   title: string;
   deadline: string; // ISO
   category: string; // カテゴリID
-  priority: boolean;
+  priority: boolean; // 旧フィールド。新規UIは廃止 (importance===3 に同期)
   taskType?: "single" | "mid" | "long" | "daily";
   estimatedMinutes?: number;
   loggedMinutes?: number;
