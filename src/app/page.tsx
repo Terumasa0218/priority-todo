@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG, WEEKDAY_LABELS } from "@/lib/constants";
+import { DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG, FILTERS, WEEKDAY_LABELS } from "@/lib/constants";
 import { expandRecurring, remaining, uid } from "@/lib/utils";
 import { Category, Group, Task, TimetableConfig, TimetableItem, TouchDragState } from "@/lib/types";
 import { IconBook, IconList, IconPalette, IconPlus, IconSettings } from "@/components/Icons";
@@ -17,7 +17,7 @@ import SurfaceCard from "@/components/ui/SurfaceCard";
 import EmptyState from "@/components/ui/EmptyState";
 import { auth, firebaseEnabled, googleProvider } from "@/lib/firebase";
 import { signInWithPopup, signOut, onAuthStateChanged, signInWithRedirect, User, browserLocalPersistence, getRedirectResult, setPersistence } from "firebase/auth";
-import { deleteCloudSnapshot, loadCloudSnapshot, migrateLocalToCloudOnce, saveCloudSnapshot } from "@/lib/cloudStorage";
+import { deleteCloudSnapshot, loadCloudSnapshot, migrateLocalToCloudOnce } from "@/lib/cloudStorage";
 import { createTimetableShareToken, loadTimetableShareToken } from "@/lib/timetableShare";
 import { AuthIssue, resolveAuthIssue } from "@/lib/authErrorCatalog";
 
@@ -39,8 +39,6 @@ const migratePeriod = (period: string | number): string => {
   return `オンデマンド${period}`;
 };
 
-const startOfToday = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
-
 const withTaskDefaults = (task: Task): Task => ({
   ...task,
   taskType: task.taskType || "single",
@@ -59,10 +57,6 @@ export default function Home() {
   const [timetableConfig, setTimetableConfig] = useState<TimetableConfig>(DEFAULT_TIMETABLE_CONFIG);
   const [view, setView] = useState<View>("list");
   const [activeFilter, setActiveFilter] = useState("week");
-  // Backward-compatible aliases for in-progress refactors in this file.
-  // This prevents accidental unresolved references when `filter` names remain.
-  const filter = activeFilter;
-  const setFilter = setActiveFilter;
   const [catFilter, setCatFilter] = useState("all");
   const [showCourseFilters, setShowCourseFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -247,7 +241,6 @@ export default function Home() {
   );
 
   const timetableCats = useMemo(() => cats.filter((c) => !!c.timetableId), [cats]);
-  const normalCats = useMemo(() => cats.filter((c) => !c.timetableId), [cats]);
 
   const allExpanded = useMemo(() => {
     const horizon = new Date();
@@ -602,8 +595,8 @@ export default function Home() {
           <>
             <div className="px-4 pt-3 pb-1">
               <SegmentedTabs
-                value={filter}
-                onChange={setFilter}
+                value={activeFilter}
+                onChange={setActiveFilter}
                 items={FILTERS.map((f) => ({ id: f.id, label: f.label }))}
               />
             </div>
@@ -628,12 +621,6 @@ export default function Home() {
               </div>
             ) : (
               renderSortedTasks()
-            )}
-
-            {listMode === "all" && (
-              <div ref={listRef}>
-                {sorted.map((t, i) => <TaskRow key={t.id} task={t} cats={cats} idx={i} touchDrag={touchDrag} onComplete={handleComplete} onEdit={(task) => { setEditTask(task); setPrefillDate(null); setShowForm(true); }} onDelete={handleDeleteTask} />)}
-              </div>
             )}
           </>
         )}
