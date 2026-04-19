@@ -1,4 +1,4 @@
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { Category, Group, Task, TimetableConfig, TimetableItem } from "./types";
 import { DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG } from "./constants";
 import { db } from "./firebase";
@@ -60,6 +60,12 @@ export const saveCloudSnapshot = async (uid: string, payload: AppSnapshot): Prom
     },
     { merge: true }
   );
+};
+
+export const deleteCloudSnapshot = async (uid: string): Promise<void> => {
+  if (!db) return;
+  await deleteDoc(doc(db, "users", uid, "private", "app_state"));
+  await deleteDoc(doc(db, "users", uid));
 };
 
 const localSnapshot = (): AppSnapshot =>

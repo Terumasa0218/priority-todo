@@ -73,7 +73,7 @@ export const loadTimetableConfig = (): TimetableConfig => {
       : [1, 2, 3, 4, 5].map((day) => (Number.isFinite(legacyOnDemandSlots) && day <= legacyOnDemandSlots ? 1 : 0));
 
     return {
-      maxPeriod: Number.isFinite(maxPeriod) && maxPeriod >= 2 ? maxPeriod : DEFAULT_TIMETABLE_CONFIG.maxPeriod,
+      maxPeriod: Number.isFinite(maxPeriod) ? Math.min(18, Math.max(2, Math.floor(maxPeriod / 2) * 2)) : DEFAULT_TIMETABLE_CONFIG.maxPeriod,
       showOnDemand: typeof raw?.showOnDemand === "boolean" ? raw.showOnDemand : DEFAULT_TIMETABLE_CONFIG.showOnDemand,
       onDemandSlotsByDay,
     };

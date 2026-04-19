@@ -9,7 +9,7 @@ export const createTimetableShareToken = (items: TimetableItem[]): string => {
   const payload: SharedTimetable = {
     version: 1,
     items: items
-      .filter((it) => it.day >= 1 && it.day <= 5 && it.period >= 1 && it.period <= 6)
+      .filter((it) => it.day >= 1 && it.day <= 5 && !String(it.period).startsWith("オンデマンド"))
       .map((it) => ({ name: it.name, day: it.day, period: String(it.period), teacher: it.teacher || undefined, room: it.room || undefined, color: it.color })),
   };
   return btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
