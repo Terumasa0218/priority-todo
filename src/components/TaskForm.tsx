@@ -40,6 +40,9 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const [reminder, setReminder] = useState(task?.reminder || "1day");
   const [memo, setMemo] = useState(task?.memo || "");
   const [url, setUrl] = useState(task?.url || "");
+  const [taskType, setTaskType] = useState<Task["taskType"]>(task?.taskType || undefined);
+  const [estimatedMinutes, setEstimatedMinutes] = useState<number>(task?.estimatedMinutes || 0);
+  const [importance, setImportance] = useState<1 | 2 | 3>(task?.importance || (task?.priority ? 3 : 2));
   const [classDayOfWeek, setClassDayOfWeek] = useState<number>(task?.classDayOfWeek ?? new Date(task?.deadline || deadline).getDay());
   const [offsetDays, setOffsetDays] = useState<number>(task?.offsetDays ?? 0);
   const [offsetTime, setOffsetTime] = useState(task?.offsetTime || "23:59");
@@ -68,6 +71,14 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     if (hit) setClassDayOfWeek(hit.day);
   }, [category, cats, timetable, recurrence]);
 
+  useEffect(() => {
+    if (taskType) return;
+    const days = Math.ceil((new Date(deadline).getTime() - Date.now()) / 86400000);
+    if (days <= 1) setTaskType("single");
+    else if (days <= 6) setTaskType("mid");
+    else setTaskType("long");
+  }, [deadline, taskType]);
+
   const preview = useMemo(() => {
     if (!isTimetableCourse || (recurrence !== "weekly" && recurrence !== "biweekly")) return "";
     const base = new Date(deadline);
@@ -87,6 +98,11 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       deadline: new Date(deadline).toISOString(),
       category,
       priority,
+      taskType: taskType || "single",
+      estimatedMinutes: estimatedMinutes > 0 ? estimatedMinutes : undefined,
+      loggedMinutes: task?.loggedMinutes || 0,
+      importance,
+      lastWorkedAt: task?.lastWorkedAt || null,
       recurrence: recurrence as Task["recurrence"],
       repeatCount: task?.repeatCount || 15,
       repeatEndDate,
@@ -116,6 +132,11 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       deadline: new Date(deadline).toISOString(),
       category,
       priority,
+      taskType: taskType || "single",
+      estimatedMinutes: estimatedMinutes > 0 ? estimatedMinutes : undefined,
+      loggedMinutes: task?.loggedMinutes || 0,
+      importance,
+      lastWorkedAt: task?.lastWorkedAt || null,
       recurrence: recurrence as Task["recurrence"],
       repeatCount: recurrence === "none" ? null : (task?.repeatCount || 15),
       repeatEndDate: recurrence === "none" ? null : repeatEndDate,
@@ -189,6 +210,20 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         </div>
         {formError && <div className="mt-3 mx-4 text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{formError}</div>}
         <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <span className="text-sm">タスク種別</span>
+            <select value={taskType || "single"} onChange={(e) => setTaskType(e.target.value as Task["taskType"])} className="text-sm">
+              <option value="single">単発</option><option value="mid">中期</option><option value="long">長期</option><option value="daily">毎日</option>
+            </select>
+          </div>
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <span className="text-sm">見積時間（分）</span>
+            <input type="number" min={0} step={15} value={estimatedMinutes} onChange={(e) => setEstimatedMinutes(Number(e.target.value || 0))} className="w-28 px-2 py-1.5 rounded border border-gray-200 text-sm" />
+          </div>
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <span className="text-sm">重要度</span>
+            <select value={importance} onChange={(e) => setImportance(Number(e.target.value) as 1 | 2 | 3)} className="text-sm"><option value={1}>低</option><option value={2}>中</option><option value={3}>高</option></select>
+          </div>
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100"><div className="flex items-center gap-2"><IconFlag filled={priority} /><span className="text-sm">最優先</span></div><button onClick={() => setPriority(!priority)} className={`w-12 h-7 rounded-full relative ${priority ? "bg-red-500" : "bg-gray-300"}`}><div className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white ${priority ? "translate-x-5" : ""}`} /></button></div>
           <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="URL" className="w-full px-4 py-3 text-sm border-b border-gray-100" />
           <textarea value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="メモ" rows={3} className="w-full px-4 py-3 text-sm resize-none" />
