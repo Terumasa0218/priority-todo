@@ -47,7 +47,8 @@ const buildPeriods = (maxPeriod: number) => {
   const safeMax = Math.max(2, maxPeriod % 2 === 0 ? maxPeriod : maxPeriod + 1);
   return Array.from({ length: safeMax / 2 }, (_, idx) => {
     const start = idx * 2 + 1;
-    return { value: start, label: `${start}・${start + 1}限` };
+    const label = `${start}・${start + 1}限`;
+    return { value: label, label };
   });
 };
 
