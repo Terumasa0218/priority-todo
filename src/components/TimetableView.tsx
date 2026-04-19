@@ -30,12 +30,12 @@ interface EditingState {
 const ON_DEMAND_PERIOD = 999;
 const isOnDemandPeriod = (period: number) => period >= ON_DEMAND_PERIOD;
 const getOnDemandSlotIndex = (period: number) => Math.max(0, period - ON_DEMAND_PERIOD);
-const normalizePeriod = (period: number) => Math.max(1, Math.floor(period));
+const normalizePeriod = (period: number) => (period % 2 === 0 ? period - 1 : period);
 const buildPeriods = (maxPeriod: number) => {
-  const safeMax = Math.max(6, Math.floor(maxPeriod));
-  return Array.from({ length: Math.min(6, safeMax) }, (_, idx) => {
-    const period = idx + 1;
-    return { value: period, label: `${period}限` };
+  const safeMax = Math.max(2, maxPeriod % 2 === 0 ? maxPeriod : maxPeriod + 1);
+  return Array.from({ length: safeMax / 2 }, (_, idx) => {
+    const start = idx * 2 + 1;
+    return { value: start, label: `${start}・${start + 1}限` };
   });
 };
 
@@ -58,7 +58,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
       if (isOnDemandPeriod(it.period)) return;
       if (it.day < 1 || it.day > 5) return;
       const normalized = normalizePeriod(it.period);
-      const maxStart = 6;
+      const maxStart = Math.max(1, (Math.floor(config.maxPeriod / 2) * 2) - 1);
       if (normalized < 1 || normalized > maxStart) return;
       map.set(`${it.day}-${normalized}`, { ...it, period: normalized });
     });
@@ -153,7 +153,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
   };
 
   const applyCustomize = (maxPeriodInput: number, showOnDemandInput: boolean, onDemandSlotsInput: number[]) => {
-    const evenMax = 6;
+    const evenMax = Math.max(2, Math.min(20, maxPeriodInput % 2 === 0 ? maxPeriodInput : maxPeriodInput + 1));
     const nextOnDemandSlotsByDay = DAYS.map((_, idx) => {
       const value = Number(onDemandSlotsInput[idx] ?? 0);
       return Number.isFinite(value) ? Math.max(0, Math.min(20, Math.floor(value))) : 0;
@@ -172,7 +172,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
     try {
       const link = await onShare();
       if (!link) {
-        setShareMessage("共有リンクを生成リンクを作成できませんでした");
+        setShareMessage("共有リンクを作成できませんでした");
         return;
       }
       if (navigator.clipboard?.writeText) {
