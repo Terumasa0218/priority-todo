@@ -41,18 +41,20 @@ const buildPeriods = (maxPeriod: number) => {
   });
 };
 
-export default function TimetableView({ items, setItems, setCats, config, setConfig, onShare, tasks, cats }: TimetableViewProps) {
+// Backward-compatible alias for historical references.
+const buildPeriodGroups = (maxPeriod: number) => buildPeriods(maxPeriod);
+
+export default function TimetableView({ items, setItems, setCats, config, setConfig, onShare }: TimetableViewProps) {
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [showError, setShowError] = useState(false);
   const [showCustomize, setShowCustomize] = useState(false);
   const [detailCourseId, setDetailCourseId] = useState<string | null>(null);
 
   const periodOptions = useMemo(() => buildPeriodGroups(config.maxPeriod), [config.maxPeriod]);
-
-  const normalizedItems = useMemo(
-    () => items.map((it) => ({ ...it, period: normalizePeriod(it.period), memo: it.memo || "", absenceLimit: it.absenceLimit ?? 5, attendanceAbsent: it.attendanceAbsent ?? 0, attendanceLate: it.attendanceLate ?? 0, attendancePresent: it.attendancePresent ?? 0 })),
-    [items]
-  );
+  const onDemandSlotsByDay = DAYS.map((_, idx) => {
+    const value = Number(config.onDemandSlotsByDay?.[idx] ?? 0);
+    return Number.isFinite(value) ? Math.max(0, Math.min(20, Math.floor(value))) : 0;
+  });
 
   const cellMap = useMemo(() => {
     const map = new Map<string, TimetableItem>();
