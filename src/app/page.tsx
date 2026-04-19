@@ -58,8 +58,7 @@ export default function Home() {
   const [timetable, setTimetable] = useState<TimetableItem[]>([]);
   const [timetableConfig, setTimetableConfig] = useState<TimetableConfig>(DEFAULT_TIMETABLE_CONFIG);
   const [view, setView] = useState<View>("list");
-  const [listMode, setListMode] = useState<"today" | "near" | "all">("today");
-  const [nearWindow, setNearWindow] = useState<7 | 30>(7);
+  const [activeFilter, setActiveFilter] = useState("week");
   const [catFilter, setCatFilter] = useState("all");
   const [showCourseFilters, setShowCourseFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -280,8 +279,21 @@ export default function Home() {
 
   const sorted = useMemo(() => {
     const now = Date.now();
+    const fDays = FILTERS.find((f) => f.id === activeFilter)?.days ?? 7;
     let list = [...allExpanded];
-    if (catFilter !== "all") list = list.filter((t) => t.category === catFilter);
+    if (fDays !== Infinity) {
+      const end = activeFilter === "today" ? new Date(new Date().setHours(23, 59, 59, 999)).getTime() : now + fDays * 864e5;
+      list = list.filter((t) => new Date(t.deadline).getTime() <= end);
+    }
+    allExpanded.filter((t) => new Date(t.deadline).getTime() < now).forEach((t) => {
+      if (!list.find((l) => l.id === t.id)) list.push(t);
+    });
+    if (catFilter === "timetable_group") {
+      const timetableIds = new Set(timetableCats.map((c) => c.id));
+      list = list.filter((t) => timetableIds.has(t.category));
+    } else if (catFilter !== "all") {
+      list = list.filter((t) => t.category === catFilter);
+    }
 
     const overdue = list.filter((t) => new Date(t.deadline).getTime() < now).sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
     const notOverdue = list.filter((t) => new Date(t.deadline).getTime() >= now);
@@ -296,78 +308,7 @@ export default function Home() {
       return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
     });
     return [...overdue, ...pri, ...norm];
-  }, [allExpanded, catFilter]);
-
-  const todayView = useMemo(() => {
-    const start = startOfToday();
-    const end = new Date(start); end.setDate(end.getDate() + 1);
-    const dueToday = sorted.filter((t) => {
-      const due = new Date(t.deadline);
-      return due >= start && due < end;
-    }).sort((a, b) => {
-      const aw = (a.taskType === "long" ? 50 : a.taskType === "mid" ? 30 : a.taskType === "daily" ? 20 : 10);
-      const bw = (b.taskType === "long" ? 50 : b.taskType === "mid" ? 30 : b.taskType === "daily" ? 20 : 10);
-      if (aw !== bw) return bw - aw;
-      return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
-    });
-
-    const candidates = sorted.filter((t) => {
-      if (dueToday.find((d) => d.id === t.id)) return false;
-      const dueDays = Math.ceil((new Date(t.deadline).getTime() - Date.now()) / 86400000);
-      const unstartedDays = t.lastWorkedAt ? Math.floor((Date.now() - new Date(t.lastWorkedAt).getTime()) / 86400000) : 99;
-      return t.taskType === "daily" || dueDays <= 3 || unstartedDays >= 2 || (t.importance ?? 2) === 3;
-    });
-
-    const scored = candidates.map((t) => {
-      const base = t.taskType === "long" ? 50 : t.taskType === "mid" ? 30 : t.taskType === "daily" ? 20 : 10;
-      const est = t.estimatedMinutes ?? (t.taskType === "long" ? 300 : t.taskType === "mid" ? 120 : t.taskType === "daily" ? 20 : 30);
-      const logged = t.loggedMinutes ?? 0;
-      const progress = Math.max(0, Math.min(1, logged / Math.max(est, 1)));
-      const effectiveLoad = Math.ceil(base * (1 - progress));
-      const dueDays = Math.max(1, Math.ceil((new Date(t.deadline).getTime() - Date.now()) / 86400000));
-      const remainingMinutes = Math.max(est - logged, 0);
-      const todayRequiredMinutes = Math.ceil(remainingMinutes / dueDays);
-      const unstartedDays = t.lastWorkedAt ? Math.floor((Date.now() - new Date(t.lastWorkedAt).getTime()) / 86400000) : 99;
-      let urgency = dueDays <= 0 ? 130 : dueDays === 1 ? 100 : dueDays === 2 ? 80 : dueDays <= 3 ? 60 : dueDays <= 7 ? 35 : 10;
-      if (todayRequiredMinutes > 0 && !t.lastWorkedAt) urgency += 10;
-      if ((t.importance ?? 2) === 3) urgency += 10;
-      const priorityScore = urgency + ((t.importance ?? 2) === 3 ? 10 : (t.importance ?? 2) === 2 ? 5 : 0) + Math.min(unstartedDays * 3, 15) + (todayRequiredMinutes > 0 ? 15 : 0);
-      let weightedLoad = effectiveLoad;
-      if (dueDays <= 3) weightedLoad += 10;
-      if (unstartedDays >= 2) weightedLoad += 10;
-      if ((t.importance ?? 2) === 3) weightedLoad += 10;
-      if (progress >= 0.8) weightedLoad -= 20;
-      else if (progress >= 0.5) weightedLoad -= 10;
-      weightedLoad = Math.max(5, Math.min(100, weightedLoad));
-      const reasons = [`締切${dueDays <= 0 ? "超過" : `${dueDays}日`}`, `今日${todayRequiredMinutes}分目安`, `進捗${Math.round(progress * 100)}%`];
-      return { t, priorityScore, weightedLoad, reasons };
-    }).sort((a,b)=>b.priorityScore-a.priorityScore);
-
-    const recommended: typeof scored = [];
-    const alternatives: typeof scored = [];
-    let budget = 100;
-    let overflowUsed = false;
-    scored.forEach((entry) => {
-      if (entry.weightedLoad <= budget) {
-        recommended.push(entry); budget -= entry.weightedLoad; return;
-      }
-      if (!overflowUsed && entry.priorityScore >= 80) {
-        recommended.push(entry); overflowUsed = true; return;
-      }
-      if (entry.weightedLoad <= 20) alternatives.push(entry);
-    });
-
-    return { dueToday, recommended, alternatives, budgetLeft: budget };
-  }, [sorted]);
-
-  const nearTasks = useMemo(() => {
-    const limit = Date.now() + nearWindow * 86400000;
-    return sorted.filter((t) => new Date(t.deadline).getTime() <= limit).sort((a,b)=>new Date(a.deadline).getTime()-new Date(b.deadline).getTime());
-  }, [sorted, nearWindow]);
-
-  const logWork = (task: Task, minutes: number) => {
-    setTasks((prev) => prev.map((t) => t.id === task.id ? { ...t, loggedMinutes: Math.max(0, (t.loggedMinutes || 0) + minutes), lastWorkedAt: new Date().toISOString() } : t));
-  };
+  }, [allExpanded, activeFilter, catFilter, timetableCats]);
 
   const sortedRef = useRef<Task[]>(sorted);
   useEffect(() => {
@@ -657,8 +598,8 @@ export default function Home() {
           <>
             <div className="px-4 pt-3 pb-1">
               <SegmentedTabs
-                value={filter}
-                onChange={setFilter}
+                value={activeFilter}
+                onChange={setActiveFilter}
                 items={FILTERS.map((f) => ({ id: f.id, label: f.label }))}
               />
             </div>
@@ -683,12 +624,6 @@ export default function Home() {
               </div>
             ) : (
               renderSortedTasks()
-            )}
-
-            {listMode === "near" && (
-              <div ref={listRef}>
-                {nearTasks.map((t, i) => <TaskRow key={t.id} task={t} cats={cats} idx={i} touchDrag={touchDrag} onComplete={handleComplete} onEdit={(task) => { setEditTask(task); setPrefillDate(null); setShowForm(true); }} onDelete={handleDeleteTask} />)}
-              </div>
             )}
 
             {listMode === "all" && (
