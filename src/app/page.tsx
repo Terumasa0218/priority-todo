@@ -17,7 +17,7 @@ import SurfaceCard from "@/components/ui/SurfaceCard";
 import EmptyState from "@/components/ui/EmptyState";
 import { auth, firebaseEnabled, googleProvider } from "@/lib/firebase";
 import { signInWithPopup, signOut, onAuthStateChanged, signInWithRedirect, User, browserLocalPersistence, getRedirectResult, setPersistence } from "firebase/auth";
-import { deleteCloudSnapshot, loadCloudSnapshot, migrateLocalToCloudOnce } from "@/lib/cloudStorage";
+import { deleteCloudSnapshot, loadCloudSnapshot, migrateLocalToCloudOnce, saveCloudSnapshot } from "@/lib/cloudStorage";
 import { createTimetableShareToken, loadTimetableShareToken } from "@/lib/timetableShare";
 import { AuthIssue, resolveAuthIssue } from "@/lib/authErrorCatalog";
 
@@ -195,6 +195,16 @@ export default function Home() {
       mounted = false;
     };
   }, [authReady, user]);
+
+  useEffect(() => {
+    if (!ready || !user) return;
+    const timer = setTimeout(() => {
+      saveCloudSnapshot(user.uid, { tasks, cats, groups, timetable, timetableConfig }).catch((err) => {
+        console.error("Cloud sync failed:", err);
+      });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [tasks, cats, groups, timetable, timetableConfig, ready, user]);
 
   useEffect(() => {
     if (!ready || !user) return;

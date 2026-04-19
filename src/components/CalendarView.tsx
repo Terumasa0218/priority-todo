@@ -63,12 +63,12 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
     <div>
       <SectionHeader
         title={`${y}年 ${m + 1}月`}
-        subtitle="月表示は軽く、詳細は下で確認"
         className="mb-2"
         action={
           <div className="flex items-center gap-1">
-            <button onClick={() => setMonth(new Date(y, m - 1))} className="min-h-11 min-w-11 p-2 hover:bg-slate-100 rounded-xl"><IconChevL size={16} /></button>
-            <button onClick={() => setMonth(new Date(y, m + 1))} className="min-h-11 min-w-11 p-2 hover:bg-slate-100 rounded-xl"><IconChevR size={16} /></button>
+            <button onClick={() => setMonth(new Date(y, m - 1))} className="min-h-11 min-w-11 p-2 hover:bg-slate-100 rounded-xl" aria-label="前の月"><IconChevL size={16} /></button>
+            <button onClick={() => setMonth(new Date())} className="min-h-11 px-3 text-[11px] font-medium text-slate-500 hover:bg-slate-100 rounded-xl" aria-label="今日">今日</button>
+            <button onClick={() => setMonth(new Date(y, m + 1))} className="min-h-11 min-w-11 p-2 hover:bg-slate-100 rounded-xl" aria-label="次の月"><IconChevR size={16} /></button>
           </div>
         }
       />
@@ -88,11 +88,13 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
               key={idx}
               onClick={() => day && setSelectedDate(new Date(y, m, day))}
               className={`min-h-[92px] p-1.5 transition-colors ${day ? "cursor-pointer" : ""}`}
-              style={sel ? { boxShadow: "inset 0 0 0 2px #CBD5E1", borderRadius: "8px", backgroundColor: "#EFF6FF" } : tod ? { backgroundColor: "#F8FAFC" } : { backgroundColor: "#fff" }}
+              style={sel ? { boxShadow: "inset 0 0 0 2px #111827", backgroundColor: "#fff" } : tod ? { backgroundColor: "#EFF6FF" } : { backgroundColor: "#fff" }}
             >
               {day && (
                 <>
-                  <div className={`text-[11px] leading-none mb-1.5 text-center ${sel ? "font-bold text-gray-900" : tod ? "font-bold text-blue-600" : "text-gray-700"}`}>{day}</div>
+                  <div className="text-[11px] leading-none mb-1.5 flex justify-center">
+                    <span className={`inline-flex items-center justify-center ${tod ? "w-5 h-5 rounded-full bg-blue-500 text-white font-bold" : sel ? "font-bold text-gray-900" : "text-gray-700"}`}>{day}</span>
+                  </div>
                   <div className="space-y-0.5">
                     {dt.slice(0, 2).map((t) => {
                       const tc = cats.find((c) => c.id === t.category);
