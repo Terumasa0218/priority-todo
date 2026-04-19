@@ -8,16 +8,16 @@ interface ParticleBurstProps {
 
 export default function ParticleBurst({ x, y }: ParticleBurstProps) {
   const particles = useMemo(() => {
-    const count = 8;
+    const count = 10;
     return Array.from({ length: count }, (_, i) => {
       const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
-      const dist = 30 + Math.random() * 40;
-      const size = 4 + Math.random() * 5;
+      const dist = 22 + Math.random() * 30;
+      const size = 3 + Math.random() * 4;
       const tx = Math.cos(angle) * dist;
       const ty = Math.sin(angle) * dist;
-      const colors = ["#111827", "#6B7280", "#9CA3AF", "#374151", "#D1D5DB"];
+      const colors = ["#93C5FD", "#A7F3D0", "#FBCFE8", "#DDD6FE", "#FDE68A", "#C7D2FE"];
       const color = colors[Math.floor(Math.random() * colors.length)];
-      const dur = 0.3 + Math.random() * 0.2;
+      const dur = 0.35 + Math.random() * 0.22;
       return { tx, ty, size, color, dur };
     });
   }, []);

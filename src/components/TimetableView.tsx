@@ -4,6 +4,9 @@ import { IconPencil } from "@/components/Icons";
 import { Category, Task, TimetableConfig, TimetableItem } from "@/lib/types";
 import { PALETTE } from "@/lib/constants";
 import { uid } from "@/lib/utils";
+import SurfaceCard from "./ui/SurfaceCard";
+import SectionHeader from "./ui/SectionHeader";
+import EmptyState from "./ui/EmptyState";
 
 const DAYS = [
   { value: 1, label: "月" },
@@ -29,28 +32,47 @@ interface EditingState {
   item: TimetableItem;
 }
 
-const ON_DEMAND_PERIOD = 999;
-const isOnDemandPeriod = (period: number) => period >= ON_DEMAND_PERIOD;
-const getOnDemandSlotIndex = (period: number) => Math.max(0, period - ON_DEMAND_PERIOD);
-const normalizePeriod = (period: number) => (period % 2 === 0 ? period - 1 : period);
+const ON_DEMAND_PREFIX = "オンデマンド";
+const isOnDemandPeriod = (period: string) => String(period).startsWith(ON_DEMAND_PREFIX);
+const getOnDemandSlotIndex = (period: string) => {
+  const m = String(period).match(/^オンデマンド(\d+)$/);
+  return m ? Math.max(0, Number(m[1]) - 1) : 0;
+};
+const normalizePeriod = (period: string) => {
+  if (isOnDemandPeriod(period)) return period;
+  const m = String(period).match(/^(\d+)(?:・(\d+))?限$/);
+  if (!m) return period;
+  const start = Number(m[1]);
+  const normalizedStart = start % 2 === 0 ? start - 1 : start;
+  return `${normalizedStart}・${normalizedStart + 1}限`;
+};
 const buildPeriods = (maxPeriod: number) => {
   const safeMax = Math.max(2, maxPeriod % 2 === 0 ? maxPeriod : maxPeriod + 1);
   return Array.from({ length: safeMax / 2 }, (_, idx) => {
     const start = idx * 2 + 1;
-    return { value: start, label: `${start}・${start + 1}限` };
+    const label = `${start}・${start + 1}限`;
+    return { value: label, label };
   });
 };
 
 // Backward-compatible alias for historical references.
 const buildPeriodGroups = (maxPeriod: number) => buildPeriods(maxPeriod);
 
-export default function TimetableView({ items, setItems, setCats, config, setConfig, onShare }: TimetableViewProps) {
+export default function TimetableView({ items, setItems, setCats, config, setConfig, onShare, tasks, cats }: TimetableViewProps) {
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [showError, setShowError] = useState(false);
   const [showCustomize, setShowCustomize] = useState(false);
   const [detailCourseId, setDetailCourseId] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
 
   const periodOptions = useMemo(() => buildPeriodGroups(config.maxPeriod), [config.maxPeriod]);
+  // NOTE: keep this memo defined before all derived maps/lists to avoid regressions
+  // where `normalizedItems` is referenced before declaration/removal.
+  const normalizedItems = useMemo<TimetableItem[]>(
+    () => items.map((it) => ({ ...it, period: normalizePeriod(String(it.period)) })),
+    [items]
+  );
   const onDemandSlotsByDay = DAYS.map((_, idx) => {
     const value = Number(config.onDemandSlotsByDay?.[idx] ?? 0);
     return Number.isFinite(value) ? Math.max(0, Math.min(20, Math.floor(value))) : 0;
@@ -62,16 +84,15 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
       if (isOnDemandPeriod(it.period)) return;
       if (it.day < 1 || it.day > 5) return;
       const normalized = normalizePeriod(it.period);
-      const maxStart = Math.max(1, (Math.floor(config.maxPeriod / 2) * 2) - 1);
-      if (normalized < 1 || normalized > maxStart) return;
+      if (!periodOptions.some((option) => option.value === normalized)) return;
       map.set(`${it.day}-${normalized}`, { ...it, period: normalized });
     });
     return map;
-  }, [items, config.maxPeriod]);
+  }, [normalizedItems, periodOptions]);
 
   const onDemandMap = useMemo(() => {
     const map = new Map<number, TimetableItem[]>();
-    items.filter((it) => isOnDemandPeriod(it.period)).forEach((it) => {
+    normalizedItems.filter((it) => isOnDemandPeriod(it.period)).forEach((it) => {
       if (it.day < 1 || it.day > 5) return;
       const list = map.get(it.day) ?? [];
       list.push(it);
@@ -85,6 +106,10 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
 
   const onDemandItems = useMemo(() => normalizedItems.filter((it) => isOnDemandPeriod(it.period)), [normalizedItems]);
   const detailCourse = normalizedItems.find((it) => it.id === detailCourseId) || null;
+  const updateDetail = (patch: Partial<TimetableItem>) => {
+    if (!detailCourse) return;
+    setItems((prev) => prev.map((it) => (it.id === detailCourse.id ? { ...it, ...patch } : it)));
+  };
 
   const upsertCategoryByTimetable = (item: TimetableItem) => {
     setCats((prev) => {
@@ -120,7 +145,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
     setEditing(null);
   };
 
-  const applyCustomize = (maxPeriodInput: number, showOnDemandInput: boolean, onDemandSlotsInput: number[]) => {
+  const applyCustomize = (maxPeriodInput: number, showOnDemandInput: boolean, onDemandSlotsInput: number[] = onDemandSlotsByDay) => {
     const evenMax = Math.max(2, Math.min(20, maxPeriodInput % 2 === 0 ? maxPeriodInput : maxPeriodInput + 1));
     const nextOnDemandSlotsByDay = DAYS.map((_, idx) => {
       const value = Number(onDemandSlotsInput[idx] ?? 0);
@@ -129,7 +154,8 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
     setConfig({ maxPeriod: evenMax, showOnDemand: showOnDemandInput, onDemandSlotsByDay: nextOnDemandSlotsByDay });
     setItems((prev) => prev.filter((it) => {
       if (isOnDemandPeriod(it.period)) return it.day >= 1 && it.day <= 5;
-      return it.day >= 1 && it.day <= 5 && normalizePeriod(it.period) <= evenMax - 1;
+      const normalized = normalizePeriod(it.period);
+      return it.day >= 1 && it.day <= 5 && periodOptions.slice(0, evenMax / 2).some((option) => option.value === normalized);
     }));
     setShowCustomize(false);
   };
@@ -160,41 +186,61 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
   const linkedTasks = detailCourse
     ? (() => { const cat = cats.find((c) => c.timetableId === detailCourse.id); return tasks.filter((t) => !t.completed && !!cat && t.category === cat.id).length; })()
     : 0;
+  const todayDay = ((new Date().getDay() + 6) % 7) + 1;
+  const todayClasses = normalizedItems.filter((it) => it.day === todayDay && !isOnDemandPeriod(it.period));
+  const todayPendingTasks = tasks.filter((t) => !t.completed && new Date(t.deadline).toDateString() === new Date().toDateString()).length;
+  const weekDone = tasks.filter((t) => t.completed && t.completedAt && (Date.now() - new Date(t.completedAt).getTime()) < 7 * 864e5).length;
 
   return (
     <div className="px-2 py-4">
-      <div className="flex items-center justify-end gap-2 mb-2">
-        <button onClick={() => onShare()} disabled={items.length === 0} className="px-3 py-2 min-h-11 text-xs rounded-md hover:bg-gray-100">共有</button>
-        <button onClick={() => setShowCustomize(true)} className="px-3 py-2 min-h-11 text-xs rounded-md hover:bg-gray-100"><IconPencil size={13} />カスタム</button>
+      <SectionHeader title="時間割" subtitle="授業を起点にタスク・出欠を管理" className="px-1 mb-2" />
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        {[
+          { label: "今日の授業", value: `${todayClasses.length}コマ` },
+          { label: "次の授業", value: todayClasses[0]?.name || "なし" },
+          { label: "今日締切", value: `${todayPendingTasks}件` },
+          { label: "今週の達成", value: `${weekDone}件` },
+        ].map((stat) => (
+          <SurfaceCard key={stat.label} className="px-3 py-2.5">
+            <div className="text-[11px] text-slate-500">{stat.label}</div>
+            <div className="text-sm font-semibold text-slate-900 mt-0.5 truncate">{stat.value}</div>
+          </SurfaceCard>
+        ))}
       </div>
 
-      <div className="border border-gray-300 rounded-xl overflow-hidden bg-white">
+      <div className="flex items-center justify-end gap-2 mb-2">
+        <button onClick={handleShare} disabled={items.length === 0 || sharing} className="px-3 py-2 min-h-11 text-xs rounded-md hover:bg-gray-100">{sharing ? "共有中..." : "共有"}</button>
+        <button onClick={() => setShowCustomize(true)} className="px-3 py-2 min-h-11 text-xs rounded-md hover:bg-gray-100"><IconPencil size={13} />カスタム</button>
+      </div>
+      {shareMessage && <p className="mb-2 text-xs text-gray-500 text-right">{shareMessage}</p>}
+
+      <SurfaceCard className="overflow-hidden !rounded-[22px]">
         <div className="grid" style={{ gridTemplateColumns: "62px repeat(5, minmax(0, 1fr))" }}>
           <div className="bg-gray-50 border-b border-r border-gray-300 h-11" />
           {DAYS.map((d) => <div key={d.value} className="h-11 border-b border-gray-300 text-center text-sm font-semibold text-gray-600 flex items-center justify-center bg-gray-50">{d.label}</div>)}
           {periodOptions.map((label) => (
-            <React.Fragment key={label}>
-              <div className="h-28 border-r border-b border-gray-300 flex items-center justify-center text-xs text-gray-600 bg-gray-50">{label}</div>
+            <React.Fragment key={label.value}>
+              <div className="h-28 border-r border-b border-gray-300 flex items-center justify-center text-xs text-gray-600 bg-gray-50">{label.label}</div>
               {DAYS.map((d) => {
-                const key = `${d.value}-${label}`;
+                const key = `${d.value}-${label.value}`;
                 const item = cellMap.get(key);
                 return item ? (
                   <button key={key} onClick={() => setDetailCourseId(item.id)} className="h-28 border-b border-gray-300 p-2 text-left" style={{ backgroundColor: `${item.color}20`, borderLeft: `4px solid ${item.color}` }}>
                     <div className="text-xs font-semibold line-clamp-3">{item.name}</div>
                     <div className="text-[11px] text-gray-600 mt-1 truncate">{item.room || "教室未設定"}</div>
                   </button>
-                ) : <button key={key} onClick={() => openCreate(d.value, label)} className="h-28 border-b border-gray-300 text-gray-300 hover:bg-gray-50">＋</button>;
+                ) : <button key={key} onClick={() => openCreate(d.value, label.value)} className="h-28 border-b border-gray-300 text-gray-300 hover:bg-gray-50">＋</button>;
               })}
             </React.Fragment>
           ))}
         </div>
-      </div>
+      </SurfaceCard>
 
       {config.showOnDemand && (
         <div className="mt-4">
-          <div className="text-sm font-semibold text-gray-700 mb-2">オンデマンド授業</div>
+          <SectionHeader title="オンデマンド授業" subtitle="配信授業をまとめて管理" className="mb-2 px-1" />
           <div className="flex gap-2 overflow-x-auto pb-2">
-            {onDemandItems.map((item) => (
+            {onDemandItems.length === 0 ? <EmptyState title="オンデマンド授業はまだありません" description="＋ボタンから追加できます" className="min-w-full" /> : onDemandItems.map((item) => (
               <button key={item.id} onClick={() => setDetailCourseId(item.id)} className="min-w-44 h-24 rounded-lg border p-3 text-left" style={{ backgroundColor: `${item.color}14`, borderColor: `${item.color}88` }}>
                 <span className="block font-medium text-sm truncate">{item.name}</span>
                 <span className="block text-xs text-gray-500 mt-1 truncate">{DAYS.find((d) => d.value === item.day)?.label}曜配信</span>
@@ -227,7 +273,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
           <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200"><button onClick={() => setEditing(null)} className="text-sm text-blue-500">キャンセル</button><span className="text-sm font-semibold">{editing.mode === "edit" ? "授業の編集" : "授業の追加"}</span><button onClick={handleSave} className="text-sm text-blue-500 font-semibold">保存</button></div>
           <div className="flex-1 overflow-y-auto mt-4 mx-4 bg-white rounded-xl border border-gray-100">
             <input type="text" value={editing.item.name} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, name: e.target.value } } : prev)} placeholder="授業名" className="w-full px-4 py-3 border-b" />
-            {!isOnDemandPeriod(editing.item.period) && <div className="px-4 py-3 border-b flex items-center justify-between"><span className="text-sm">時限</span><select value={editing.item.period} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, period: e.target.value } } : prev)}>{periodOptions.map((p) => <option key={p} value={p}>{p}</option>)}</select></div>}
+            {!isOnDemandPeriod(editing.item.period) && <div className="px-4 py-3 border-b flex items-center justify-between"><span className="text-sm">時限</span><select value={editing.item.period} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, period: e.target.value } } : prev)}>{periodOptions.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</select></div>}
             <input type="text" value={editing.item.teacher} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, teacher: e.target.value } } : prev)} placeholder="教員名" className="w-full px-4 py-3 border-b" />
             <input type="text" value={editing.item.room} onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, room: e.target.value } } : prev)} placeholder="教室" className="w-full px-4 py-3 border-b" />
           </div>
@@ -240,20 +286,30 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
         <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
           <div className="flex items-center justify-between px-4 py-3 bg-white border-b"><button onClick={() => setDetailCourseId(null)} className="text-sm text-blue-500">戻る</button><span className="text-sm font-semibold">授業詳細</span><button onClick={() => openEdit(detailCourse)} className="text-sm text-blue-500">編集</button></div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            <div className="bg-white rounded-xl border p-4 text-sm space-y-1"><div className="font-semibold">{detailCourse.name}</div><div>教室: {detailCourse.room || "未設定"}</div><div>教員: {detailCourse.teacher || "未設定"}</div></div>
-            <div className="bg-white rounded-xl border p-4 text-sm space-y-2">
-              <div className="font-semibold">出欠</div>
+            <SurfaceCard className="p-4">
+              <div className="text-lg font-semibold text-slate-900">{detailCourse.name}</div>
+              <div className="text-xs text-slate-500 mt-1">{DAYS.find((d) => d.value === detailCourse.day)?.label}曜 / {detailCourse.period}</div>
+              <div className="text-sm mt-3 text-slate-700">教室: {detailCourse.room || "未設定"}</div>
+              <div className="text-sm text-slate-700">教員: {detailCourse.teacher || "未設定"}</div>
+            </SurfaceCard>
+            <SurfaceCard className="p-4 text-sm space-y-2">
+              <div className="font-semibold text-slate-900">出欠</div>
               <div className="grid grid-cols-3 gap-2 text-center">
-                {(["attendancePresent", "attendanceAbsent", "attendanceLate"] as const).map((k, i) => <button key={k} onClick={() => updateDetail({ [k]: (detailCourse[k] || 0) + 1 })} className="border rounded-lg py-2">{["出席", "欠席", "遅刻"][i]} +<div>{detailCourse[k] || 0}</div></button>)}
+                {(["attendancePresent", "attendanceAbsent", "attendanceLate"] as const).map((k, i) => <button key={k} onClick={() => updateDetail({ [k]: (detailCourse[k] || 0) + 1 })} className="rounded-xl border border-slate-200 py-2.5 bg-slate-50">{["出席", "欠席", "遅刻"][i]}<div className="text-base font-semibold mt-0.5">{detailCourse[k] || 0}</div></button>)}
               </div>
-              <label className="text-xs block">欠席上限<input type="number" min={1} max={30} value={detailCourse.absenceLimit ?? 5} onChange={(e) => updateDetail({ absenceLimit: Number(e.target.value || 5) })} className="w-full mt-1 border rounded px-2 py-1" /></label>
-              <div className="text-xs text-gray-500">あと{Math.max((detailCourse.absenceLimit ?? 5) - (detailCourse.attendanceAbsent ?? 0), 0)}回休める</div>
-            </div>
-            <div className="bg-white rounded-xl border p-4 text-sm">
+              <label className="text-xs block text-slate-500">欠席上限<input type="number" min={1} max={30} value={detailCourse.absenceLimit ?? 5} onChange={(e) => updateDetail({ absenceLimit: Number(e.target.value || 5) })} className="w-full mt-1 border border-slate-200 rounded-xl px-3 py-2" /></label>
+              <div>
+                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-rose-300 rounded-full" style={{ width: `${Math.min(100, ((detailCourse.attendanceAbsent ?? 0) / Math.max(detailCourse.absenceLimit ?? 5, 1)) * 100)}%` }} />
+                </div>
+                <div className="text-xs text-slate-500 mt-1">あと{Math.max((detailCourse.absenceLimit ?? 5) - (detailCourse.attendanceAbsent ?? 0), 0)}回休める</div>
+              </div>
+            </SurfaceCard>
+            <SurfaceCard className="p-4 text-sm">
               <div className="font-semibold mb-2">この授業の未完了タスク</div>
-              <div className="text-xs text-gray-500">カテゴリ連携済みタスク: {linkedTasks}件</div>
-            </div>
-            <div className="bg-white rounded-xl border p-4 text-sm"><div className="font-semibold mb-2">メモ</div><textarea value={detailCourse.memo || ""} onChange={(e) => updateDetail({ memo: e.target.value })} rows={4} className="w-full border rounded p-2" /></div>
+              <div className="text-xs text-slate-500">カテゴリ連携済みタスク: {linkedTasks}件</div>
+            </SurfaceCard>
+            <SurfaceCard className="p-4 text-sm"><div className="font-semibold mb-2">メモ</div><textarea value={detailCourse.memo || ""} onChange={(e) => updateDetail({ memo: e.target.value })} rows={4} className="w-full border border-slate-200 rounded-xl p-2.5" /></SurfaceCard>
           </div>
         </div>
       )}

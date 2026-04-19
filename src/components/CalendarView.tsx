@@ -3,6 +3,9 @@ import React from "react";
 import { Task, Category } from "@/lib/types";
 import { DAY } from "@/lib/constants";
 import { IconChevL, IconChevR, IconX, IconPlus, IconFlag, IconRepeat } from "./Icons";
+import SurfaceCard from "./ui/SurfaceCard";
+import SectionHeader from "./ui/SectionHeader";
+import EmptyState from "./ui/EmptyState";
 
 interface CalendarViewProps {
   tasks: Task[];
@@ -58,17 +61,24 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
-        <button onClick={() => setMonth(new Date(y, m - 1))} className="p-2 hover:bg-gray-100 rounded-lg"><IconChevL size={16} /></button>
-        <span className="text-sm font-semibold text-gray-900">{y}年 {m + 1}月</span>
-        <button onClick={() => setMonth(new Date(y, m + 1))} className="p-2 hover:bg-gray-100 rounded-lg"><IconChevR size={16} /></button>
-      </div>
+      <SectionHeader
+        title={`${y}年 ${m + 1}月`}
+        subtitle="月表示は軽く、詳細は下で確認"
+        className="mb-2"
+        action={
+          <div className="flex items-center gap-1">
+            <button onClick={() => setMonth(new Date(y, m - 1))} className="min-h-11 min-w-11 p-2 hover:bg-slate-100 rounded-xl"><IconChevL size={16} /></button>
+            <button onClick={() => setMonth(new Date(y, m + 1))} className="min-h-11 min-w-11 p-2 hover:bg-slate-100 rounded-xl"><IconChevR size={16} /></button>
+          </div>
+        }
+      />
+      <SurfaceCard className="p-3">
       <div className="grid grid-cols-7 mb-1">
         {DAY.map((d, i) => (
           <div key={d} className={`text-center text-xs font-semibold py-1.5 ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-gray-400"}`}>{d}</div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-px bg-gray-100 border border-gray-100 rounded-lg overflow-hidden">
+      <div className="grid grid-cols-7 gap-px bg-slate-100 border border-slate-100 rounded-2xl overflow-hidden">
         {cells.map((day, idx) => {
           const dt = day ? tasksOn(day) : [];
           const sel = isSel(day);
@@ -77,8 +87,8 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
             <div
               key={idx}
               onClick={() => day && setSelectedDate(new Date(y, m, day))}
-              className={`min-h-[100px] p-1.5 transition-colors ${day ? "cursor-pointer" : ""}`}
-              style={sel ? { border: "2px solid #111827", borderRadius: "4px", backgroundColor: "#fff" } : tod ? { backgroundColor: "rgba(219,234,254,0.4)" } : { backgroundColor: "#fff" }}
+              className={`min-h-[92px] p-1.5 transition-colors ${day ? "cursor-pointer" : ""}`}
+              style={sel ? { boxShadow: "inset 0 0 0 2px #CBD5E1", borderRadius: "8px", backgroundColor: "#EFF6FF" } : tod ? { backgroundColor: "#F8FAFC" } : { backgroundColor: "#fff" }}
             >
               {day && (
                 <>
@@ -98,15 +108,16 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
           );
         })}
       </div>
+      </SurfaceCard>
       {selectedDate && (
         <div className="mt-3">
-          <div className="bg-gray-100 px-4 py-2.5 flex items-center justify-between rounded-t-lg">
+          <div className="bg-slate-100 px-4 py-2.5 flex items-center justify-between rounded-t-2xl">
             <span className="text-xs font-semibold text-gray-700">{fmtSel}</span>
             <button onClick={() => setSelectedDate(null)} className="text-gray-400 hover:text-gray-600"><IconX size={14} /></button>
           </div>
-          <div className="border border-t-0 border-gray-100 rounded-b-lg bg-white">
+          <div className="surface-card !rounded-t-none !shadow-none border-t-0 rounded-b-2xl bg-white">
             {selTasks.length === 0 ? (
-              <div className="px-4 py-6 text-center text-sm text-gray-400">予定はありません</div>
+              <EmptyState title="予定はありません" description="この日は余白です。追加して整えましょう。" className="!border-none !shadow-none !bg-transparent py-7" />
             ) : (
               selTasks.map((t) => {
                 const tc = cats.find((c) => c.id === t.category) || { label: "未分類", color: "#889096" };
@@ -140,7 +151,7 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
               })
             )}
             <button onClick={() => onAddClick(selectedDate)}
-              className="flex items-center justify-center gap-2 w-full px-4 py-3.5 text-sm font-medium text-gray-500 hover:bg-gray-50 transition-colors border-t border-gray-100">
+              className="flex items-center justify-center gap-2 w-full px-4 py-3.5 text-sm font-medium text-slate-500 hover:bg-slate-50 transition-colors border-t border-slate-100">
               <IconPlus size={15} />新しい予定の作成
             </button>
           </div>
