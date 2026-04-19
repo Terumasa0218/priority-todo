@@ -488,6 +488,7 @@ export default function Home() {
           )}
           <button
             onClick={handleGoogleLogin}
+            disabled={inAppBrowser}
             className="mt-4 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-medium"
           >
             Googleでログイン
