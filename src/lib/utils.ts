@@ -27,11 +27,11 @@ export function urgColor(u: number) {
   return { bg: "#F0F0F3", fg: "#60646C" };
 }
 
-export function advanceDate(d: Date, r: string) {
+export function advanceDate(d: Date, r: string, biweeklyInterval = 2) {
   switch (r) {
     case "daily": d.setDate(d.getDate() + 1); break;
     case "weekly": d.setDate(d.getDate() + 7); break;
-    case "biweekly": d.setDate(d.getDate() + 14); break;
+    case "biweekly": d.setDate(d.getDate() + Math.max(2, biweeklyInterval) * 7); break;
     case "monthly": d.setMonth(d.getMonth() + 1); break;
   }
 }
@@ -89,7 +89,7 @@ export const calcOccurrenceCount = (task: Task): number => {
   let count = 0;
   while (cur <= end && count < 240) {
     count += 1;
-    cur.setDate(cur.getDate() + (task.recurrence === "biweekly" ? 14 : 7));
+    cur.setDate(cur.getDate() + (task.recurrence === "biweekly" ? Math.max(2, task.biweeklyInterval ?? 2) * 7 : 7));
   }
   return count;
 };
@@ -127,7 +127,7 @@ export function expandRecurring(task: Task, horizonDate: Date): Task[] {
       due.setDate(due.getDate() + offsetDays);
       due.setHours(hh || 0, mm || 0, 0, 0);
       if (due <= effectiveEnd) pushOccurrence(due);
-      classDate.setDate(classDate.getDate() + (task.recurrence === "biweekly" ? 14 : 7));
+      classDate.setDate(classDate.getDate() + (task.recurrence === "biweekly" ? Math.max(2, task.biweeklyInterval ?? 2) * 7 : 7));
       count += 1;
     }
     return results;
@@ -138,7 +138,7 @@ export function expandRecurring(task: Task, horizonDate: Date): Task[] {
   while (current <= effectiveEnd && count < 200) {
     pushOccurrence(current);
     const next = new Date(current);
-    advanceDate(next, task.recurrence);
+    advanceDate(next, task.recurrence, task.biweeklyInterval);
     current.setTime(next.getTime());
     count++;
   }

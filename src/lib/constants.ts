@@ -38,12 +38,12 @@ export const DEFAULT_CATS: Category[] = [
   { id: "default", label: "未分類", color: "#889096" },
 ];
 
-export const PERIODS = ["1限", "2限", "3限", "4限", "5限", "6限"] as const;
+export const PERIODS = ["1・2限", "3・4限", "5・6限"] as const;
 
 export const DEFAULT_TIMETABLE_CONFIG: TimetableConfig = {
   maxPeriod: 6,
   showOnDemand: true,
-  onDemandSlotsByDay: [1, 1, 0, 0, 0],
+  onDemandSlotsByDay: [0, 0, 0, 0, 0],
 };
 
 export const MEMBER_COLORS = [
