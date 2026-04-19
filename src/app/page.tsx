@@ -19,7 +19,7 @@ import { createTimetableShareToken, loadTimetableShareToken } from "@/lib/timeta
 import { AuthIssue, resolveAuthIssue } from "@/lib/authErrorCatalog";
 
 type View = "list" | "calendar" | "timetable" | "group" | "completed";
-const isInAppBrowser = () => /FBAN|FBAV|Instagram|Line|Twitter|wv/i.test(navigator.userAgent);
+const isInAppBrowser = () => /FBAN|FBAV|Instagram|Line|Twitter|wv|WebView|GSA|LinkedInApp|Slack|Discord|GitHub/i.test(navigator.userAgent);
 const isMobileDevice = () => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
 const migratePeriod = (period: string | number): string => {
@@ -59,6 +59,7 @@ export default function Home() {
   const [syncing, setSyncing] = useState(false);
   const [authIssue, setAuthIssue] = useState<AuthIssue | null>(null);
   const [authFlowMessage, setAuthFlowMessage] = useState<string | null>(null);
+  const inAppBrowser = useMemo(() => (typeof navigator !== "undefined" ? isInAppBrowser() : false), []);
 
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -352,8 +353,9 @@ export default function Home() {
     if (!auth || !googleProvider) return;
     setAuthIssue(null);
     setAuthFlowMessage(null);
-    if (isInAppBrowser()) {
+    if (inAppBrowser) {
       setAuthIssue(resolveAuthIssue("auth/disallowed-useragent"));
+      setAuthFlowMessage("アプリ内ブラウザではログインできません。Safari / Chrome で開いてください。");
       return;
     }
     try {
@@ -379,10 +381,23 @@ export default function Home() {
     }
   };
 
+  const copyCurrentUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setAuthFlowMessage("URLをコピーしました。Safari / Chrome に貼り付けて開いてください。");
+    } catch {
+      setAuthFlowMessage("URLコピーに失敗しました。アドレスバーからURLをコピーしてSafari / Chromeで開いてください。");
+    }
+  };
+
   const openInExternalBrowser = () => {
     const currentUrl = window.location.href;
     if (/Line/i.test(navigator.userAgent)) {
       window.location.href = `https://line.me/R/openExternalBrowser?url=${encodeURIComponent(currentUrl)}`;
+      return;
+    }
+    if (/GitHub|Instagram|FBAN|FBAV|Twitter|GSA|LinkedInApp|Slack|Discord/i.test(navigator.userAgent)) {
+      void copyCurrentUrl();
       return;
     }
     window.open(currentUrl, "_blank", "noopener,noreferrer");
@@ -446,6 +461,12 @@ export default function Home() {
         <div>
           <h1 className="text-lg font-bold text-gray-900">PrioriTodoへようこそ</h1>
           <p className="text-sm text-gray-500 mt-2">Googleでログインして、クラウド同期を有効化してください。</p>
+          {inAppBrowser && (
+            <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-left">
+              <p className="text-xs text-amber-700 font-medium">このアプリ内ブラウザではGoogleログインできません。</p>
+              <p className="text-[11px] text-amber-700 mt-0.5">右上メニューからSafari / Chromeで開くか、URLをコピーして外部ブラウザで開いてください。</p>
+            </div>
+          )}
           {authFlowMessage && <p className="text-xs text-gray-500 mt-2">{authFlowMessage}</p>}
           {authIssue && (
             <div className="mt-2">
@@ -460,10 +481,16 @@ export default function Home() {
           )}
           <button
             onClick={handleGoogleLogin}
+            disabled={inAppBrowser}
             className="mt-4 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-medium"
           >
             Googleでログイン
           </button>
+          {inAppBrowser && (
+            <button onClick={copyCurrentUrl} className="mt-2 px-4 py-2 rounded-lg border border-gray-300 text-xs font-medium text-gray-700">
+              URLをコピー
+            </button>
+          )}
         </div>
       </div>
     );
