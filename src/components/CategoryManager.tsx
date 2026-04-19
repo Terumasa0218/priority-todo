@@ -8,9 +8,10 @@ interface CategoryManagerProps {
   cats: Category[];
   setCats: React.Dispatch<React.SetStateAction<Category[]>>;
   onClose: () => void;
+  onDeleteCategory: (catId: string) => void;
 }
 
-export default function CategoryManager({ cats, setCats, onClose }: CategoryManagerProps) {
+export default function CategoryManager({ cats, setCats, onClose, onDeleteCategory }: CategoryManagerProps) {
   const [eid, setEid] = useState<string | null>(null);
   const [eLabel, setELabel] = useState("");
   const [eColor, setEColor] = useState("");
@@ -62,7 +63,7 @@ export default function CategoryManager({ cats, setCats, onClose }: CategoryMana
                   <span className="text-sm text-gray-900 flex-1">{c.label}</span>
                   <button onClick={() => startEdit(c)} className="text-xs text-blue-500 px-2">編集</button>
                   {c.id !== "default" && !c.timetableId && (
-                    <button onClick={() => setCats((prev) => prev.filter((x) => x.id !== c.id))} className="p-1 text-gray-300 hover:text-red-500">
+                    <button onClick={() => { onDeleteCategory(c.id); setCats((prev) => prev.filter((x) => x.id !== c.id)); }} className="p-1 text-gray-300 hover:text-red-500">
                       <IconTrash size={14} />
                     </button>
                   )}

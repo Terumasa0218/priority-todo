@@ -1,43 +1,25 @@
-import { TimetableConfig, TimetableItem } from "./types";
+import { TimetableItem } from "./types";
 
-export interface TimetablePresetPayload {
-  timetable: TimetableItem[];
-  timetableConfig: TimetableConfig;
+export interface SharedTimetable {
+  version: 1;
+  items: { name: string; day: number; period: string; teacher?: string; room?: string; color: string; }[];
 }
 
-const DEFAULT_CONFIG: TimetableConfig = {
-  maxPeriod: 6,
-  showOnDemand: true,
-  onDemandSlotsByDay: [1, 1, 0, 0, 0],
+export const createTimetableShareToken = (items: TimetableItem[]): string => {
+  const payload: SharedTimetable = {
+    version: 1,
+    items: items
+      .filter((it) => it.day >= 1 && it.day <= 5 && it.period >= 1 && it.period <= 6)
+      .map((it) => ({ name: it.name, day: it.day, period: String(it.period), teacher: it.teacher || undefined, room: it.room || undefined, color: it.color })),
+  };
+  return btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
 };
 
-const encodeBase64Url = (text: string) => {
-  const utf8 = new TextEncoder().encode(text);
-  let binary = "";
-  utf8.forEach((b) => { binary += String.fromCharCode(b); });
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-};
-
-const decodeBase64Url = (encoded: string) => {
-  const base64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
-  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
-  const binary = atob(`${base64}${padding}`);
-  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
-};
-
-export const createTimetablePresetToken = (
-  payload: TimetablePresetPayload
-): string => encodeBase64Url(JSON.stringify(payload));
-
-export const loadTimetablePresetFromToken = (
-  token: string
-): TimetablePresetPayload | null => {
+export const loadTimetableShareToken = (token: string): SharedTimetable | null => {
   try {
-    const parsed = JSON.parse(decodeBase64Url(token)) as Partial<TimetablePresetPayload>;
-    const timetable = Array.isArray(parsed.timetable) ? parsed.timetable : [];
-    const timetableConfig = parsed.timetableConfig || DEFAULT_CONFIG;
-    return { timetable, timetableConfig };
+    const parsed = JSON.parse(decodeURIComponent(escape(atob(token)))) as SharedTimetable;
+    if (parsed?.version !== 1 || !Array.isArray(parsed.items)) return null;
+    return parsed;
   } catch {
     return null;
   }
