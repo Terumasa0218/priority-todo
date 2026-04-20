@@ -200,18 +200,39 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
     setSharing(true);
     setShareMessage(null);
     try {
+      if (items.length === 0) {
+        setShareMessage("先に授業を追加してください");
+        return;
+      }
       const link = await onShare();
       if (!link) {
         setShareMessage("共有リンクを作成できませんでした");
         return;
       }
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(link);
-        setShareMessage("リンクをコピーしました");
-      } else {
-        window.prompt("このリンクをコピーしてください", link);
-        setShareMessage("リンクを作成しました");
+      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+        try {
+          await navigator.share({ title: "時間割", url: link });
+          setShareMessage("共有しました");
+          return;
+        } catch (err) {
+          const name = (err as { name?: string })?.name;
+          if (name === "AbortError") {
+            setShareMessage(null);
+            return;
+          }
+        }
       }
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(link);
+          setShareMessage("リンクをコピーしました");
+          return;
+        } catch {
+          /* fall through */
+        }
+      }
+      window.prompt("このリンクをコピーしてください", link);
+      setShareMessage("リンクを作成しました");
     } catch {
       setShareMessage("共有リンクの作成に失敗しました");
     } finally {
@@ -241,7 +262,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
           <div className="text-[11px] text-gray-500 mt-0.5">今日 {todayClassCount}コマ・今日締切 {todayPending}件</div>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={handleShare} disabled={sharing || items.length === 0} className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900 px-2.5 py-1.5 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+          <button onClick={handleShare} disabled={sharing} className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900 px-2.5 py-1.5 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
             {sharing ? "共有中..." : "共有"}
           </button>
           <button onClick={() => setShowCustomize(true)} className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900 px-2.5 py-1.5 rounded-lg hover:bg-gray-100 transition-colors">
@@ -289,46 +310,56 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
               })}
             </React.Fragment>
           ))}
-
-          {showOnDemandRows && Array.from({ length: maxOnDemandRows }, (_, slotIdx) => (
-            <React.Fragment key={`on-${slotIdx}`}>
-              <div className="h-[68px] border-r border-b border-gray-200 flex flex-col items-center justify-center text-[9px] leading-tight text-gray-500 bg-gray-50 text-center px-1">
-                <span>オンデマ</span>
-                <span>{slotIdx + 1}</span>
-              </div>
-              {DAYS.map((d, dIdx) => {
-                const count = onDemandSlotsByDay[dIdx];
-                const key = `on-${d.value}-${slotIdx}`;
-                if (slotIdx >= count) {
-                  return <div key={key} className="h-[68px] border-b border-gray-200 bg-gray-50/40" />;
-                }
-                const item = (onDemandMap.get(d.value) ?? []).find((it) => getOnDemandSlotIndex(it.period) === slotIdx) ?? null;
-                if (!item) {
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => openCreate(d.value, buildOnDemandPeriod(slotIdx))}
-                      className="h-[68px] border-b border-gray-200 flex items-center justify-center text-gray-300 hover:text-gray-500 hover:bg-gray-50 transition-colors text-xs"
-                      aria-label={`${d.label}曜 オンデマンド${slotIdx + 1} を追加`}
-                    >＋</button>
-                  );
-                }
-                return (
-                  <button
-                    key={key}
-                    onClick={() => openEdit(item)}
-                    className="h-[68px] border-b border-gray-200 p-1.5 text-left transition-colors hover:brightness-95 active:brightness-90"
-                    style={{ backgroundColor: `${item.color}1F`, borderLeft: `3px solid ${item.color}` }}
-                  >
-                    <div className="text-[10px] font-semibold text-gray-900 leading-tight line-clamp-2">{item.name}</div>
-                    {item.teacher && <div className="text-[9px] text-gray-500 truncate mt-0.5">{item.teacher}</div>}
-                  </button>
-                );
-              })}
-            </React.Fragment>
-          ))}
         </div>
       </div>
+
+      {showOnDemandRows && (
+        <div className="mt-3 border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-sm">
+          <div className="px-3 py-2 text-xs font-semibold text-gray-700 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+            <span>オンデマンド</span>
+            <span className="text-[10px] text-gray-400 font-normal">曜日ごとの枠</span>
+          </div>
+          <div className="flex">
+            {DAYS.map((d, dIdx) => {
+              const count = onDemandSlotsByDay[dIdx];
+              const dayItems = onDemandMap.get(d.value) ?? [];
+              return (
+                <div key={d.value} className="flex-1 border-r border-gray-200 last:border-r-0">
+                  <div className={`h-7 text-center text-[11px] font-semibold flex items-center justify-center bg-gray-50/60 border-b border-gray-200 ${d.value === todayDay ? "text-blue-600" : "text-gray-600"}`}>{d.label}</div>
+                  {count === 0 ? (
+                    <div className="h-12 flex items-center justify-center text-[10px] text-gray-300">—</div>
+                  ) : (
+                    Array.from({ length: count }, (_, slotIdx) => {
+                      const item = dayItems.find((it) => getOnDemandSlotIndex(it.period) === slotIdx) ?? null;
+                      const key = `on-${d.value}-${slotIdx}`;
+                      if (!item) {
+                        return (
+                          <button
+                            key={key}
+                            onClick={() => openCreate(d.value, buildOnDemandPeriod(slotIdx))}
+                            className="w-full h-12 border-b border-gray-200 last:border-b-0 flex items-center justify-center text-gray-300 hover:text-gray-500 hover:bg-gray-50 transition-colors text-xs"
+                            aria-label={`${d.label}曜 オンデマンド${slotIdx + 1} を追加`}
+                          >＋</button>
+                        );
+                      }
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => openEdit(item)}
+                          className="w-full h-12 border-b border-gray-200 last:border-b-0 p-1.5 text-left transition-colors hover:brightness-95 active:brightness-90"
+                          style={{ backgroundColor: `${item.color}1F`, borderLeft: `3px solid ${item.color}` }}
+                        >
+                          <div className="text-[10px] font-semibold text-gray-900 leading-tight line-clamp-2">{item.name}</div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {showCustomize && (
         <div className="fixed inset-0 z-50 bg-gray-50/95 flex flex-col" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>

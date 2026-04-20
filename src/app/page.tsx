@@ -21,6 +21,7 @@ import { signInWithPopup, signOut, onAuthStateChanged, signInWithRedirect, User,
 import { deleteCloudSnapshot, loadCloudSnapshot, migrateLocalToCloudOnce, saveCloudSnapshot } from "@/lib/cloudStorage";
 import { createTimetableShareToken, loadTimetableShareToken } from "@/lib/timetableShare";
 import { AuthIssue, resolveAuthIssue } from "@/lib/authErrorCatalog";
+import { loadCategories, loadGroups, loadTasks, loadTimetable, loadTimetableConfig, saveCategories, saveGroups, saveTasks, saveTimetable, saveTimetableConfig } from "@/lib/storage";
 
 type View = "list" | "calendar" | "timetable" | "group" | "completed";
 const isInAppBrowser = () => /FBAN|FBAV|Instagram|Line|Twitter|wv|WebView|GSA|LinkedInApp|Slack|Discord|GitHub/i.test(navigator.userAgent);
@@ -42,7 +43,6 @@ const migratePeriod = (period: string | number): string => {
 
 const withTaskDefaults = (task: Task): Task => ({
   ...task,
-  importance: task.importance ?? (task.priority ? 3 : 2),
   startDate: task.startDate ?? null,
   subtasks: task.subtasks,
 });
@@ -148,23 +148,37 @@ export default function Home() {
       setAuthReady(true);
       return;
     }
-    setPersistence(auth, browserLocalPersistence).catch(() => { /* ignore */ });
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result?.user) setAuthFlowMessage("ログイン情報を確認中...");
-      })
-      .catch((err: { code?: string }) => {
-        console.error("Redirect result error:", err);
-        setAuthIssue(resolveAuthIssue(err?.code));
-      });
-    return onAuthStateChanged(auth, (nextUser) => {
-      setUser(nextUser);
-      setAuthReady(true);
-      if (nextUser) {
-        setAuthIssue(null);
-        setAuthFlowMessage(null);
+    let unsubscribe: (() => void) | null = null;
+    let cancelled = false;
+    (async () => {
+      try {
+        await setPersistence(auth!, browserLocalPersistence);
+      } catch (err) {
+        console.error("setPersistence failed:", err);
       }
-    });
+      if (cancelled) return;
+      try {
+        const result = await getRedirectResult(auth!);
+        if (result?.user) setAuthFlowMessage("ログイン情報を確認中...");
+      } catch (err) {
+        console.error("Redirect result error:", err);
+        const code = (err as { code?: string })?.code;
+        setAuthIssue(resolveAuthIssue(code));
+      }
+      if (cancelled) return;
+      unsubscribe = onAuthStateChanged(auth!, (nextUser) => {
+        setUser(nextUser);
+        setAuthReady(true);
+        if (nextUser) {
+          setAuthIssue(null);
+          setAuthFlowMessage(null);
+        }
+      });
+    })();
+    return () => {
+      cancelled = true;
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -175,16 +189,31 @@ export default function Home() {
     let mounted = true;
     const sync = async () => {
       setSyncing(true);
+      setTasks(loadTasks().map(withTaskDefaults));
+      setCats(loadCategories());
+      setGroups(loadGroups());
+      setTimetable(loadTimetable().map((it) => ({ ...it, period: migratePeriod(it.period as string | number) })));
+      setTimetableConfig(loadTimetableConfig());
       try {
         await migrateLocalToCloudOnce(user.uid);
         const snapshot = await loadCloudSnapshot(user.uid);
         if (!mounted) return;
-        setTasks(snapshot.tasks.map(withTaskDefaults));
-        setCats(snapshot.cats);
-        setGroups(snapshot.groups);
-        setTimetable(snapshot.timetable.map((it) => ({ ...it, period: migratePeriod(it.period as string | number) })));
-        setTimetableConfig(snapshot.timetableConfig);
+        const cloudHasData =
+          snapshot.tasks.length > 0 ||
+          snapshot.groups.length > 0 ||
+          snapshot.timetable.length > 0 ||
+          snapshot.cats.length > 1;
+        if (cloudHasData) {
+          setTasks(snapshot.tasks.map(withTaskDefaults));
+          setCats(snapshot.cats);
+          setGroups(snapshot.groups);
+          setTimetable(snapshot.timetable.map((it) => ({ ...it, period: migratePeriod(it.period as string | number) })));
+          setTimetableConfig(snapshot.timetableConfig);
+        }
         setReady(true);
+      } catch (err) {
+        console.error("Cloud sync failed, using local:", err);
+        if (mounted) setReady(true);
       } finally {
         if (mounted) setSyncing(false);
       }
@@ -194,6 +223,15 @@ export default function Home() {
       mounted = false;
     };
   }, [authReady, user]);
+
+  useEffect(() => {
+    if (!ready) return;
+    saveTasks(tasks);
+    saveCategories(cats);
+    saveGroups(groups);
+    saveTimetable(timetable);
+    saveTimetableConfig(timetableConfig);
+  }, [tasks, cats, groups, timetable, timetableConfig, ready]);
 
   useEffect(() => {
     if (!ready || !user) return;
@@ -391,6 +429,7 @@ export default function Home() {
       setAuthFlowMessage("アプリ内ブラウザです。失敗する場合は下の「Safari / Chromeで開く」を使ってください。");
     }
     try {
+      await setPersistence(auth, browserLocalPersistence);
       if (isMobileDevice() || inAppBrowser) {
         await signInWithRedirect(auth, googleProvider);
         return;
