@@ -1,14 +1,22 @@
+export interface Subtask {
+  id: string;
+  title: string;
+  done: boolean;
+}
+
 export interface Task {
   id: string;
   title: string;
   deadline: string; // ISO
   category: string; // カテゴリID
-  priority: boolean;
+  priority: boolean; // 旧フィールド。新規UIは廃止 (importance===3 に同期)
   taskType?: "single" | "mid" | "long" | "daily";
   estimatedMinutes?: number;
   loggedMinutes?: number;
   importance?: 1 | 2 | 3;
   lastWorkedAt?: string | null;
+  startDate?: string | null; // 着手開始日 (ISO). 未指定なら即表示
+  subtasks?: Subtask[];
   recurrence: "none" | "daily" | "weekly" | "biweekly" | "monthly";
   classDayOfWeek?: number; // 0-6
   offsetDays?: number;

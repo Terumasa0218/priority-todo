@@ -12,6 +12,7 @@ import CalendarView from "@/components/CalendarView";
 import CompletedList from "@/components/CompletedList";
 import GroupView from "@/components/GroupView";
 import TimetableView from "@/components/TimetableView";
+import TodayView from "@/components/TodayView";
 import SegmentedTabs from "@/components/ui/SegmentedTabs";
 import SurfaceCard from "@/components/ui/SurfaceCard";
 import EmptyState from "@/components/ui/EmptyState";
@@ -41,11 +42,9 @@ const migratePeriod = (period: string | number): string => {
 
 const withTaskDefaults = (task: Task): Task => ({
   ...task,
-  taskType: task.taskType || "single",
-  estimatedMinutes: task.estimatedMinutes ?? undefined,
-  loggedMinutes: task.loggedMinutes ?? 0,
   importance: task.importance ?? (task.priority ? 3 : 2),
-  lastWorkedAt: task.lastWorkedAt ?? null,
+  startDate: task.startDate ?? null,
+  subtasks: task.subtasks,
 });
 
 
@@ -56,7 +55,7 @@ export default function Home() {
   const [timetable, setTimetable] = useState<TimetableItem[]>([]);
   const [timetableConfig, setTimetableConfig] = useState<TimetableConfig>(DEFAULT_TIMETABLE_CONFIG);
   const [view, setView] = useState<View>("list");
-  const [activeFilter, setActiveFilter] = useState("week");
+  const [activeFilter, setActiveFilter] = useState("today");
   const [catFilter, setCatFilter] = useState("all");
   const [showCourseFilters, setShowCourseFilters] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -353,6 +352,14 @@ export default function Home() {
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, completed: false, completedAt: null } : t)));
   }, []);
 
+  const handleToggleSubtask = useCallback((task: Task, subtaskId: string) => {
+    setTasks((prev) => prev.map((t) => {
+      if (t.id !== (task.parentId || task.id)) return t;
+      const subs = (t.subtasks || []).map((s) => s.id === subtaskId ? { ...s, done: !s.done } : s);
+      return { ...t, subtasks: subs };
+    }));
+  }, []);
+
   const handleDeleteTask = useCallback((task: Task) => {
     const id = task.parentId || task.id;
     if (task.isOccurrence) {
@@ -625,7 +632,15 @@ export default function Home() {
                 </div>
               )}
             </SurfaceCard>
-            {sorted.length === 0 ? (
+            {activeFilter === "today" ? (
+              <TodayView
+                tasks={allExpanded.filter((t) => catFilter === "all" || (catFilter === "timetable_group" ? timetableCats.some((c) => c.id === t.category) : t.category === catFilter))}
+                cats={cats}
+                onComplete={handleComplete}
+                onEdit={(t) => { setEditTask(t); setPrefillDate(null); setShowForm(true); }}
+                onToggleSubtask={handleToggleSubtask}
+              />
+            ) : sorted.length === 0 ? (
               <div className="px-4 py-8">
                 <EmptyState title="タスクなし" description="右下の + から追加して、今日の流れを作りましょう。" icon={<IconList size={20} stroke="#94A3B8" />} />
               </div>

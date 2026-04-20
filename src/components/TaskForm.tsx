@@ -1,10 +1,9 @@
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
-import { Task, Category, TimetableItem } from "@/lib/types";
+import { Task, Subtask, Category, TimetableItem } from "@/lib/types";
 import { RECUR, REMINDERS, DAY } from "@/lib/constants";
 import { uid, calcOccurrenceCount } from "@/lib/utils";
 import CategoryPicker from "./CategoryPicker";
-import { IconFlag } from "./Icons";
 
 interface TaskFormProps {
   task: Task | null;
@@ -16,6 +15,29 @@ interface TaskFormProps {
   setCats: React.Dispatch<React.SetStateAction<Category[]>>;
   timetable: TimetableItem[];
 }
+
+type StartMode = "immediate" | "d3" | "d7" | "d14" | "custom";
+
+const START_PRESETS: { id: StartMode; label: string; daysBefore: number | null }[] = [
+  { id: "immediate", label: "すぐ表示", daysBefore: null },
+  { id: "d3", label: "3日前から", daysBefore: 3 },
+  { id: "d7", label: "7日前から", daysBefore: 7 },
+  { id: "d14", label: "14日前から", daysBefore: 14 },
+  { id: "custom", label: "日付指定", daysBefore: null },
+];
+
+const toDateOnly = (iso: string): string => iso.slice(0, 10);
+
+const inferStartMode = (task: Task | null): StartMode => {
+  if (!task?.startDate) return "immediate";
+  const dl = new Date(task.deadline).getTime();
+  const st = new Date(task.startDate).getTime();
+  const days = Math.round((dl - st) / 86_400_000);
+  if (days === 3) return "d3";
+  if (days === 7) return "d7";
+  if (days === 14) return "d14";
+  return "custom";
+};
 
 export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate, cats, setCats, timetable }: TaskFormProps) {
   const isEdit = !!task;
@@ -34,15 +56,16 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const [title, setTitle] = useState(task?.title || "");
   const [deadline, setDeadline] = useState(task?.deadline ? new Date(task.deadline).toISOString().slice(0, 16) : getDefault());
   const [category, setCategory] = useState(task?.category || (cats[0]?.id || "default"));
-  const [priority, setPriority] = useState(task?.priority || false);
-  const [recurrence, setRecurrence] = useState(task?.recurrence || "none");
+  const [recurrence, setRecurrence] = useState<Task["recurrence"]>(task?.recurrence || "none");
   const [repeatEndDate, setRepeatEndDate] = useState(task?.repeatEndDate || "");
   const [reminder, setReminder] = useState(task?.reminder || "1day");
   const [memo, setMemo] = useState(task?.memo || "");
   const [url, setUrl] = useState(task?.url || "");
-  const [taskType, setTaskType] = useState<Task["taskType"]>(task?.taskType || undefined);
-  const [estimatedMinutes, setEstimatedMinutes] = useState<number>(task?.estimatedMinutes || 0);
   const [importance, setImportance] = useState<1 | 2 | 3>(task?.importance || (task?.priority ? 3 : 2));
+  const [startMode, setStartMode] = useState<StartMode>(inferStartMode(task));
+  const [customStartDate, setCustomStartDate] = useState<string>(task?.startDate ? toDateOnly(task.startDate) : "");
+  const [subtasks, setSubtasks] = useState<Subtask[]>(task?.subtasks || []);
+  const [newSubtask, setNewSubtask] = useState("");
   const [classDayOfWeek, setClassDayOfWeek] = useState<number>(task?.classDayOfWeek ?? new Date(task?.deadline || deadline).getDay());
   const [offsetDays, setOffsetDays] = useState<number>(task?.offsetDays ?? 0);
   const [offsetTime, setOffsetTime] = useState(task?.offsetTime || "23:59");
@@ -71,13 +94,15 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     if (hit) setClassDayOfWeek(hit.day);
   }, [category, cats, timetable, recurrence]);
 
-  useEffect(() => {
-    if (taskType) return;
-    const days = Math.ceil((new Date(deadline).getTime() - Date.now()) / 86400000);
-    if (days <= 1) setTaskType("single");
-    else if (days <= 6) setTaskType("mid");
-    else setTaskType("long");
-  }, [deadline, taskType]);
+  const computedStartDate = useMemo(() => {
+    if (startMode === "immediate") return null;
+    if (startMode === "custom") return customStartDate || null;
+    const preset = START_PRESETS.find((p) => p.id === startMode);
+    if (!preset?.daysBefore) return null;
+    const d = new Date(deadline);
+    d.setDate(d.getDate() - preset.daysBefore);
+    return d.toISOString().slice(0, 10);
+  }, [startMode, customStartDate, deadline]);
 
   const preview = useMemo(() => {
     if (!isTimetableCourse || (recurrence !== "weekly" && recurrence !== "biweekly")) return "";
@@ -97,13 +122,9 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       title,
       deadline: new Date(deadline).toISOString(),
       category,
-      priority,
-      taskType: taskType || "single",
-      estimatedMinutes: estimatedMinutes > 0 ? estimatedMinutes : undefined,
-      loggedMinutes: task?.loggedMinutes || 0,
+      priority: false,
       importance,
-      lastWorkedAt: task?.lastWorkedAt || null,
-      recurrence: recurrence as Task["recurrence"],
+      recurrence,
       repeatCount: task?.repeatCount || 15,
       repeatEndDate,
       reminder,
@@ -119,25 +140,39 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       offsetTime,
       biweeklyInterval,
     });
-  }, [recurrence, repeatEndDate, task, title, deadline, category, priority, reminder, memo, url, classDayOfWeek, offsetDays, offsetTime, biweeklyInterval]);
+  }, [recurrence, repeatEndDate, task, title, deadline, category, importance, reminder, memo, url, classDayOfWeek, offsetDays, offsetTime, biweeklyInterval]);
+
+  const addSubtask = () => {
+    const v = newSubtask.trim();
+    if (!v) return;
+    setSubtasks((prev) => [...prev, { id: uid(), title: v, done: false }]);
+    setNewSubtask("");
+  };
+
+  const toggleSubtask = (id: string) => {
+    setSubtasks((prev) => prev.map((s) => (s.id === id ? { ...s, done: !s.done } : s)));
+  };
+
+  const removeSubtask = (id: string) => {
+    setSubtasks((prev) => prev.filter((s) => s.id !== id));
+  };
 
   const handleSave = () => {
     if (!title.trim()) { setShowError(true); setFormError("タイトルを入力してください"); return; }
     if (recurrence !== "none" && repeatEndDate && new Date(repeatEndDate).getTime() < new Date(deadline).getTime()) { setFormError("終了日は開始日以降に設定してください"); return; }
     if (recurrence === "biweekly" && (biweeklyInterval < 2 || biweeklyInterval > 8)) { setFormError("隔週の間隔は2〜8週間で入力してください"); return; }
+    if (startMode === "custom" && customStartDate && new Date(customStartDate).getTime() > new Date(deadline).getTime()) { setFormError("着手開始日は締切より前に設定してください"); return; }
     setFormError("");
     onSave({
       id: task?.parentId || task?.id || uid(),
       title: title.trim(),
       deadline: new Date(deadline).toISOString(),
       category,
-      priority,
-      taskType: taskType || "single",
-      estimatedMinutes: estimatedMinutes > 0 ? estimatedMinutes : undefined,
-      loggedMinutes: task?.loggedMinutes || 0,
+      priority: importance === 3,
       importance,
-      lastWorkedAt: task?.lastWorkedAt || null,
-      recurrence: recurrence as Task["recurrence"],
+      startDate: computedStartDate || null,
+      subtasks: subtasks.length > 0 ? subtasks : undefined,
+      recurrence,
       repeatCount: recurrence === "none" ? null : (task?.repeatCount || 15),
       repeatEndDate: recurrence === "none" ? null : repeatEndDate,
       reminder,
@@ -159,29 +194,121 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
       <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
         <button onClick={onClose} className="text-sm text-blue-500 font-medium">キャンセル</button>
-        <span className="text-sm font-semibold text-gray-900">{isEdit ? "予定の編集" : "新しい予定"}</span>
+        <span className="text-sm font-semibold text-gray-900">{isEdit ? "タスクの編集" : "新しいタスク"}</span>
         <button onClick={handleSave} className="text-sm font-semibold text-blue-500">保存</button>
       </div>
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pb-24">
         <div className="mt-4 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
-          <input type="text" value={title} onChange={(e) => { setTitle(e.target.value); if (e.target.value.trim()) setShowError(false); }} placeholder="タスク名を入力" className={`w-full px-4 py-3.5 text-sm ${showError && !title.trim() ? "border-red-300 bg-red-50/50" : "border-gray-100"}`} autoFocus />
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => { setTitle(e.target.value); if (e.target.value.trim()) setShowError(false); }}
+            placeholder="タスク名を入力"
+            className={`w-full px-4 py-3.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none border-b ${showError && !title.trim() ? "border-red-300 bg-red-50/50" : "border-gray-100"}`}
+            autoFocus
+          />
           <CategoryPicker cats={cats} setCats={setCats} selected={category} onSelect={setCategory} />
         </div>
+
         <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100 p-4">
-          <label className="block text-sm mb-2">締切</label>
+          <label className="block text-sm mb-2 text-gray-900">締切</label>
           <input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} className="w-full text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />
         </div>
+
+        <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
+          <div className="px-4 py-3 flex items-center justify-between">
+            <div>
+              <span className="text-sm text-gray-900">重要度</span>
+              <div className="text-[10px] text-gray-400">並び順には使われません（表示用）</div>
+            </div>
+            <div className="flex items-center gap-1">
+              {[1, 2, 3].map((lv) => (
+                <button
+                  key={lv}
+                  onClick={() => setImportance(lv as 1 | 2 | 3)}
+                  aria-label={`重要度${lv}`}
+                  className="w-9 h-9 flex items-center justify-center"
+                >
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill={importance >= lv ? "#F5A524" : "none"} stroke={importance >= lv ? "#F5A524" : "#CBD5E1"} strokeWidth="2" strokeLinejoin="round">
+                    <polygon points="12,2 15,9 22,10 17,15 18,22 12,18.5 6,22 7,15 2,10 9,9" />
+                  </svg>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="px-4 py-3 border-t border-gray-100">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-900">着手開始日</span>
+              <span className="text-[10px] text-gray-400">この日までは今日の一覧に出ない</span>
+            </div>
+            <div className="mt-2 flex gap-1.5 flex-wrap">
+              {START_PRESETS.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setStartMode(p.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium ${startMode === p.id ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"}`}
+                >{p.label}</button>
+              ))}
+            </div>
+            {startMode === "custom" && (
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="mt-2 w-full text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200"
+              />
+            )}
+            {computedStartDate && (
+              <div className="mt-1.5 text-[11px] text-gray-500">開始: {computedStartDate}</div>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <span className="text-sm text-gray-900">サブタスク</span>
+            <span className="text-[10px] text-gray-400">任意</span>
+          </div>
+          {subtasks.length > 0 && (
+            <div className="px-4 py-2 space-y-1.5">
+              {subtasks.map((s) => (
+                <div key={s.id} className="flex items-center gap-2">
+                  <button onClick={() => toggleSubtask(s.id)} className={`w-4 h-4 rounded border-2 flex-shrink-0 ${s.done ? "bg-emerald-500 border-emerald-500" : "border-gray-300"}`}>
+                    {s.done && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>}
+                  </button>
+                  <span className={`flex-1 text-sm ${s.done ? "line-through text-gray-400" : "text-gray-800"}`}>{s.title}</span>
+                  <button onClick={() => removeSubtask(s.id)} className="text-[11px] text-gray-400 hover:text-red-500">削除</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="px-4 py-2 flex items-center gap-2 border-t border-gray-100">
+            <input
+              type="text"
+              value={newSubtask}
+              onChange={(e) => setNewSubtask(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSubtask(); } }}
+              placeholder="サブタスクを追加"
+              className="flex-1 text-sm bg-transparent focus:outline-none"
+            />
+            <button onClick={addSubtask} className="text-xs text-blue-500 font-medium">追加</button>
+          </div>
+        </div>
+
         <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
           <div className="px-4 py-3 border-b border-gray-100">
-            <span className="text-sm mb-2 block">繰り返し</span>
+            <span className="text-sm text-gray-900 mb-2 block">繰り返し</span>
             <div className="flex gap-1.5 flex-wrap">
-              {RECUR.map((r) => <button key={r.id} onClick={() => setRecurrence(r.id)} className={`px-2.5 py-1.5 rounded-lg text-xs ${recurrence === r.id ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"}`}>{r.label}</button>)}
+              {RECUR.map((r) => (
+                <button key={r.id} onClick={() => setRecurrence(r.id)} className={`px-2.5 py-1.5 rounded-lg text-xs ${recurrence === r.id ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"}`}>{r.label}</button>
+              ))}
+              <button onClick={() => setRecurrence("daily")} className={`px-2.5 py-1.5 rounded-lg text-xs ${recurrence === "daily" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"}`}>毎日</button>
             </div>
           </div>
           {isTimetableCourse && (recurrence === "weekly" || recurrence === "biweekly") && (
             <>
               <div className="px-4 py-3 border-b border-gray-100">
-                <div className="text-sm mb-1">授業曜日（時間割から自動）</div>
+                <div className="text-sm mb-1 text-gray-900">授業曜日（時間割から自動）</div>
                 <div className="text-xs text-gray-500">{DAY[classDayOfWeek]}曜日</div>
               </div>
               <div className="px-4 py-3 border-b border-gray-100 grid grid-cols-3 gap-2 items-end">
@@ -193,7 +320,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
           )}
           {recurrence === "biweekly" && (
             <div className="px-4 py-3 border-b border-gray-100">
-              <label className="text-sm">間隔</label>
+              <label className="text-sm text-gray-900">間隔</label>
               <div className="mt-1 flex items-center gap-2 text-sm">
                 <input type="number" min={2} max={8} value={biweeklyInterval} onChange={(e) => setBiweeklyInterval(Number(e.target.value || 2))} className="w-20 text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />週間おき
               </div>
@@ -201,30 +328,21 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
           )}
           {recurrence !== "none" && (
             <div className="px-4 py-3 border-b border-gray-100">
-              <label className="text-sm">終了日</label>
+              <label className="text-sm text-gray-900">終了日</label>
               <input type="date" value={repeatEndDate} onChange={(e) => setRepeatEndDate(e.target.value)} className="w-full mt-1 text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />
               <div className="text-xs text-gray-400 mt-1">全{occurrenceCount}回</div>
             </div>
           )}
-          <div className="px-4 py-3 flex items-center justify-between"><span className="text-sm">通知アラーム</span><select value={reminder} onChange={(e) => setReminder(e.target.value)} className="text-sm">{REMINDERS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}</select></div>
-        </div>
-        {formError && <div className="mt-3 mx-4 text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{formError}</div>}
-        <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <span className="text-sm">タスク種別</span>
-            <select value={taskType || "single"} onChange={(e) => setTaskType(e.target.value as Task["taskType"])} className="text-sm">
-              <option value="single">単発</option><option value="mid">中期</option><option value="long">長期</option><option value="daily">毎日</option>
+          <div className="px-4 py-3 flex items-center justify-between">
+            <span className="text-sm text-gray-900">通知アラーム</span>
+            <select value={reminder} onChange={(e) => setReminder(e.target.value)} className="text-sm">
+              {REMINDERS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
             </select>
           </div>
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <span className="text-sm">見積時間（分）</span>
-            <input type="number" min={0} step={15} value={estimatedMinutes} onChange={(e) => setEstimatedMinutes(Number(e.target.value || 0))} className="w-28 px-2 py-1.5 rounded border border-gray-200 text-sm" />
-          </div>
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <span className="text-sm">重要度</span>
-            <select value={importance} onChange={(e) => setImportance(Number(e.target.value) as 1 | 2 | 3)} className="text-sm"><option value={1}>低</option><option value={2}>中</option><option value={3}>高</option></select>
-          </div>
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100"><div className="flex items-center gap-2"><IconFlag filled={priority} /><span className="text-sm">最優先</span></div><button onClick={() => setPriority(!priority)} className={`w-12 h-7 rounded-full relative ${priority ? "bg-red-500" : "bg-gray-300"}`}><div className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white ${priority ? "translate-x-5" : ""}`} /></button></div>
+        </div>
+        {formError && <div className="mt-3 mx-4 text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{formError}</div>}
+
+        <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
           <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="URL" className="w-full px-4 py-3 text-sm border-b border-gray-100" />
           <textarea value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="メモ" rows={3} className="w-full px-4 py-3 text-sm resize-none" />
         </div>

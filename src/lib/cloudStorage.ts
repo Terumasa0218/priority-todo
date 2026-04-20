@@ -52,14 +52,8 @@ export const loadCloudSnapshot = async (uid: string): Promise<AppSnapshot> => {
 export const saveCloudSnapshot = async (uid: string, payload: AppSnapshot): Promise<void> => {
   const ref = userDoc(uid);
   if (!ref) return;
-  await setDoc(
-    ref,
-    {
-      ...payload,
-      updatedAt: serverTimestamp(),
-    },
-    { merge: true }
-  );
+  const body: Record<string, unknown> = { ...payload, updatedAt: serverTimestamp() };
+  await setDoc(ref, body, { merge: true });
 };
 
 export const deleteCloudSnapshot = async (uid: string): Promise<void> => {
