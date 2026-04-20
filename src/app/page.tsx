@@ -16,7 +16,6 @@ import TodayView from "@/components/TodayView";
 import SegmentedTabs from "@/components/ui/SegmentedTabs";
 import SurfaceCard from "@/components/ui/SurfaceCard";
 import EmptyState from "@/components/ui/EmptyState";
-import { DayOverrides, ensureDayOverrides } from "@/lib/scoring";
 import { auth, firebaseEnabled, googleProvider } from "@/lib/firebase";
 import { signInWithPopup, signOut, onAuthStateChanged, signInWithRedirect, User, browserLocalPersistence, getRedirectResult, setPersistence } from "firebase/auth";
 import { deleteCloudSnapshot, loadCloudSnapshot, migrateLocalToCloudOnce, saveCloudSnapshot } from "@/lib/cloudStorage";
@@ -43,11 +42,9 @@ const migratePeriod = (period: string | number): string => {
 
 const withTaskDefaults = (task: Task): Task => ({
   ...task,
-  taskType: task.taskType || "single",
-  estimatedMinutes: task.estimatedMinutes ?? undefined,
-  loggedMinutes: task.loggedMinutes ?? 0,
   importance: task.importance ?? (task.priority ? 3 : 2),
-  lastWorkedAt: task.lastWorkedAt ?? null,
+  startDate: task.startDate ?? null,
+  subtasks: task.subtasks,
 });
 
 
@@ -57,7 +54,6 @@ export default function Home() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [timetable, setTimetable] = useState<TimetableItem[]>([]);
   const [timetableConfig, setTimetableConfig] = useState<TimetableConfig>(DEFAULT_TIMETABLE_CONFIG);
-  const [dayOverrides, setDayOverrides] = useState<DayOverrides | null>(null);
   const [view, setView] = useState<View>("list");
   const [activeFilter, setActiveFilter] = useState("today");
   const [catFilter, setCatFilter] = useState("all");
@@ -188,7 +184,6 @@ export default function Home() {
         setGroups(snapshot.groups);
         setTimetable(snapshot.timetable.map((it) => ({ ...it, period: migratePeriod(it.period as string | number) })));
         setTimetableConfig(snapshot.timetableConfig);
-        setDayOverrides(ensureDayOverrides(snapshot.dayOverrides));
         setReady(true);
       } finally {
         if (mounted) setSyncing(false);
@@ -203,12 +198,12 @@ export default function Home() {
   useEffect(() => {
     if (!ready || !user) return;
     const timer = setTimeout(() => {
-      saveCloudSnapshot(user.uid, { tasks, cats, groups, timetable, timetableConfig, dayOverrides: dayOverrides || undefined }).catch((err) => {
+      saveCloudSnapshot(user.uid, { tasks, cats, groups, timetable, timetableConfig }).catch((err) => {
         console.error("Cloud sync failed:", err);
       });
     }, 400);
     return () => clearTimeout(timer);
-  }, [tasks, cats, groups, timetable, timetableConfig, dayOverrides, ready, user]);
+  }, [tasks, cats, groups, timetable, timetableConfig, ready, user]);
 
   useEffect(() => {
     if (!ready || !user) return;
@@ -357,12 +352,11 @@ export default function Home() {
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, completed: false, completedAt: null } : t)));
   }, []);
 
-  const handleLogProgress = useCallback((task: Task, delta: number) => {
-    const now = new Date().toISOString();
+  const handleToggleSubtask = useCallback((task: Task, subtaskId: string) => {
     setTasks((prev) => prev.map((t) => {
       if (t.id !== (task.parentId || task.id)) return t;
-      const logged = Math.max(0, (t.loggedMinutes || 0) + delta);
-      return { ...t, loggedMinutes: logged, lastWorkedAt: now };
+      const subs = (t.subtasks || []).map((s) => s.id === subtaskId ? { ...s, done: !s.done } : s);
+      return { ...t, subtasks: subs };
     }));
   }, []);
 
@@ -642,11 +636,9 @@ export default function Home() {
               <TodayView
                 tasks={allExpanded.filter((t) => catFilter === "all" || (catFilter === "timetable_group" ? timetableCats.some((c) => c.id === t.category) : t.category === catFilter))}
                 cats={cats}
-                overrides={dayOverrides}
-                setOverrides={setDayOverrides}
                 onComplete={handleComplete}
                 onEdit={(t) => { setEditTask(t); setPrefillDate(null); setShowForm(true); }}
-                onLogProgress={handleLogProgress}
+                onToggleSubtask={handleToggleSubtask}
               />
             ) : sorted.length === 0 ? (
               <div className="px-4 py-8">

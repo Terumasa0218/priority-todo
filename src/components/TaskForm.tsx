@@ -1,9 +1,8 @@
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
-import { Task, Category, TimetableItem } from "@/lib/types";
+import { Task, Subtask, Category, TimetableItem } from "@/lib/types";
 import { RECUR, REMINDERS, DAY } from "@/lib/constants";
 import { uid, calcOccurrenceCount } from "@/lib/utils";
-import { pickTaskTypeDefault } from "@/lib/scoring";
 import CategoryPicker from "./CategoryPicker";
 
 interface TaskFormProps {
@@ -17,14 +16,28 @@ interface TaskFormProps {
   timetable: TimetableItem[];
 }
 
-const ESTIMATE_CHIPS = [15, 30, 60, 90, 120, 180];
+type StartMode = "immediate" | "d3" | "d7" | "d14" | "custom";
 
-const TASK_TYPES = [
-  { id: "single", label: "単発" },
-  { id: "mid", label: "中期" },
-  { id: "long", label: "長期" },
-  { id: "daily", label: "毎日" },
-] as const;
+const START_PRESETS: { id: StartMode; label: string; daysBefore: number | null }[] = [
+  { id: "immediate", label: "すぐ表示", daysBefore: null },
+  { id: "d3", label: "3日前から", daysBefore: 3 },
+  { id: "d7", label: "7日前から", daysBefore: 7 },
+  { id: "d14", label: "14日前から", daysBefore: 14 },
+  { id: "custom", label: "日付指定", daysBefore: null },
+];
+
+const toDateOnly = (iso: string): string => iso.slice(0, 10);
+
+const inferStartMode = (task: Task | null): StartMode => {
+  if (!task?.startDate) return "immediate";
+  const dl = new Date(task.deadline).getTime();
+  const st = new Date(task.startDate).getTime();
+  const days = Math.round((dl - st) / 86_400_000);
+  if (days === 3) return "d3";
+  if (days === 7) return "d7";
+  if (days === 14) return "d14";
+  return "custom";
+};
 
 export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate, cats, setCats, timetable }: TaskFormProps) {
   const isEdit = !!task;
@@ -48,13 +61,11 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const [reminder, setReminder] = useState(task?.reminder || "1day");
   const [memo, setMemo] = useState(task?.memo || "");
   const [url, setUrl] = useState(task?.url || "");
-  const [taskTypeOverride, setTaskTypeOverride] = useState<NonNullable<Task["taskType"]> | null>(task?.taskType || null);
-  const taskType: NonNullable<Task["taskType"]> = recurrence === "daily"
-    ? "daily"
-    : (taskTypeOverride || pickTaskTypeDefault(deadline));
-  const taskTypeTouched = taskTypeOverride !== null;
-  const [estimatedMinutes, setEstimatedMinutes] = useState<number>(task?.estimatedMinutes || 0);
   const [importance, setImportance] = useState<1 | 2 | 3>(task?.importance || (task?.priority ? 3 : 2));
+  const [startMode, setStartMode] = useState<StartMode>(inferStartMode(task));
+  const [customStartDate, setCustomStartDate] = useState<string>(task?.startDate ? toDateOnly(task.startDate) : "");
+  const [subtasks, setSubtasks] = useState<Subtask[]>(task?.subtasks || []);
+  const [newSubtask, setNewSubtask] = useState("");
   const [classDayOfWeek, setClassDayOfWeek] = useState<number>(task?.classDayOfWeek ?? new Date(task?.deadline || deadline).getDay());
   const [offsetDays, setOffsetDays] = useState<number>(task?.offsetDays ?? 0);
   const [offsetTime, setOffsetTime] = useState(task?.offsetTime || "23:59");
@@ -73,17 +84,6 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     setRepeatEndDate(d.toISOString().slice(0, 10));
   }, [recurrence, deadline, repeatEndDate]);
 
-  const chooseTaskType = (t: NonNullable<Task["taskType"]>) => {
-    setTaskTypeOverride(t);
-    if (t === "daily" && recurrence !== "daily") setRecurrence("daily");
-    if (t !== "daily" && recurrence === "daily") setRecurrence("none");
-  };
-
-  const chooseRecurrence = (r: Task["recurrence"]) => {
-    setRecurrence(r);
-    if (r === "daily") setTaskTypeOverride("daily");
-  };
-
   const selectedCat = cats.find((c) => c.id === category);
   const isTimetableCourse = !!selectedCat?.timetableId;
 
@@ -93,6 +93,16 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     const hit = timetable.find((t) => t.id === c.timetableId);
     if (hit) setClassDayOfWeek(hit.day);
   }, [category, cats, timetable, recurrence]);
+
+  const computedStartDate = useMemo(() => {
+    if (startMode === "immediate") return null;
+    if (startMode === "custom") return customStartDate || null;
+    const preset = START_PRESETS.find((p) => p.id === startMode);
+    if (!preset?.daysBefore) return null;
+    const d = new Date(deadline);
+    d.setDate(d.getDate() - preset.daysBefore);
+    return d.toISOString().slice(0, 10);
+  }, [startMode, customStartDate, deadline]);
 
   const preview = useMemo(() => {
     if (!isTimetableCourse || (recurrence !== "weekly" && recurrence !== "biweekly")) return "";
@@ -113,11 +123,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       deadline: new Date(deadline).toISOString(),
       category,
       priority: false,
-      taskType,
-      estimatedMinutes: estimatedMinutes > 0 ? estimatedMinutes : undefined,
-      loggedMinutes: task?.loggedMinutes || 0,
       importance,
-      lastWorkedAt: task?.lastWorkedAt || null,
       recurrence,
       repeatCount: task?.repeatCount || 15,
       repeatEndDate,
@@ -134,24 +140,38 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       offsetTime,
       biweeklyInterval,
     });
-  }, [recurrence, repeatEndDate, task, title, deadline, category, taskType, estimatedMinutes, importance, reminder, memo, url, classDayOfWeek, offsetDays, offsetTime, biweeklyInterval]);
+  }, [recurrence, repeatEndDate, task, title, deadline, category, importance, reminder, memo, url, classDayOfWeek, offsetDays, offsetTime, biweeklyInterval]);
+
+  const addSubtask = () => {
+    const v = newSubtask.trim();
+    if (!v) return;
+    setSubtasks((prev) => [...prev, { id: uid(), title: v, done: false }]);
+    setNewSubtask("");
+  };
+
+  const toggleSubtask = (id: string) => {
+    setSubtasks((prev) => prev.map((s) => (s.id === id ? { ...s, done: !s.done } : s)));
+  };
+
+  const removeSubtask = (id: string) => {
+    setSubtasks((prev) => prev.filter((s) => s.id !== id));
+  };
 
   const handleSave = () => {
     if (!title.trim()) { setShowError(true); setFormError("タイトルを入力してください"); return; }
     if (recurrence !== "none" && repeatEndDate && new Date(repeatEndDate).getTime() < new Date(deadline).getTime()) { setFormError("終了日は開始日以降に設定してください"); return; }
     if (recurrence === "biweekly" && (biweeklyInterval < 2 || biweeklyInterval > 8)) { setFormError("隔週の間隔は2〜8週間で入力してください"); return; }
+    if (startMode === "custom" && customStartDate && new Date(customStartDate).getTime() > new Date(deadline).getTime()) { setFormError("着手開始日は締切より前に設定してください"); return; }
     setFormError("");
     onSave({
       id: task?.parentId || task?.id || uid(),
       title: title.trim(),
       deadline: new Date(deadline).toISOString(),
       category,
-      priority: importance === 3, // 後方互換のため同期
-      taskType,
-      estimatedMinutes: estimatedMinutes > 0 ? estimatedMinutes : undefined,
-      loggedMinutes: task?.loggedMinutes || 0,
+      priority: importance === 3,
       importance,
-      lastWorkedAt: task?.lastWorkedAt || null,
+      startDate: computedStartDate || null,
+      subtasks: subtasks.length > 0 ? subtasks : undefined,
       recurrence,
       repeatCount: recurrence === "none" ? null : (task?.repeatCount || 15),
       repeatEndDate: recurrence === "none" ? null : repeatEndDate,
@@ -196,47 +216,11 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         </div>
 
         <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
-          <div className="px-4 py-3 border-b border-gray-100">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-900">タスク種別</span>
-              {!taskTypeTouched && <span className="text-[10px] text-gray-400">自動提案中</span>}
-            </div>
-            <div className="mt-2 flex gap-1.5 flex-wrap">
-              {TASK_TYPES.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => chooseTaskType(t.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium ${taskType === t.id ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"}`}
-                >{t.label}</button>
-              ))}
-            </div>
-          </div>
-          <div className="px-4 py-3 border-b border-gray-100">
-            <span className="text-sm text-gray-900 block">見積時間</span>
-            <div className="mt-2 flex gap-1.5 flex-wrap">
-              {ESTIMATE_CHIPS.map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setEstimatedMinutes(m)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium ${estimatedMinutes === m ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"}`}
-                >{m}分</button>
-              ))}
-              <div className="flex items-center gap-1">
-                <input
-                  type="number"
-                  min={0}
-                  step={15}
-                  value={estimatedMinutes && !ESTIMATE_CHIPS.includes(estimatedMinutes) ? estimatedMinutes : ""}
-                  onChange={(e) => setEstimatedMinutes(Number(e.target.value || 0))}
-                  placeholder="その他"
-                  className="w-16 px-2 py-1.5 rounded-lg border border-gray-200 text-xs"
-                />
-                <span className="text-[11px] text-gray-400">分</span>
-              </div>
-            </div>
-          </div>
           <div className="px-4 py-3 flex items-center justify-between">
-            <span className="text-sm text-gray-900">重要度</span>
+            <div>
+              <span className="text-sm text-gray-900">重要度</span>
+              <div className="text-[10px] text-gray-400">並び順には使われません（表示用）</div>
+            </div>
             <div className="flex items-center gap-1">
               {[1, 2, 3].map((lv) => (
                 <button
@@ -252,6 +236,63 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
               ))}
             </div>
           </div>
+          <div className="px-4 py-3 border-t border-gray-100">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-900">着手開始日</span>
+              <span className="text-[10px] text-gray-400">この日までは今日の一覧に出ない</span>
+            </div>
+            <div className="mt-2 flex gap-1.5 flex-wrap">
+              {START_PRESETS.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setStartMode(p.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium ${startMode === p.id ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"}`}
+                >{p.label}</button>
+              ))}
+            </div>
+            {startMode === "custom" && (
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="mt-2 w-full text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200"
+              />
+            )}
+            {computedStartDate && (
+              <div className="mt-1.5 text-[11px] text-gray-500">開始: {computedStartDate}</div>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <span className="text-sm text-gray-900">サブタスク</span>
+            <span className="text-[10px] text-gray-400">任意</span>
+          </div>
+          {subtasks.length > 0 && (
+            <div className="px-4 py-2 space-y-1.5">
+              {subtasks.map((s) => (
+                <div key={s.id} className="flex items-center gap-2">
+                  <button onClick={() => toggleSubtask(s.id)} className={`w-4 h-4 rounded border-2 flex-shrink-0 ${s.done ? "bg-emerald-500 border-emerald-500" : "border-gray-300"}`}>
+                    {s.done && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>}
+                  </button>
+                  <span className={`flex-1 text-sm ${s.done ? "line-through text-gray-400" : "text-gray-800"}`}>{s.title}</span>
+                  <button onClick={() => removeSubtask(s.id)} className="text-[11px] text-gray-400 hover:text-red-500">削除</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="px-4 py-2 flex items-center gap-2 border-t border-gray-100">
+            <input
+              type="text"
+              value={newSubtask}
+              onChange={(e) => setNewSubtask(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSubtask(); } }}
+              placeholder="サブタスクを追加"
+              className="flex-1 text-sm bg-transparent focus:outline-none"
+            />
+            <button onClick={addSubtask} className="text-xs text-blue-500 font-medium">追加</button>
+          </div>
         </div>
 
         <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
@@ -259,9 +300,9 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
             <span className="text-sm text-gray-900 mb-2 block">繰り返し</span>
             <div className="flex gap-1.5 flex-wrap">
               {RECUR.map((r) => (
-                <button key={r.id} onClick={() => chooseRecurrence(r.id)} className={`px-2.5 py-1.5 rounded-lg text-xs ${recurrence === r.id ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"}`}>{r.label}</button>
+                <button key={r.id} onClick={() => setRecurrence(r.id)} className={`px-2.5 py-1.5 rounded-lg text-xs ${recurrence === r.id ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"}`}>{r.label}</button>
               ))}
-              <button onClick={() => chooseRecurrence("daily")} className={`px-2.5 py-1.5 rounded-lg text-xs ${recurrence === "daily" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"}`}>毎日</button>
+              <button onClick={() => setRecurrence("daily")} className={`px-2.5 py-1.5 rounded-lg text-xs ${recurrence === "daily" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"}`}>毎日</button>
             </div>
           </div>
           {isTimetableCourse && (recurrence === "weekly" || recurrence === "biweekly") && (

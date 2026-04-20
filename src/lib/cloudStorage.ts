@@ -2,7 +2,6 @@ import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from "firebase/firest
 import { Category, Group, Task, TimetableConfig, TimetableItem } from "./types";
 import { DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG } from "./constants";
 import { db } from "./firebase";
-import { DayOverrides } from "./scoring";
 import {
   loadCategories,
   loadGroups,
@@ -17,7 +16,6 @@ export interface AppSnapshot {
   groups: Group[];
   timetable: TimetableItem[];
   timetableConfig: TimetableConfig;
-  dayOverrides?: DayOverrides;
 }
 
 const MIGRATION_PREFIX = "prioritodo_v6_migrated_";
@@ -28,7 +26,6 @@ const emptySnapshot: AppSnapshot = {
   groups: [],
   timetable: [],
   timetableConfig: DEFAULT_TIMETABLE_CONFIG,
-  dayOverrides: undefined,
 };
 
 const userDoc = (uid: string) => {
@@ -42,13 +39,6 @@ const normalizeSnapshot = (raw: Partial<AppSnapshot> | null | undefined): AppSna
   groups: Array.isArray(raw?.groups) ? raw.groups : [],
   timetable: Array.isArray(raw?.timetable) ? raw.timetable : [],
   timetableConfig: raw?.timetableConfig || DEFAULT_TIMETABLE_CONFIG,
-  dayOverrides: raw?.dayOverrides && typeof raw.dayOverrides === "object" && raw.dayOverrides.date
-    ? {
-      date: String(raw.dayOverrides.date),
-      skipped: Array.isArray(raw.dayOverrides.skipped) ? raw.dayOverrides.skipped : [],
-      pinned: Array.isArray(raw.dayOverrides.pinned) ? raw.dayOverrides.pinned : [],
-    }
-    : undefined,
 });
 
 export const loadCloudSnapshot = async (uid: string): Promise<AppSnapshot> => {
@@ -62,9 +52,7 @@ export const loadCloudSnapshot = async (uid: string): Promise<AppSnapshot> => {
 export const saveCloudSnapshot = async (uid: string, payload: AppSnapshot): Promise<void> => {
   const ref = userDoc(uid);
   if (!ref) return;
-  const { dayOverrides, ...rest } = payload;
-  const body: Record<string, unknown> = { ...rest, updatedAt: serverTimestamp() };
-  if (dayOverrides) body.dayOverrides = dayOverrides;
+  const body: Record<string, unknown> = { ...payload, updatedAt: serverTimestamp() };
   await setDoc(ref, body, { merge: true });
 };
 
