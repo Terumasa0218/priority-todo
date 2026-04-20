@@ -9,12 +9,7 @@ export interface Task {
   title: string;
   deadline: string; // ISO
   category: string; // カテゴリID
-  priority: boolean; // 旧フィールド。新規UIは廃止 (importance===3 に同期)
-  taskType?: "single" | "mid" | "long" | "daily";
-  estimatedMinutes?: number;
-  loggedMinutes?: number;
-  importance?: 1 | 2 | 3;
-  lastWorkedAt?: string | null;
+  priority: boolean; // 最優先（リスト先頭固定）
   startDate?: string | null; // 着手開始日 (ISO). 未指定なら即表示
   subtasks?: Subtask[];
   recurrence: "none" | "daily" | "weekly" | "biweekly" | "monthly";

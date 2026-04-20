@@ -61,7 +61,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const [reminder, setReminder] = useState(task?.reminder || "1day");
   const [memo, setMemo] = useState(task?.memo || "");
   const [url, setUrl] = useState(task?.url || "");
-  const [importance, setImportance] = useState<1 | 2 | 3>(task?.importance || (task?.priority ? 3 : 2));
+  const [priority, setPriority] = useState<boolean>(task?.priority || false);
   const [startMode, setStartMode] = useState<StartMode>(inferStartMode(task));
   const [customStartDate, setCustomStartDate] = useState<string>(task?.startDate ? toDateOnly(task.startDate) : "");
   const [subtasks, setSubtasks] = useState<Subtask[]>(task?.subtasks || []);
@@ -123,7 +123,6 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       deadline: new Date(deadline).toISOString(),
       category,
       priority: false,
-      importance,
       recurrence,
       repeatCount: task?.repeatCount || 15,
       repeatEndDate,
@@ -140,7 +139,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       offsetTime,
       biweeklyInterval,
     });
-  }, [recurrence, repeatEndDate, task, title, deadline, category, importance, reminder, memo, url, classDayOfWeek, offsetDays, offsetTime, biweeklyInterval]);
+  }, [recurrence, repeatEndDate, task, title, deadline, category, reminder, memo, url, classDayOfWeek, offsetDays, offsetTime, biweeklyInterval]);
 
   const addSubtask = () => {
     const v = newSubtask.trim();
@@ -168,8 +167,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       title: title.trim(),
       deadline: new Date(deadline).toISOString(),
       category,
-      priority: importance === 3,
-      importance,
+      priority,
       startDate: computedStartDate || null,
       subtasks: subtasks.length > 0 ? subtasks : undefined,
       recurrence,
@@ -218,23 +216,17 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
           <div className="px-4 py-3 flex items-center justify-between">
             <div>
-              <span className="text-sm text-gray-900">重要度</span>
-              <div className="text-[10px] text-gray-400">並び順には使われません（表示用）</div>
+              <span className="text-sm text-gray-900">最優先</span>
+              <div className="text-[10px] text-gray-400">リスト先頭に固定表示</div>
             </div>
-            <div className="flex items-center gap-1">
-              {[1, 2, 3].map((lv) => (
-                <button
-                  key={lv}
-                  onClick={() => setImportance(lv as 1 | 2 | 3)}
-                  aria-label={`重要度${lv}`}
-                  className="w-9 h-9 flex items-center justify-center"
-                >
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill={importance >= lv ? "#F5A524" : "none"} stroke={importance >= lv ? "#F5A524" : "#CBD5E1"} strokeWidth="2" strokeLinejoin="round">
-                    <polygon points="12,2 15,9 22,10 17,15 18,22 12,18.5 6,22 7,15 2,10 9,9" />
-                  </svg>
-                </button>
-              ))}
-            </div>
+            <button
+              onClick={() => setPriority((p) => !p)}
+              aria-label="最優先"
+              aria-pressed={priority}
+              className={`relative w-11 h-6 rounded-full transition-colors ${priority ? "bg-rose-500" : "bg-gray-300"}`}
+            >
+              <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${priority ? "translate-x-[22px]" : "translate-x-0.5"}`} />
+            </button>
           </div>
           <div className="px-4 py-3 border-t border-gray-100">
             <div className="flex items-center justify-between">
@@ -242,13 +234,23 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
               <span className="text-[10px] text-gray-400">この日までは今日の一覧に出ない</span>
             </div>
             <div className="mt-2 flex gap-1.5 flex-wrap">
-              {START_PRESETS.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setStartMode(p.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium ${startMode === p.id ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"}`}
-                >{p.label}</button>
-              ))}
+              {START_PRESETS.map((p) => {
+                const chipDate = p.daysBefore !== null ? (() => {
+                  const d = new Date(deadline);
+                  d.setDate(d.getDate() - p.daysBefore!);
+                  return `${d.getMonth() + 1}/${d.getDate()}`;
+                })() : null;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => setStartMode(p.id)}
+                    className={`flex flex-col items-center px-3 py-1.5 rounded-lg text-xs font-medium leading-tight ${startMode === p.id ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"}`}
+                  >
+                    <span>{p.label}</span>
+                    {chipDate && <span className="text-[9px] opacity-70 mt-0.5">{chipDate}</span>}
+                  </button>
+                );
+              })}
             </div>
             {startMode === "custom" && (
               <input
@@ -258,9 +260,13 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
                 className="mt-2 w-full text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200"
               />
             )}
-            {computedStartDate && (
-              <div className="mt-1.5 text-[11px] text-gray-500">開始: {computedStartDate}</div>
-            )}
+            <div className="mt-2 text-xs font-medium">
+              {computedStartDate ? (
+                <span className="text-blue-600">→ {(() => { const d = new Date(computedStartDate); return `${d.getMonth() + 1}/${d.getDate()}(${DAY[d.getDay()]})`; })()} から今日の一覧に表示</span>
+              ) : (
+                <span className="text-gray-400">→ すぐに今日の一覧に表示</span>
+              )}
+            </div>
           </div>
         </div>
 

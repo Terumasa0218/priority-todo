@@ -44,7 +44,6 @@ const TaskCard = ({
   const cat = cats.find((c) => c.id === task.category) || { label: "未分類", color: "#889096" };
   const facts = taskFacts(task, today);
   const sub = subtaskProgress(task);
-  const importance = task.importance ?? 2;
 
   const accent = facts.overdue
     ? "border-l-[3px] border-rose-500"
@@ -65,9 +64,6 @@ const TaskCard = ({
             {task.priority && <IconFlag filled size={12} />}
             <span className={`text-sm font-semibold truncate ${facts.overdue ? "text-rose-700" : "text-slate-900"}`}>{task.title}</span>
             {task.recurrence && task.recurrence !== "none" && <IconRepeat size={11} stroke="#94A3B8" />}
-            {importance === 3 && <span className="text-[10px] text-amber-600">★★★</span>}
-            {importance === 2 && <span className="text-[10px] text-amber-600">★★</span>}
-            {importance === 1 && <span className="text-[10px] text-amber-600">★</span>}
           </div>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
