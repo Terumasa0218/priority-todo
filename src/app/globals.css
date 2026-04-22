@@ -46,6 +46,17 @@ body {
   animation: taskShrink 0.35s 0.15s ease-in forwards;
 }
 
+@keyframes sheetSlideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes sheetFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.sheet-slide-up { animation: sheetSlideUp 0.22s cubic-bezier(.22,.82,.4,1) both; }
+.sheet-fade-in { animation: sheetFadeIn 0.18s ease-out both; }
+
 .prioritodo-app * {
   -webkit-touch-callout: none;
   -webkit-user-select: none;

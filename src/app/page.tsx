@@ -537,12 +537,8 @@ export default function Home() {
     );
   }
 
-  if (!authReady || syncing) {
-    return (
-      <div className="h-[100dvh] bg-background flex items-center justify-center p-6 text-center safe-top safe-bottom">
-        <p className="text-sm text-gray-500">データを同期中...</p>
-      </div>
-    );
+  if (!authReady) {
+    return <div className="h-[100dvh] bg-background safe-top safe-bottom" />;
   }
 
   if (!user) {
