@@ -29,6 +29,14 @@ body {
   overflow: hidden;
 }
 
+/* iOS ホーム画面追加時にステータスバー領域を避ける */
+.safe-top { padding-top: env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+.safe-x {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
 @keyframes taskShrink {
   0% { transform: scale(1); opacity: 1; }
   100% { transform: scale(0); opacity: 0; height: 0; padding: 0; margin: 0; border: none; overflow: hidden; }
