@@ -726,12 +726,12 @@ export default function Home() {
         </div>
       )}
       {showSettings && (
-        <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
-          <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
+        <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col safe-x" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
+          <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 safe-top">
             <button onClick={() => setShowSettings(false)} className="text-sm text-blue-500 font-medium">戻る</button>
             <span className="text-sm font-semibold text-gray-900">設定</span><div className="w-10" />
           </div>
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto safe-bottom">
             <div className="mt-4 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
               <div className="px-4 py-3.5 border-b border-gray-100 flex items-center justify-between"><span className="text-sm text-gray-900">壁紙</span><span className="text-sm text-gray-400">近日公開</span></div>
               <div className="px-4 py-3.5 border-b border-gray-100 flex items-center justify-between"><span className="text-sm text-gray-900">完了エフェクト</span><span className="text-sm text-gray-400">近日公開</span></div>
@@ -743,12 +743,12 @@ export default function Home() {
       )}
 
       {showHelp && (
-        <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
-          <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
+        <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col safe-x" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
+          <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 safe-top">
             <button onClick={() => setShowHelp(false)} className="text-sm text-blue-500 font-medium">戻る</button>
             <span className="text-sm font-semibold text-gray-900">使い方</span><div className="w-10" />
           </div>
-          <div className="flex-1 overflow-y-auto"><div className="mt-4 mx-4 space-y-4">
+          <div className="flex-1 overflow-y-auto safe-bottom"><div className="mt-4 mx-4 space-y-4">
             <div className="bg-white rounded-xl border border-gray-100 p-4"><h3 className="text-sm font-semibold text-gray-900 mb-2">PrioriTodoとは</h3><p className="text-xs text-gray-500 leading-relaxed">「次にやることが、すぐ分かる」をコンセプトにした優先順位自動整理タスク管理アプリです。締切が近い順に自動でソートされ、開いた瞬間に何をすべきか一目で分かります。</p></div>
             <div className="bg-white rounded-xl border border-gray-100 p-4"><h3 className="text-sm font-semibold text-gray-900 mb-2">基本操作</h3><div className="space-y-2 text-xs text-gray-500 leading-relaxed"><p><span className="font-medium text-gray-700">タスク追加：</span>右下の「+」ボタン、またはカレンダーの日付をタップ</p><p><span className="font-medium text-gray-700">完了：</span>チェックボックスをタップ</p><p><span className="font-medium text-gray-700">編集：</span>タスクをタップ</p><p><span className="font-medium text-gray-700">削除：</span>左にスワイプ（モバイル）/ 右クリック（PC）</p><p><span className="font-medium text-gray-700">並び替え：</span>長押しして上下にドラッグ</p></div></div>
             <div className="bg-white rounded-xl border border-gray-100 p-4"><h3 className="text-sm font-semibold text-gray-900 mb-2">最優先フラグ</h3><p className="text-xs text-gray-500 leading-relaxed">締切に関わらずリスト上部に固定表示されます。すぐにやらないといけないタスクに設定してください。</p></div>

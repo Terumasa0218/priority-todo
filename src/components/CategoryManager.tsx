@@ -29,13 +29,13 @@ export default function CategoryManager({ cats, setCats, onClose, onDeleteCatego
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
-      <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
+    <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col safe-x" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
+      <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 safe-top">
         <button onClick={onClose} className="text-sm text-blue-500 font-medium">戻る</button>
         <span className="text-sm font-semibold text-gray-900">カテゴリ管理</span>
         <div className="w-10" />
       </div>
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto safe-bottom">
         <p className="px-4 pt-4 pb-2 text-xs text-gray-400">カテゴリの名前や色を変更できます。</p>
         <div className="mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
           {cats.map((c, i) => (
