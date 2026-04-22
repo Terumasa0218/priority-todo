@@ -190,10 +190,12 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
 
   return (
     <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col safe-x" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
-      <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 safe-top">
-        <button onClick={onClose} className="text-sm text-blue-500 font-medium">キャンセル</button>
-        <span className="text-sm font-semibold text-gray-900">{isEdit ? "タスクの編集" : "新しいタスク"}</span>
-        <button onClick={handleSave} className="text-sm font-semibold text-blue-500">保存</button>
+      <div className="bg-white border-b border-gray-200 safe-top">
+        <div className="flex items-center justify-between px-4 py-3 min-h-[52px]">
+          <button onClick={onClose} className="text-sm text-blue-500 font-medium px-2 py-1 -mx-2">キャンセル</button>
+          <span className="text-sm font-semibold text-gray-900">{isEdit ? "タスクの編集" : "新しいタスク"}</span>
+          <button onClick={handleSave} className="text-sm font-bold text-white bg-blue-500 hover:bg-blue-600 px-4 py-1.5 rounded-full shadow-sm">保存</button>
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto pb-24 safe-bottom">
         <div className="mt-4 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">

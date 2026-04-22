@@ -37,6 +37,22 @@ body {
   padding-right: env(safe-area-inset-right);
 }
 
+/* iOS 入力時のオートズームを防ぐため、フォーム入力は 16px 以上に固定 */
+input[type="text"],
+input[type="number"],
+input[type="search"],
+input[type="email"],
+input[type="url"],
+input[type="tel"],
+input[type="password"],
+input[type="datetime-local"],
+input[type="date"],
+input[type="time"],
+textarea,
+select {
+  font-size: 16px;
+}
+
 @keyframes taskShrink {
   0% { transform: scale(1); opacity: 1; }
   100% { transform: scale(0); opacity: 0; height: 0; padding: 0; margin: 0; border: none; overflow: hidden; }
