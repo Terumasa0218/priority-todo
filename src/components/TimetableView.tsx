@@ -362,8 +362,8 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
       )}
 
       {showCustomize && (
-        <div className="fixed inset-0 z-50 bg-gray-50/95 flex flex-col" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
-          <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
+        <div className="fixed inset-0 z-50 bg-gray-50/95 flex flex-col safe-x" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
+          <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 safe-top">
             <button onClick={() => setShowCustomize(false)} className="text-sm text-blue-500 font-medium">キャンセル</button>
             <span className="text-sm font-semibold text-gray-900">時間割のカスタム</span>
             <button
@@ -408,13 +408,13 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
       )}
 
       {editing && (
-        <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
-          <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200">
+        <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col safe-x" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
+          <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 safe-top">
             <button onClick={() => setEditing(null)} className="text-sm text-blue-500 font-medium">キャンセル</button>
             <span className="text-sm font-semibold text-gray-900">{editing.mode === "edit" ? "授業の編集" : "授業の追加"}</span>
             <button onClick={handleSave} className="text-sm font-semibold text-blue-500">保存</button>
           </div>
-          <div className="flex-1 overflow-y-auto pb-24">
+          <div className="flex-1 overflow-y-auto pb-24 safe-bottom">
             <div className="mt-4 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
               <input
                 type="text"

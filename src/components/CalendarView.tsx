@@ -112,15 +112,11 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
       </div>
       </SurfaceCard>
       {selectedDate && (
-        <div className="fixed inset-0 z-50 flex items-end" role="dialog" aria-modal="true">
-          <div
-            className="absolute inset-0 bg-black/30 sheet-fade-in"
-            onClick={() => setSelectedDate(null)}
-          />
-          <div
-            className="relative w-full max-w-lg mx-auto bg-white rounded-t-3xl shadow-2xl sheet-slide-up flex flex-col"
-            style={{ maxHeight: "75dvh", paddingBottom: "env(safe-area-inset-bottom)" }}
-          >
+        <div
+          className="fixed inset-x-0 bottom-0 z-50 w-full max-w-lg mx-auto bg-white rounded-t-3xl shadow-2xl sheet-slide-up flex flex-col border-t border-slate-100"
+          style={{ maxHeight: "55dvh", paddingBottom: "env(safe-area-inset-bottom)" }}
+          role="dialog"
+        >
             <div className="flex items-center justify-center pt-2 pb-1">
               <div className="w-10 h-1 rounded-full bg-slate-200" />
             </div>
@@ -170,7 +166,6 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
               className="flex items-center justify-center gap-2 w-full px-4 py-3.5 text-sm font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 transition-colors border-t border-slate-100">
               <IconPlus size={15} />新しい予定の作成
             </button>
-          </div>
         </div>
       )}
     </div>
