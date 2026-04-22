@@ -112,48 +112,62 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
       </div>
       </SurfaceCard>
       {selectedDate && (
-        <div className="mt-3">
-          <div className="bg-slate-100 px-4 py-2.5 flex items-center justify-between rounded-t-2xl">
-            <span className="text-xs font-semibold text-gray-700">{fmtSel}</span>
-            <button onClick={() => setSelectedDate(null)} className="text-gray-400 hover:text-gray-600"><IconX size={14} /></button>
-          </div>
-          <div className="surface-card !rounded-t-none !shadow-none border-t-0 rounded-b-2xl bg-white">
-            {selTasks.length === 0 ? (
-              <EmptyState title="予定はありません" description="この日は余白です。追加して整えましょう。" className="!border-none !shadow-none !bg-transparent py-7" />
-            ) : (
-              selTasks.map((t) => {
-                const tc = cats.find((c) => c.id === t.category) || { label: "未分類", color: "#889096" };
-                const hasMemo = t.memo && t.memo.trim();
-                const hasUrl = t.url && t.url.trim();
-                return (
-                  <div key={t.id} onClick={() => onEditTask(t)}
-                    className="flex items-start gap-3 px-4 py-3 border-b border-gray-50 last:border-b-0 hover:bg-gray-50 cursor-pointer transition-colors">
-                    <div className="flex-shrink-0 w-12 text-right mt-0.5">
-                      <div className="text-xs font-medium text-gray-500">{fmtTime(t.deadline)}</div>
-                    </div>
-                    <div className="w-1 self-stretch rounded-full flex-shrink-0" style={{ backgroundColor: t.priority ? "#CD2B31" : tc.color, minHeight: "24px" }} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        {t.priority && <IconFlag filled size={11} />}
-                        <span className="text-sm text-gray-900 font-medium truncate">{t.title}</span>
-                        {t.recurrence && t.recurrence !== "none" && <IconRepeat size={11} stroke="#889096" />}
+        <div className="fixed inset-0 z-50 flex items-end" role="dialog" aria-modal="true">
+          <div
+            className="absolute inset-0 bg-black/30 sheet-fade-in"
+            onClick={() => setSelectedDate(null)}
+          />
+          <div
+            className="relative w-full max-w-lg mx-auto bg-white rounded-t-3xl shadow-2xl sheet-slide-up flex flex-col"
+            style={{ maxHeight: "75dvh", paddingBottom: "env(safe-area-inset-bottom)" }}
+          >
+            <div className="flex items-center justify-center pt-2 pb-1">
+              <div className="w-10 h-1 rounded-full bg-slate-200" />
+            </div>
+            <div className="px-4 pb-3 flex items-center justify-between">
+              <span className="text-sm font-semibold text-gray-900">{fmtSel}</span>
+              <button onClick={() => setSelectedDate(null)} aria-label="閉じる" className="text-gray-400 hover:text-gray-600 p-1.5 -mr-1.5">
+                <IconX size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {selTasks.length === 0 ? (
+                <EmptyState title="予定はありません" description="この日は余白です。追加して整えましょう。" className="!border-none !shadow-none !bg-transparent py-7" />
+              ) : (
+                selTasks.map((t) => {
+                  const tc = cats.find((c) => c.id === t.category) || { label: "未分類", color: "#889096" };
+                  const hasMemo = t.memo && t.memo.trim();
+                  const hasUrl = t.url && t.url.trim();
+                  return (
+                    <div key={t.id} onClick={() => onEditTask(t)}
+                      className="flex items-start gap-3 px-4 py-3 border-b border-gray-50 last:border-b-0 hover:bg-gray-50 cursor-pointer transition-colors">
+                      <div className="flex-shrink-0 w-12 text-right mt-0.5">
+                        <div className="text-xs font-medium text-gray-500">{fmtTime(t.deadline)}</div>
                       </div>
-                      <span className="text-[11px] text-gray-400">{tc.label}</span>
-                      {hasMemo && (
-                        <div className="mt-1 text-[11px] text-gray-400 leading-relaxed"
-                          style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } as React.CSSProperties}>
-                          {t.memo}
+                      <div className="w-1 self-stretch rounded-full flex-shrink-0" style={{ backgroundColor: t.priority ? "#CD2B31" : tc.color, minHeight: "24px" }} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          {t.priority && <IconFlag filled size={11} />}
+                          <span className="text-sm text-gray-900 font-medium truncate">{t.title}</span>
+                          {t.recurrence && t.recurrence !== "none" && <IconRepeat size={11} stroke="#889096" />}
                         </div>
-                      )}
-                      {hasUrl && <div className="mt-0.5 text-[10px] text-blue-400 truncate">{t.url.replace(/^https?:\/\//, "").slice(0, 35)}</div>}
+                        <span className="text-[11px] text-gray-400">{tc.label}</span>
+                        {hasMemo && (
+                          <div className="mt-1 text-[11px] text-gray-400 leading-relaxed"
+                            style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } as React.CSSProperties}>
+                            {t.memo}
+                          </div>
+                        )}
+                        {hasUrl && <div className="mt-0.5 text-[10px] text-blue-400 truncate">{t.url.replace(/^https?:\/\//, "").slice(0, 35)}</div>}
+                      </div>
+                      <IconChevR size={14} stroke="#ccc" className="mt-0.5" />
                     </div>
-                    <IconChevR size={14} stroke="#ccc" className="mt-0.5" />
-                  </div>
-                );
-              })
-            )}
+                  );
+                })
+              )}
+            </div>
             <button onClick={() => onAddClick(selectedDate)}
-              className="flex items-center justify-center gap-2 w-full px-4 py-3.5 text-sm font-medium text-slate-500 hover:bg-slate-50 transition-colors border-t border-slate-100">
+              className="flex items-center justify-center gap-2 w-full px-4 py-3.5 text-sm font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 transition-colors border-t border-slate-100">
               <IconPlus size={15} />新しい予定の作成
             </button>
           </div>
