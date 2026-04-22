@@ -539,7 +539,7 @@ export default function Home() {
 
   if (!authReady || syncing) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center p-6 text-center">
+      <div className="h-[100dvh] bg-background flex items-center justify-center p-6 text-center safe-top safe-bottom">
         <p className="text-sm text-gray-500">データを同期中...</p>
       </div>
     );
@@ -547,7 +547,7 @@ export default function Home() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center p-6 text-center">
+      <div className="h-[100dvh] bg-background flex items-center justify-center p-6 text-center safe-top safe-bottom safe-x">
         <div>
           <h1 className="text-lg font-bold text-gray-900">PrioriTodoへようこそ</h1>
           <p className="text-sm text-gray-500 mt-2">Googleでログインして、クラウド同期を有効化してください。</p>
@@ -617,8 +617,8 @@ export default function Home() {
   );
 
   return (
-    <div className="h-[100dvh] flex flex-col overflow-hidden bg-background prioritodo-app">
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-100">
+    <div className="h-[100dvh] flex flex-col overflow-hidden bg-background prioritodo-app safe-x">
+      <header className="sticky top-0 z-40 bg-white border-b border-slate-100 safe-top">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
           <div><h1 className="text-base font-bold text-gray-900 tracking-tight">PrioriTodo</h1><p className="text-[10px] text-gray-400 tracking-wide">次にやることが、すぐ分かる</p></div>
           <div className="flex items-center gap-2">
@@ -695,7 +695,11 @@ export default function Home() {
         {view === "completed" && <div><div className="px-4 py-3 flex items-center justify-between"><span className="text-sm font-semibold text-gray-900">達成済み</span><span className="text-[11px] text-gray-400">{completed.length}件</span></div><CompletedList tasks={completed} cats={cats} onRestore={handleRestore} /></div>}
       </div>
 
-      <button onClick={() => openNew(null)} className="fixed bottom-6 right-6 z-40 w-12 h-12 bg-gray-900 hover:bg-gray-800 text-white rounded-xl shadow-lg hover:shadow-xl transition-all active:scale-95 flex items-center justify-center"><IconPlus size={20} sw={2.5} /></button>
+      <button
+        onClick={() => openNew(null)}
+        className="fixed right-6 z-40 w-12 h-12 bg-gray-900 hover:bg-gray-800 text-white rounded-xl shadow-lg hover:shadow-xl transition-all active:scale-95 flex items-center justify-center"
+        style={{ bottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}
+      ><IconPlus size={20} sw={2.5} /></button>
       {showForm && <TaskForm task={editTask} prefillDate={prefillDate} cats={cats} setCats={setCats} timetable={timetable} onSave={handleSave} onDelete={handleDeleteFromForm} onClose={() => { setShowForm(false); setEditTask(null); setPrefillDate(null); }} />}
       {showCatMgr && <CategoryManager cats={cats} setCats={setCats} onDeleteCategory={(catId) => setTasks((prev) => prev.map((t) => (t.category === catId ? { ...t, category: "default" } : t)))} onClose={() => setShowCatMgr(false)} />}
 
