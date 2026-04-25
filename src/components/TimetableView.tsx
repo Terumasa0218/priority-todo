@@ -3,6 +3,7 @@ import React, { useMemo, useState } from "react";
 import { IconPencil } from "@/components/Icons";
 import { Category, Task, TimetableConfig, TimetableItem } from "@/lib/types";
 import { PALETTE } from "@/lib/constants";
+import { orderedPalette } from "@/lib/utils";
 import { uid } from "@/lib/utils";
 
 const DAYS = [
@@ -66,6 +67,14 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
 
   const periodOptions = useMemo(() => buildPeriodGroups(config.maxPeriod), [config.maxPeriod]);
 
+  const editingPalette = useMemo(() => {
+    const used = [
+      ...items.map((it) => it.color),
+      ...cats.map((c) => c.color),
+    ];
+    return orderedPalette(PALETTE, used, editing?.item.color);
+  }, [items, cats, editing?.item.color]);
+
   const normalizedItems = useMemo<TimetableItem[]>(
     () => items.map((it) => ({ ...it, period: normalizePeriod(String(it.period)) })),
     [items]
@@ -107,6 +116,8 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
   const todayPending = tasks.filter((t) => !t.completed && new Date(t.deadline).toDateString() === new Date().toDateString()).length;
 
   const openCreate = (day: number, period: string) => {
+    const used = [...items.map((it) => it.color), ...cats.map((c) => c.color)];
+    const defaultColor = orderedPalette(PALETTE, used)[0];
     setEditing({
       mode: "create",
       item: {
@@ -116,7 +127,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
         period,
         teacher: "",
         room: "",
-        color: PALETTE[4],
+        color: defaultColor,
         absenceLimit: 5,
         attendanceAbsent: 0,
         attendanceLate: 0,
@@ -473,7 +484,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
               <div className="px-4 py-3">
                 <span className="text-sm text-gray-900 block mb-2">色</span>
                 <div className="flex gap-1.5 flex-wrap">
-                  {PALETTE.map((co) => (
+                  {editingPalette.map((co) => (
                     <button
                       key={co}
                       onClick={() => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, color: co } } : prev)}
@@ -490,34 +501,50 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
               <>
                 <div className="mt-4 mx-4 bg-white rounded-xl border border-gray-100">
                   <div className="px-4 py-3 border-b border-gray-100 text-sm font-semibold text-gray-900">出欠</div>
-                  <div className="px-4 py-3 grid grid-cols-3 gap-2 text-center">
+                  <div className="px-4 py-3 grid grid-cols-3 gap-2">
                     {([
                       ["attendancePresent", "出席"],
                       ["attendanceAbsent", "欠席"],
                       ["attendanceLate", "遅刻"],
                     ] as const).map(([k, label]) => (
-                      <button
-                        key={k}
-                        onClick={() => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, [k]: (prev.item[k] || 0) + 1 } } : prev)}
-                        onContextMenu={(e) => { e.preventDefault(); setEditing((prev) => prev ? { ...prev, item: { ...prev.item, [k]: Math.max(0, (prev.item[k] || 0) - 1) } } : prev); }}
-                        className="rounded-xl border border-gray-200 py-2.5 bg-gray-50 active:bg-gray-100"
-                      >
+                      <div key={k} className="rounded-xl border border-gray-200 bg-gray-50 px-2 py-2 flex flex-col items-center">
                         <div className="text-xs text-gray-500">{label}</div>
-                        <div className="text-base font-semibold mt-0.5">{editing.item[k] || 0}</div>
-                      </button>
+                        <div className="mt-1 flex items-center gap-2">
+                          <button
+                            type="button"
+                            aria-label={`${label}を1減らす`}
+                            onClick={() => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, [k]: Math.max(0, (prev.item[k] || 0) - 1) } } : prev)}
+                            className="w-7 h-7 rounded-full bg-white border border-gray-200 text-gray-600 text-base leading-none active:bg-gray-100"
+                          >−</button>
+                          <span className="text-base font-semibold w-6 text-center tabular-nums">{editing.item[k] || 0}</span>
+                          <button
+                            type="button"
+                            aria-label={`${label}を1増やす`}
+                            onClick={() => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, [k]: (prev.item[k] || 0) + 1 } } : prev)}
+                            className="w-7 h-7 rounded-full bg-white border border-gray-200 text-gray-600 text-base leading-none active:bg-gray-100"
+                          >+</button>
+                        </div>
+                      </div>
                     ))}
                   </div>
                   <div className="px-4 py-3 border-t border-gray-100">
-                    <label className="text-xs text-gray-500 block">欠席上限
-                      <input
-                        type="number"
-                        min={1}
-                        max={30}
-                        value={editing.item.absenceLimit ?? 5}
-                        onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, absenceLimit: Number(e.target.value || 5) } } : prev)}
-                        className="w-full mt-1 border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                      />
-                    </label>
+                    <div className="text-xs text-gray-500">欠席上限</div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <button
+                        type="button"
+                        aria-label="欠席上限を1減らす"
+                        onClick={() => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, absenceLimit: Math.max(1, (prev.item.absenceLimit ?? 5) - 1) } } : prev)}
+                        className="w-8 h-8 rounded-full bg-gray-50 border border-gray-200 text-gray-600 text-lg leading-none active:bg-gray-100"
+                      >−</button>
+                      <span className="text-base font-semibold w-8 text-center tabular-nums">{editing.item.absenceLimit ?? 5}</span>
+                      <button
+                        type="button"
+                        aria-label="欠席上限を1増やす"
+                        onClick={() => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, absenceLimit: Math.min(30, (prev.item.absenceLimit ?? 5) + 1) } } : prev)}
+                        className="w-8 h-8 rounded-full bg-gray-50 border border-gray-200 text-gray-600 text-lg leading-none active:bg-gray-100"
+                      >+</button>
+                      <span className="ml-2 text-[11px] text-gray-400">回まで</span>
+                    </div>
                     <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                       <div className="h-full bg-rose-300 rounded-full transition-all" style={{ width: `${Math.min(100, ((editing.item.attendanceAbsent ?? 0) / Math.max(editing.item.absenceLimit ?? 5, 1)) * 100)}%` }} />
                     </div>

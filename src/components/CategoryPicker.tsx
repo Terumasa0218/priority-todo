@@ -1,8 +1,8 @@
 "use client";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Category } from "@/lib/types";
 import { PALETTE } from "@/lib/constants";
-import { uid } from "@/lib/utils";
+import { orderedPalette, uid } from "@/lib/utils";
 import { IconPlus, IconCheck, IconChevD } from "./Icons";
 
 interface CategoryPickerProps {
@@ -16,8 +16,14 @@ export default function CategoryPicker({ cats, setCats, selected, onSelect }: Ca
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newLabel, setNewLabel] = useState("");
-  const [newColor, setNewColor] = useState(PALETTE[4]);
+  const palette = useMemo(() => orderedPalette(PALETTE, cats.map((c) => c.color)), [cats]);
+  const [newColor, setNewColor] = useState(palette[0]);
   const current = cats.find((c) => c.id === selected) || cats[0] || { label: "未分類", color: "#889096" };
+
+  const startCreating = () => {
+    setNewColor(palette[0]);
+    setCreating(true);
+  };
 
   const handleCreate = () => {
     if (!newLabel.trim()) return;
@@ -53,7 +59,7 @@ export default function CategoryPicker({ cats, setCats, selected, onSelect }: Ca
             </div>
           ))}
           {!creating ? (
-            <button onClick={() => setCreating(true)} className="flex items-center gap-2 px-4 py-2.5 w-full text-sm text-blue-500 hover:bg-blue-50 transition-colors border-t border-gray-100">
+            <button onClick={startCreating} className="flex items-center gap-2 px-4 py-2.5 w-full text-sm text-blue-500 hover:bg-blue-50 transition-colors border-t border-gray-100">
               <IconPlus size={14} /> 新しいカテゴリを作成
             </button>
           ) : (
@@ -64,7 +70,7 @@ export default function CategoryPicker({ cats, setCats, selected, onSelect }: Ca
                 autoFocus onKeyDown={(e) => e.key === "Enter" && handleCreate()}
               />
               <div className="flex gap-1.5 flex-wrap">
-                {PALETTE.map((c) => (
+                {palette.map((c) => (
                   <button key={c} onClick={() => setNewColor(c)}
                     className={`w-6 h-6 rounded-full transition-all ${newColor === c ? "ring-2 ring-offset-1 ring-gray-900 scale-110" : ""}`}
                     style={{ backgroundColor: c }}
