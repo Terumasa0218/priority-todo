@@ -1,4 +1,5 @@
 import { DAY } from "./constants";
+import { isHoliday } from "./holidays";
 import { Task } from "./types";
 
 export const uid = () =>
@@ -110,6 +111,18 @@ export const calcOccurrenceCount = (task: Task): number => {
   return count;
 };
 
+// occurrence 個別の startDate を返す。task.startOffsetDays が設定されていれば
+// 締切から N 日前を起点にする。そうでなければ親 task.startDate を継承。
+const occurrenceStartDate = (task: Task, deadline: Date): string | null | undefined => {
+  if (typeof task.startOffsetDays === "number") {
+    const start = new Date(deadline);
+    start.setDate(start.getDate() - task.startOffsetDays);
+    start.setHours(0, 0, 0, 0);
+    return start.toISOString();
+  }
+  return task.startDate;
+};
+
 export function expandRecurring(task: Task, horizonDate: Date): Task[] {
   if (!task.recurrence || task.recurrence === "none") return [task];
   const results: Task[] = [];
@@ -128,6 +141,7 @@ export function expandRecurring(task: Task, horizonDate: Date): Task[] {
       id: `${task.id}_${current.getTime()}`,
       parentId: task.id,
       deadline: current.toISOString(),
+      startDate: occurrenceStartDate(task, current),
       isOccurrence: true,
     });
   };
@@ -139,10 +153,13 @@ export function expandRecurring(task: Task, horizonDate: Date): Task[] {
     const classDate = firstClassDay(base, task.classDayOfWeek);
     let count = 0;
     while (classDate <= effectiveEnd && count < 240) {
-      const due = new Date(classDate);
-      due.setDate(due.getDate() + offsetDays);
-      due.setHours(hh || 0, mm || 0, 0, 0);
-      if (due <= effectiveEnd) pushOccurrence(due);
+      // 時間割由来の繰り返しは、授業日が祝日に当たる回はスキップ（休講扱い）
+      if (!isHoliday(classDate)) {
+        const due = new Date(classDate);
+        due.setDate(due.getDate() + offsetDays);
+        due.setHours(hh || 0, mm || 0, 0, 0);
+        if (due <= effectiveEnd) pushOccurrence(due);
+      }
       classDate.setDate(classDate.getDate() + (task.recurrence === "biweekly" ? Math.max(2, task.biweeklyInterval ?? 2) * 7 : 7));
       count += 1;
     }
