@@ -2,6 +2,7 @@
 import React from "react";
 import { Task, Category } from "@/lib/types";
 import { DAY } from "@/lib/constants";
+import { holidayName } from "@/lib/holidays";
 import { IconChevL, IconChevR, IconX, IconPlus, IconFlag, IconRepeat } from "./Icons";
 import SurfaceCard from "./ui/SurfaceCard";
 import SectionHeader from "./ui/SectionHeader";
@@ -53,6 +54,7 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
   const fmtSel = selectedDate
     ? `${selectedDate.getFullYear()}年${selectedDate.getMonth() + 1}月${selectedDate.getDate()}日(${DAY[selectedDate.getDay()]})`
     : "";
+  const selHoliday = selectedDate ? holidayName(selectedDate) : null;
 
   const fmtTime = (d: string) => {
     const o = new Date(d);
@@ -83,6 +85,11 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
           const dt = day ? tasksOn(day) : [];
           const sel = isSel(day);
           const tod = isToday(day);
+          const dow = day != null ? new Date(y, m, day).getDay() : -1;
+          const hName = day != null ? holidayName(new Date(y, m, day)) : null;
+          const isRed = dow === 0 || hName !== null;
+          const isBlue = dow === 6;
+          const dayColor = tod ? "" : isRed ? "text-rose-500" : isBlue ? "text-blue-500" : "text-gray-700";
           return (
             <div
               key={idx}
@@ -92,8 +99,9 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
             >
               {day && (
                 <>
-                  <div className="text-[11px] leading-none mb-1.5 flex justify-center">
-                    <span className={`inline-flex items-center justify-center ${tod ? "w-5 h-5 rounded-full bg-blue-500 text-white font-bold" : sel ? "font-bold text-gray-900" : "text-gray-700"}`}>{day}</span>
+                  <div className="text-[11px] leading-none mb-1 flex flex-col items-center gap-0.5">
+                    <span className={`inline-flex items-center justify-center ${tod ? "w-5 h-5 rounded-full bg-blue-500 text-white font-bold" : `${dayColor} ${sel ? "font-bold" : ""}`}`}>{day}</span>
+                    {hName && <span className="text-[9px] text-rose-500 leading-none truncate max-w-full" title={hName}>{hName.length > 4 ? `${hName.slice(0, 3)}…` : hName}</span>}
                   </div>
                   <div className="space-y-0.5">
                     {dt.slice(0, 2).map((t) => {
@@ -121,7 +129,10 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
               <div className="w-10 h-1 rounded-full bg-slate-200" />
             </div>
             <div className="px-4 pb-3 flex items-center justify-between">
-              <span className="text-sm font-semibold text-gray-900">{fmtSel}</span>
+              <div className="flex items-baseline gap-2 min-w-0">
+                <span className="text-sm font-semibold text-gray-900">{fmtSel}</span>
+                {selHoliday && <span className="text-[11px] text-rose-500 font-medium truncate">{selHoliday}</span>}
+              </div>
               <button onClick={() => setSelectedDate(null)} aria-label="閉じる" className="text-gray-400 hover:text-gray-600 p-1.5 -mr-1.5">
                 <IconX size={16} />
               </button>

@@ -541,6 +541,18 @@ export default function Home() {
     return <div className="h-[100dvh] bg-background safe-top safe-bottom" />;
   }
 
+  // 初回ログイン直後（ローカルキャッシュ無し かつ 同期未完）は文言付きスプラッシュ。
+  // 2回目以降はローカルキャッシュが即時反映されるのでここを通らない。
+  const hasLocalData = tasks.length > 0 || cats.length > 1 || timetable.length > 0;
+  if (user && !ready && !hasLocalData) {
+    return (
+      <div className="h-[100dvh] bg-background flex flex-col items-center justify-center p-6 text-center safe-top safe-bottom safe-x">
+        <div className="w-8 h-8 rounded-full border-2 border-gray-200 border-t-gray-900 animate-spin" />
+        <p className="mt-4 text-sm text-gray-500">ユーザーの情報を取得しています...</p>
+      </div>
+    );
+  }
+
   if (!user) {
     return (
       <div className="h-[100dvh] bg-background flex items-center justify-center p-6 text-center safe-top safe-bottom safe-x">

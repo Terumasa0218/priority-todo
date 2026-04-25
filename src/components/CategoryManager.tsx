@@ -1,7 +1,8 @@
 "use client";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Category } from "@/lib/types";
 import { PALETTE } from "@/lib/constants";
+import { orderedPalette } from "@/lib/utils";
 import { IconTrash } from "./Icons";
 
 interface CategoryManagerProps {
@@ -15,6 +16,10 @@ export default function CategoryManager({ cats, setCats, onClose, onDeleteCatego
   const [eid, setEid] = useState<string | null>(null);
   const [eLabel, setELabel] = useState("");
   const [eColor, setEColor] = useState("");
+  const palette = useMemo(
+    () => orderedPalette(PALETTE, cats.map((c) => c.color), eColor),
+    [cats, eColor],
+  );
 
   const startEdit = (c: Category) => {
     setEid(c.id);
@@ -45,7 +50,7 @@ export default function CategoryManager({ cats, setCats, onClose, onDeleteCatego
                   <input type="text" value={eLabel} onChange={(e) => setELabel(e.target.value)}
                     className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-gray-400" autoFocus />
                   <div className="flex gap-1.5 flex-wrap">
-                    {PALETTE.map((co) => (
+                    {palette.map((co) => (
                       <button key={co} onClick={() => setEColor(co)}
                         className={`w-6 h-6 rounded-full transition-all ${eColor === co ? "ring-2 ring-offset-1 ring-gray-900 scale-110" : ""}`}
                         style={{ backgroundColor: co }}

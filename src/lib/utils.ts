@@ -4,6 +4,22 @@ import { Task } from "./types";
 export const uid = () =>
   Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
 
+// 使用済みの色をパレットの末尾に回す。excludeSelf には現在編集中の色を渡すと
+// 「自分の色」は使用済み扱いせず元の位置に残せる。
+export function orderedPalette(palette: string[], usedColors: Iterable<string>, excludeSelf?: string): string[] {
+  const usedSet = new Set<string>();
+  for (const c of usedColors) {
+    if (c && c !== excludeSelf) usedSet.add(c);
+  }
+  const unused: string[] = [];
+  const used: string[] = [];
+  for (const c of palette) {
+    if (usedSet.has(c)) used.push(c);
+    else unused.push(c);
+  }
+  return [...unused, ...used];
+}
+
 export function fmt(d: string) {
   const o = new Date(d);
   return `${o.getMonth() + 1}/${o.getDate()} (${DAY[o.getDay()]}) ${String(o.getHours()).padStart(2, "0")}:${String(o.getMinutes()).padStart(2, "0")}`;
