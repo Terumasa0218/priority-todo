@@ -44,6 +44,7 @@ const migratePeriod = (period: string | number): string => {
 const withTaskDefaults = (task: Task): Task => ({
   ...task,
   startDate: task.startDate ?? null,
+  startOffsetDays: task.startOffsetDays ?? null,
   subtasks: task.subtasks,
 });
 
