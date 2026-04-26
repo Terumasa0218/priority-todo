@@ -51,9 +51,3 @@ export const taskFacts = (task: Task, today: Date = new Date()): TaskFacts => {
   const startingToday = !!task.startDate && diffDays(today, new Date(task.startDate)) === 0;
   return { overdue, dueToday, daysToDue, started, startingToday };
 };
-
-export const subtaskProgress = (task: Task): { done: number; total: number } => {
-  const subs = task.subtasks || [];
-  const done = subs.filter((s) => s.done).length;
-  return { done, total: subs.length };
-};

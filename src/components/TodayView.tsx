@@ -1,7 +1,7 @@
 "use client";
 import React, { useMemo } from "react";
 import { Task, Category } from "@/lib/types";
-import { isActiveOn, isOverdue, isDueToday, taskFacts, subtaskProgress } from "@/lib/scoring";
+import { isActiveOn, isOverdue, isDueToday, taskFacts } from "@/lib/scoring";
 import { fmt, remaining, urgColor } from "@/lib/utils";
 import { IconFlag, IconRepeat } from "./Icons";
 import EmptyState from "./ui/EmptyState";
@@ -11,7 +11,6 @@ interface TodayViewProps {
   cats: Category[];
   onComplete: (task: Task) => void;
   onEdit: (task: Task) => void;
-  onToggleSubtask: (task: Task, subtaskId: string) => void;
 }
 
 const Badge = ({ tone, children }: { tone: "red" | "orange" | "blue" | "gray"; children: React.ReactNode }) => {
@@ -24,26 +23,61 @@ const Badge = ({ tone, children }: { tone: "red" | "orange" | "blue" | "gray"; c
   return <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${tones[tone]}`}>{children}</span>;
 };
 
+const fmtTime = (iso: string) => {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+
+const EventCard = ({
+  task,
+  cats,
+  onEdit,
+}: {
+  task: Task;
+  cats: Category[];
+  onEdit: (task: Task) => void;
+}) => {
+  const cat = cats.find((c) => c.id === task.category) || { label: "未分類", color: "#889096" };
+  const start = fmtTime(task.deadline);
+  const end = task.endTime ? fmtTime(task.endTime) : null;
+
+  return (
+    <div className="surface-card px-4 py-3 cursor-pointer" onClick={() => onEdit(task)}>
+      <div className="flex items-start gap-3">
+        <div className="flex-shrink-0 w-1 self-stretch rounded-full" style={{ backgroundColor: cat.color, minHeight: "32px" }} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-sm font-semibold text-slate-900 truncate">{task.title}</span>
+            <Badge tone="blue">予定</Badge>
+          </div>
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <span className="text-xs text-slate-500">{cat.label}</span>
+            <span className="text-xs text-slate-300">•</span>
+            <span className="text-xs font-medium text-slate-700 tabular-nums">{start}{end ? `–${end}` : ""}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const TaskCard = ({
   task,
   cats,
   onComplete,
   onEdit,
-  onToggleSubtask,
   today,
 }: {
   task: Task;
   cats: Category[];
   onComplete: (task: Task) => void;
   onEdit: (task: Task) => void;
-  onToggleSubtask: (task: Task, subtaskId: string) => void;
   today: Date;
 }) => {
   const rem = remaining(task.deadline);
   const uc = urgColor(rem.u);
   const cat = cats.find((c) => c.id === task.category) || { label: "未分類", color: "#889096" };
   const facts = taskFacts(task, today);
-  const sub = subtaskProgress(task);
 
   const accent = facts.overdue
     ? "border-l-[3px] border-rose-500"
@@ -80,31 +114,18 @@ const TaskCard = ({
             {!facts.overdue && !facts.dueToday && facts.daysToDue !== null && facts.daysToDue <= 3 && <Badge tone="orange">締切{facts.daysToDue}日</Badge>}
             {task.priority && <Badge tone="red">最優先</Badge>}
             {facts.startingToday && <Badge tone="blue">今日から着手</Badge>}
-            {sub.total > 0 && <Badge tone="gray">{sub.done}/{sub.total}</Badge>}
           </div>
-          {task.subtasks && task.subtasks.length > 0 && (
-            <div className="mt-2 pl-1 space-y-1" onClick={(e) => e.stopPropagation()}>
-              {task.subtasks.map((s) => (
-                <div key={s.id} className="flex items-center gap-2">
-                  <button onClick={() => onToggleSubtask(task, s.id)} className={`w-3.5 h-3.5 rounded border-[1.5px] flex-shrink-0 ${s.done ? "bg-emerald-500 border-emerald-500" : "border-gray-300"}`}>
-                    {s.done && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20,6 9,17 4,12" /></svg>}
-                  </button>
-                  <span className={`text-[12px] ${s.done ? "line-through text-gray-400" : "text-gray-700"}`}>{s.title}</span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
     </div>
   );
 };
 
-export default function TodayView({ tasks, cats, onComplete, onEdit, onToggleSubtask }: TodayViewProps) {
+export default function TodayView({ tasks, cats, onComplete, onEdit }: TodayViewProps) {
   const today = useMemo(() => new Date(), []);
   const list = useMemo(() => {
     const active = tasks.filter((t) => !t.completed && isActiveOn(t, today));
-    const shown = active.filter((t) => isOverdue(t, today) || isDueToday(t, today) || t.priority || (t.startDate && isActiveOn(t, today)) || !t.startDate);
+    const shown = active.filter((t) => isOverdue(t, today) || isDueToday(t, today) || t.priority || (t.startDate && isActiveOn(t, today)) || !t.startDate || t.kind === "event");
     return shown.sort((a, b) => {
       const ao = isOverdue(a, today);
       const bo = isOverdue(b, today);
@@ -127,15 +148,9 @@ export default function TodayView({ tasks, cats, onComplete, onEdit, onToggleSub
   return (
     <div className="px-4 py-3 space-y-2">
       {list.map((t) => (
-        <TaskCard
-          key={t.id}
-          task={t}
-          cats={cats}
-          today={today}
-          onComplete={onComplete}
-          onEdit={onEdit}
-          onToggleSubtask={onToggleSubtask}
-        />
+        t.kind === "event"
+          ? <EventCard key={t.id} task={t} cats={cats} onEdit={onEdit} />
+          : <TaskCard key={t.id} task={t} cats={cats} today={today} onComplete={onComplete} onEdit={onEdit} />
       ))}
     </div>
   );

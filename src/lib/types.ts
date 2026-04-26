@@ -1,22 +1,22 @@
-export interface Subtask {
-  id: string;
-  title: string;
-  done: boolean;
-}
-
 export interface Task {
   id: string;
   title: string;
-  deadline: string; // ISO
+  // "todo" = やること（締切ベース、完了チェックあり、優先順位ソート対象）
+  // "event" = 予定（バイト・面接など。完了チェックなし、時刻幅で表示）
+  kind?: "todo" | "event"; // 未指定なら "todo"
+  deadline: string; // ISO（todo: 締切、event: 開始時刻）
+  endTime?: string;  // ISO。event のときだけ意味を持つ（終了時刻）
   category: string; // カテゴリID
   priority: boolean; // 最優先（リスト先頭固定）
   startDate?: string | null; // 着手開始日 (ISO). 未指定なら即表示
   // 締切から N 日前を着手開始日とする規則。繰り返しタスクでは各 occurrence の
   // 締切から再計算される。null/undefined のときは startDate を直接使用（旧仕様互換）。
   startOffsetDays?: number | null;
-  subtasks?: Subtask[];
   recurrence: "none" | "daily" | "weekly" | "biweekly" | "monthly";
   classDayOfWeek?: number; // 0-6
+  // 授業の初回授業日 (ISO yyyy-mm-dd)。時間割カテゴリの繰り返し展開で使う。
+  // 未指定なら deadline + classDayOfWeek から最初の授業日を推定（後方互換）。
+  classStartDate?: string;
   offsetDays?: number;
   offsetTime?: string;
   biweeklyInterval?: number;

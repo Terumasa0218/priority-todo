@@ -150,7 +150,11 @@ export function expandRecurring(task: Task, horizonDate: Date): Task[] {
     const base = new Date(task.deadline);
     const offsetDays = task.offsetDays ?? 0;
     const [hh, mm] = (task.offsetTime || "23:59").split(":").map(Number);
-    const classDate = firstClassDay(base, task.classDayOfWeek);
+    // 授業の初回授業日: classStartDate が指定されていればそれを使用。
+    // 未指定なら deadline と classDayOfWeek から推定（後方互換）。
+    const classDate = task.classStartDate
+      ? new Date(`${task.classStartDate}T00:00:00`)
+      : firstClassDay(base, task.classDayOfWeek);
     let count = 0;
     while (classDate <= effectiveEnd && count < 240) {
       // 時間割由来の繰り返しは、授業日が祝日に当たる回はスキップ（休講扱い）

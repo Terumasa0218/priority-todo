@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useRef } from "react";
 import { Task, Category } from "@/lib/types";
 import { DAY } from "@/lib/constants";
 import { holidayName } from "@/lib/holidays";
@@ -61,6 +61,26 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
     return `${String(o.getHours()).padStart(2, "0")}:${String(o.getMinutes()).padStart(2, "0")}`;
   };
 
+  // 横スワイプで月を切り替える
+  const swipeStartX = useRef<number | null>(null);
+  const swipeStartY = useRef<number | null>(null);
+  const onTouchStart = (e: React.TouchEvent) => {
+    swipeStartX.current = e.touches[0].clientX;
+    swipeStartY.current = e.touches[0].clientY;
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (swipeStartX.current == null || swipeStartY.current == null) return;
+    const dx = e.changedTouches[0].clientX - swipeStartX.current;
+    const dy = e.changedTouches[0].clientY - swipeStartY.current;
+    swipeStartX.current = null;
+    swipeStartY.current = null;
+    // 横方向が縦方向の 2 倍以上で 50px 超えたら月送り
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 2) {
+      if (dx < 0) setMonth(new Date(y, m + 1));
+      else setMonth(new Date(y, m - 1));
+    }
+  };
+
   return (
     <div>
       <SectionHeader
@@ -74,7 +94,7 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
           </div>
         }
       />
-      <SurfaceCard className="p-3">
+      <SurfaceCard className="p-3" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       <div className="grid grid-cols-7 mb-1">
         {DAY.map((d, i) => (
           <div key={d} className={`text-center text-xs font-semibold py-1.5 ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-gray-400"}`}>{d}</div>
@@ -106,8 +126,15 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
                   <div className="space-y-0.5">
                     {dt.slice(0, 2).map((t) => {
                       const tc = cats.find((c) => c.id === t.category);
+                      const isEvent = t.kind === "event";
                       return (
-                        <div key={t.id} className="calendar-task-bar text-[10px] leading-tight truncate px-1 py-[1px] rounded text-white" style={{ backgroundColor: t.priority ? "#CD2B31" : (tc?.color || "#889096") }}>{t.title}</div>
+                        <div
+                          key={t.id}
+                          className="calendar-task-bar text-[10px] leading-tight truncate px-1 py-[1px] rounded"
+                          style={isEvent
+                            ? { backgroundColor: "#fff", color: tc?.color || "#889096", border: `1px solid ${tc?.color || "#889096"}` }
+                            : { backgroundColor: t.priority ? "#CD2B31" : (tc?.color || "#889096"), color: "#fff" }}
+                        >{t.title}</div>
                       );
                     })}
                     {dt.length > 2 && <div className="text-[9px] px-0.5 text-gray-400">+{dt.length - 2}件</div>}
@@ -145,11 +172,15 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
                   const tc = cats.find((c) => c.id === t.category) || { label: "未分類", color: "#889096" };
                   const hasMemo = t.memo && t.memo.trim();
                   const hasUrl = t.url && t.url.trim();
+                  const isEvent = t.kind === "event";
+                  const timeLabel = isEvent && t.endTime
+                    ? `${fmtTime(t.deadline)}–${fmtTime(t.endTime)}`
+                    : fmtTime(t.deadline);
                   return (
                     <div key={t.id} onClick={() => onEditTask(t)}
                       className="flex items-start gap-3 px-4 py-3 border-b border-gray-50 last:border-b-0 hover:bg-gray-50 cursor-pointer transition-colors">
-                      <div className="flex-shrink-0 w-12 text-right mt-0.5">
-                        <div className="text-xs font-medium text-gray-500">{fmtTime(t.deadline)}</div>
+                      <div className={`flex-shrink-0 ${isEvent && t.endTime ? "w-20" : "w-12"} text-right mt-0.5`}>
+                        <div className="text-xs font-medium text-gray-500 tabular-nums">{timeLabel}</div>
                       </div>
                       <div className="w-1 self-stretch rounded-full flex-shrink-0" style={{ backgroundColor: t.priority ? "#CD2B31" : tc.color, minHeight: "24px" }} />
                       <div className="flex-1 min-w-0">
@@ -157,6 +188,7 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
                           {t.priority && <IconFlag filled size={11} />}
                           <span className="text-sm text-gray-900 font-medium truncate">{t.title}</span>
                           {t.recurrence && t.recurrence !== "none" && <IconRepeat size={11} stroke="#889096" />}
+                          {isEvent && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-sky-100 text-sky-700">予定</span>}
                         </div>
                         <span className="text-[11px] text-gray-400">{tc.label}</span>
                         {hasMemo && (
