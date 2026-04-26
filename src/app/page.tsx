@@ -43,9 +43,9 @@ const migratePeriod = (period: string | number): string => {
 
 const withTaskDefaults = (task: Task): Task => ({
   ...task,
+  kind: task.kind ?? "todo",
   startDate: task.startDate ?? null,
   startOffsetDays: task.startOffsetDays ?? null,
-  subtasks: task.subtasks,
 });
 
 
@@ -325,12 +325,17 @@ export default function Home() {
   const sorted = useMemo(() => {
     const now = Date.now();
     const fDays = FILTERS.find((f) => f.id === activeFilter)?.days ?? 7;
-    let list = [...allExpanded];
+    // 予定（event）で終了時刻が過去のものはアクティブリストから除外
+    let list = allExpanded.filter((t) => {
+      if (t.kind !== "event") return true;
+      const endTs = t.endTime ? new Date(t.endTime).getTime() : new Date(t.deadline).getTime() + 3_600_000;
+      return endTs >= now;
+    });
     if (fDays !== Infinity) {
       const end = activeFilter === "today" ? new Date(new Date().setHours(23, 59, 59, 999)).getTime() : now + fDays * 864e5;
       list = list.filter((t) => new Date(t.deadline).getTime() <= end);
     }
-    allExpanded.filter((t) => new Date(t.deadline).getTime() < now).forEach((t) => {
+    allExpanded.filter((t) => t.kind !== "event" && new Date(t.deadline).getTime() < now).forEach((t) => {
       if (!list.find((l) => l.id === t.id)) list.push(t);
     });
     if (catFilter === "timetable_group") {
@@ -378,6 +383,7 @@ export default function Home() {
   }, []);
 
   const handleComplete = useCallback((task: Task) => {
+    if (task.kind === "event") return; // 予定は完了の概念なし
     if (task.isOccurrence) {
       const k = task.deadline.slice(0, 16);
       setTasks((prev) => prev.map((t) => (t.id === task.parentId ? { ...t, completedOccurrences: [...(t.completedOccurrences || []), k] } : t)));
@@ -389,14 +395,6 @@ export default function Home() {
 
   const handleRestore = useCallback((id: string) => {
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, completed: false, completedAt: null } : t)));
-  }, []);
-
-  const handleToggleSubtask = useCallback((task: Task, subtaskId: string) => {
-    setTasks((prev) => prev.map((t) => {
-      if (t.id !== (task.parentId || task.id)) return t;
-      const subs = (t.subtasks || []).map((s) => s.id === subtaskId ? { ...s, done: !s.done } : s);
-      return { ...t, subtasks: subs };
-    }));
   }, []);
 
   const handleDeleteTask = useCallback((task: Task) => {
@@ -739,7 +737,6 @@ export default function Home() {
                 cats={cats}
                 onComplete={handleComplete}
                 onEdit={(t) => { setEditTask(t); setPrefillDate(null); setShowForm(true); }}
-                onToggleSubtask={handleToggleSubtask}
               />
             ) : sorted.length === 0 ? (
               <div className="px-4 py-8">
