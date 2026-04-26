@@ -611,7 +611,7 @@ export default function Home() {
             <button
               onClick={handleGoogleLogin}
             disabled={authBusy}
-            className="mt-4 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-medium disabled:opacity-60"
+            className="mt-4 px-4 py-2 rounded-lg bg-[#007AFF] hover:bg-[#0062CC] text-white text-sm font-medium disabled:opacity-60 active:scale-[0.98] transition-transform"
           >
             {authBusy ? "ログイン処理中..." : "Googleでログイン"}
           </button>
@@ -699,7 +699,7 @@ export default function Home() {
                 {timetableCats.length > 0 && (
                   <button
                     onClick={() => { setCatFilter("timetable_group"); setShowCourseFilters(true); }}
-                    className={`flex items-center gap-1.5 px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === "timetable_group" || timetableCats.some((tc) => tc.id === catFilter) ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-50"}`}
+                    className={`flex items-center gap-1.5 px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === "timetable_group" || timetableCats.some((tc) => tc.id === catFilter) ? "bg-[#007AFF] text-white" : "text-gray-500 hover:bg-gray-50"}`}
                   >
                     <span className="text-[13px]">📚</span>
                     授業
@@ -759,7 +759,7 @@ export default function Home() {
 
       <button
         onClick={() => openNew(null)}
-        className="fixed right-6 z-40 w-12 h-12 bg-gray-900 hover:bg-gray-800 text-white rounded-xl shadow-lg hover:shadow-xl transition-all active:scale-95 flex items-center justify-center"
+        className="fixed right-6 z-40 w-14 h-14 bg-[#007AFF] hover:bg-[#0062CC] text-white rounded-full shadow-lg hover:shadow-xl transition-all active:scale-95 flex items-center justify-center"
         style={{ bottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}
       ><IconPlus size={20} sw={2.5} /></button>
       {showForm && <TaskForm task={editTask} prefillDate={prefillDate} cats={cats} setCats={setCats} timetable={timetable} onSave={handleSave} onDelete={handleDeleteFromForm} onClose={() => { setShowForm(false); setEditTask(null); setPrefillDate(null); }} />}
@@ -786,7 +786,7 @@ export default function Home() {
                   return [...withoutTimetable, ...fromTimetable];
                 });
                 setPendingImport(null); clearShareQuery();
-              }} className="px-3 py-1.5 text-xs rounded bg-gray-900 text-white">インポート</button>
+              }} className="px-3 py-1.5 text-xs rounded bg-[#007AFF] text-white">インポート</button>
             </div>
           </div>
         </div>

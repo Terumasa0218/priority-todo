@@ -59,7 +59,7 @@ export default function CategoryManager({ cats, setCats, onClose, onDeleteCatego
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => setEid(null)} className="flex-1 py-2 rounded-lg text-xs font-medium text-gray-500 bg-gray-100">取消</button>
-                    <button onClick={saveEdit} className="flex-1 py-2 rounded-lg text-xs font-medium text-white bg-gray-900">保存</button>
+                    <button onClick={saveEdit} className="flex-1 py-2 rounded-lg text-xs font-medium text-white bg-[#007AFF]">保存</button>
                   </div>
                 </div>
               ) : (
