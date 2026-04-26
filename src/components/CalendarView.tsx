@@ -4,7 +4,6 @@ import { Task, Category } from "@/lib/types";
 import { DAY } from "@/lib/constants";
 import { holidayName } from "@/lib/holidays";
 import { IconChevL, IconChevR, IconX, IconPlus, IconFlag, IconRepeat } from "./Icons";
-import SurfaceCard from "./ui/SurfaceCard";
 import SectionHeader from "./ui/SectionHeader";
 import EmptyState from "./ui/EmptyState";
 
@@ -85,7 +84,7 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
     <div>
       <SectionHeader
         title={`${y}年 ${m + 1}月`}
-        className="mb-2"
+        className="mb-2 px-4"
         action={
           <div className="flex items-center gap-1">
             <button onClick={() => setMonth(new Date(y, m - 1))} className="min-h-11 min-w-11 p-2 hover:bg-slate-100 rounded-xl" aria-label="前の月"><IconChevL size={16} /></button>
@@ -93,13 +92,13 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
           </div>
         }
       />
-      <SurfaceCard className="p-3" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <div className="grid grid-cols-7 mb-1">
+      <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <div className="grid grid-cols-7 mb-1 px-1">
         {DAY.map((d, i) => (
           <div key={d} className={`text-center text-xs font-semibold py-1.5 ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-gray-400"}`}>{d}</div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-px bg-slate-100 border border-slate-100 rounded-2xl overflow-hidden">
+      <div className="grid grid-cols-7 gap-px bg-slate-100 border-y border-slate-100 overflow-hidden">
         {cells.map((day, idx) => {
           const dt = day ? tasksOn(day) : [];
           const sel = isSel(day);
@@ -144,7 +143,7 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
           );
         })}
       </div>
-      </SurfaceCard>
+      </div>
       {selectedDate && (
         <div
           className="fixed inset-x-0 bottom-0 z-50 w-full max-w-lg mx-auto bg-white rounded-t-3xl shadow-2xl sheet-slide-up flex flex-col border-t border-slate-100"
