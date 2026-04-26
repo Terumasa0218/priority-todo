@@ -61,6 +61,14 @@ const inferStartMode = (task: Task | null): StartMode => {
 
 const fmtDateMD = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`;
 const fmtDateMDW = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}(${DAY[d.getDay()]})`;
+const toDateTimeLocal = (d: Date): string => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${y}-${m}-${day}T${hh}:${mm}`;
+};
 
 // 共通 UI ヘルパー（コンポーネント外で定義してリレンダー時の再マウントを防ぐ）
 const Card = ({ children }: { children: React.ReactNode }) => (
@@ -113,6 +121,20 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   }, [classCountStr]);
   const [showError, setShowError] = useState(false);
   const [formError, setFormError] = useState("");
+
+  const deadlineDate = deadline.slice(0, 10);
+  const deadlineTime = deadline.slice(11, 16) || "23:59";
+
+  const updateDeadlineDate = (nextDate: string) => {
+    if (!nextDate) return;
+    setDeadline(`${nextDate}T${deadlineTime}`);
+  };
+
+  const updateDeadlineTime = (nextTime: string) => {
+    if (!nextTime) return;
+    const baseDate = deadlineDate || toDateTimeLocal(new Date()).slice(0, 10);
+    setDeadline(`${baseDate}T${nextTime}`);
+  };
 
   const selectedCat = cats.find((c) => c.id === category);
   const isTimetableCourse = !!selectedCat?.timetableId;
@@ -217,13 +239,12 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   }, [recurrence, repeatEndDate, isTimetableRecurring, classCount, task, title, deadline, category, reminder, memo, url, classDayOfWeek, biweeklyInterval]);
 
   const handleSave = () => {
-    if (!title.trim()) { setShowError(true); setFormError("タイトルを入力してください"); return; }
+    if (!title.trim()) { setShowError(true); setFormError(kind === "event" ? "予定名を入力してください" : "タスク名を入力してください"); return; }
     if (kind === "event") {
       if (endTime && new Date(endTime).getTime() < new Date(deadline).getTime()) { setFormError("終了時刻は開始時刻より後にしてください"); return; }
     } else {
       if (recurrence !== "none" && !isTimetableRecurring && repeatEndDate && new Date(repeatEndDate).getTime() < new Date(deadline).getTime()) { setFormError("最終締切日は初回締切日以降に設定してください"); return; }
       if (recurrence === "biweekly" && (biweeklyInterval < 2 || biweeklyInterval > 8)) { setFormError("隔週の間隔は2〜8週間で入力してください"); return; }
-      if (startMode === "custom" && customStartDate && new Date(customStartDate).getTime() > new Date(deadline).getTime()) { setFormError("タスク表示開始日は締切より前に設定してください"); return; }
       if (isTimetableRecurring && !classStartDate) { setFormError("授業の開始日を入力してください"); return; }
     }
     setFormError("");
@@ -254,9 +275,8 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       return;
     }
 
-    const preset = START_PRESETS.find((p) => p.id === startMode);
-    const startOffsetDays: number | null = preset?.daysBefore != null ? preset.daysBefore : null;
-    const startDate: string | null = computedStartDateForFirstOccurrence;
+    const startOffsetDays: number | null = null;
+    const startDate: string | null = null;
 
     onSave({
       id: task?.parentId || task?.id || uid(),
@@ -322,7 +342,12 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     <Card>
       <div className="px-4 py-3">
         <label className="block text-sm mb-2 text-gray-900 font-medium">締切</label>
-        <input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} className="w-full text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />
+        <div className="grid grid-cols-3 gap-2">
+          <div className="col-span-2">
+            <DatePickerField value={deadlineDate} onChange={updateDeadlineDate} placeholder="締切日を選択" />
+          </div>
+          <input type="time" value={deadlineTime} onChange={(e) => updateDeadlineTime(e.target.value)} className="w-full text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />
+        </div>
       </div>
     </Card>
   );
@@ -332,7 +357,12 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     <Card>
       <div className="px-4 py-3 border-b border-gray-100">
         <label className="block text-sm mb-2 text-gray-900 font-medium">開始時刻</label>
-        <input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} className="w-full text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />
+        <div className="grid grid-cols-3 gap-2">
+          <div className="col-span-2">
+            <DatePickerField value={deadlineDate} onChange={updateDeadlineDate} placeholder="開始日を選択" />
+          </div>
+          <input type="time" value={deadlineTime} onChange={(e) => updateDeadlineTime(e.target.value)} className="w-full text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />
+        </div>
       </div>
       <div className="px-4 py-3">
         <label className="block text-sm mb-2 text-gray-900 font-medium">終了時刻 <span className="text-[10px] text-gray-400 font-normal">任意</span></label>
@@ -464,7 +494,12 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       </div>
       <div className="px-4 py-3">
         <label className="block text-sm mb-2 text-gray-900 font-medium">初回締切日</label>
-        <input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} className="w-full text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />
+        <div className="grid grid-cols-3 gap-2">
+        <div className="col-span-2">
+          <DatePickerField value={deadlineDate} onChange={updateDeadlineDate} placeholder="初回締切日を選択" />
+        </div>
+        <input type="time" value={deadlineTime} onChange={(e) => updateDeadlineTime(e.target.value)} className="w-full text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />
+      </div>
         <div className="text-[11px] text-gray-400 mt-1">第1回の課題提出日。以降の回はこれを基準に自動展開（祝日は休講としてスキップ）</div>
       </div>
     </Card>
@@ -475,7 +510,12 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     <Card>
       <div className="px-4 py-3 border-b border-gray-100">
         <label className="block text-sm mb-2 text-gray-900 font-medium">初回締切日</label>
-        <input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} className="w-full text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />
+        <div className="grid grid-cols-3 gap-2">
+          <div className="col-span-2">
+            <DatePickerField value={deadlineDate} onChange={updateDeadlineDate} placeholder="初回締切日を選択" />
+          </div>
+          <input type="time" value={deadlineTime} onChange={(e) => updateDeadlineTime(e.target.value)} className="w-full text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />
+        </div>
       </div>
       {recurrence === "biweekly" && (
         <div className="px-4 py-3 border-b border-gray-100">
@@ -502,17 +542,29 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
           onChange={(v) => setRepeatEndDate(v)}
           min={toDateOnly(deadline)}
           isDateDisabled={(d) => {
-            // 毎週/隔週: 初回締切と同じ曜日のみ選択可
-            if (recurrence === "weekly" || recurrence === "biweekly") {
-              return d.getDay() !== new Date(deadline).getDay();
+            if (d.getTime() < new Date(toDateOnly(deadline)).getTime()) return true;
+            if (recurrence === "daily") return false;
+
+            const first = new Date(toDateOnly(deadline));
+            const candidate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+            const cur = new Date(first);
+            let guard = 0;
+            while (cur.getTime() <= candidate.getTime() && guard < 240) {
+              if (cur.getTime() === candidate.getTime()) return false;
+              if (recurrence === "weekly") cur.setDate(cur.getDate() + 7);
+              else if (recurrence === "biweekly") cur.setDate(cur.getDate() + Math.max(2, biweeklyInterval) * 7);
+              else if (recurrence === "monthly") cur.setMonth(cur.getMonth() + 1);
+              else break;
+              guard += 1;
             }
-            return false;
+            return recurrence === "weekly" || recurrence === "biweekly" || recurrence === "monthly";
           }}
           placeholder="最終回の締切日を選択"
         />
         <div className="text-xs text-gray-400 mt-1">
           全{occurrenceCount}回
-          {(recurrence === "weekly" || recurrence === "biweekly") && "（初回と同じ曜日のみ選択可）"}
+          {(recurrence === "weekly" || recurrence === "biweekly") && "（繰り返し日に一致する日付のみ選択可）"
+          || (recurrence === "monthly" && "（毎月の繰り返し日に一致する日付のみ選択可）")}
         </div>
       </div>
     </Card>
@@ -538,7 +590,6 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       sections.push(NormalRecurringScheduleBlock);
     }
     sections.push(PriorityCard);
-    sections.push(StartDateCard);
     sections.push(ReminderCard);
     sections.push(UrlMemoCard);
     return sections;
@@ -566,12 +617,17 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
             className={`w-full px-4 py-3.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none border-b ${showError && !title.trim() ? "border-red-300 bg-red-50/50" : "border-gray-100"}`}
             autoFocus
           />
+          {showError && !title.trim() && (
+            <div className="px-4 py-2 text-xs text-red-500 border-b border-red-100 bg-red-50/40">
+              {kind === "event" ? "予定名を入力してください" : "タスク名を入力してください"}
+            </div>
+          )}
           <CategoryPicker cats={cats} setCats={setCats} selected={category} onSelect={setCategory} />
         </div>
 
         {renderSections()}
 
-        {formError && <div className="mt-3 mx-4 text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{formError}</div>}
+        {formError && !(showError && !title.trim()) && <div className="mt-3 mx-4 text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{formError}</div>}
         <div className="h-24" />
       </div>
       {isEdit && <div className="flex items-center justify-end px-4 py-3 bg-white border-t border-gray-200"><button onClick={() => onDelete(task!.parentId || task!.id)} className="text-sm text-red-500 font-medium">削除</button></div>}
