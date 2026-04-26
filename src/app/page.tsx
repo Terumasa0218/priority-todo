@@ -519,6 +519,29 @@ export default function Home() {
     window.location.reload();
   };
 
+  const handleResetSemester = () => {
+    if (timetable.length === 0 && timetableCats.length === 0) {
+      window.alert("リセットする時間割がありません。");
+      return;
+    }
+    const ttCatIds = new Set(timetableCats.map((c) => c.id));
+    const linkedTasks = tasks.filter((t) => ttCatIds.has(t.category)).length;
+    const ok = window.confirm(
+      `学期をリセットします。\n\n` +
+      `・時間割 ${timetable.length} コマ\n` +
+      `・授業カテゴリ ${timetableCats.length} 件\n` +
+      `・関連する繰り返しタスク ${linkedTasks} 件\n\n` +
+      `すべて削除されます。よろしいですか？（取り消せません）`
+    );
+    if (!ok) return;
+    setTasks((prev) => prev.filter((t) => !ttCatIds.has(t.category)));
+    setCats((prev) => prev.filter((c) => !c.timetableId));
+    setTimetable([]);
+    setShowSettings(false);
+    setCatFilter("all");
+    setShowCourseFilters(false);
+  };
+
   const handleShareTimetable = async (): Promise<string | null> => {
     if (timetable.length === 0) return null;
     const token = createTimetableShareToken(timetable);
@@ -667,11 +690,41 @@ export default function Home() {
             </div>
             <SurfaceCard className="mx-4 mb-2 px-3 py-2 space-y-1.5 !rounded-2xl">
               <div className="flex gap-1.5 overflow-x-auto">
-                <button onClick={() => setCatFilter("all")} className={`px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === "all" ? "bg-gray-200 text-gray-900" : "text-gray-400 hover:text-gray-600"}`}>すべて</button>
-                {cats.map((c) => <button key={c.id} onClick={() => setCatFilter(c.id)} className={`flex items-center gap-1.5 px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === c.id ? "text-white" : "text-gray-500 hover:bg-gray-50"}`} style={catFilter === c.id ? { backgroundColor: c.color } : {}}><span className="w-2 h-2 rounded-full" style={{ backgroundColor: catFilter === c.id ? "rgba(255,255,255,0.7)" : c.color }} />{c.label}</button>)}
+                <button
+                  onClick={() => { setCatFilter("all"); setShowCourseFilters(false); }}
+                  className={`px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === "all" ? "bg-gray-200 text-gray-900" : "text-gray-400 hover:text-gray-600"}`}
+                >
+                  すべて
+                </button>
+                {timetableCats.length > 0 && (
+                  <button
+                    onClick={() => { setCatFilter("timetable_group"); setShowCourseFilters(true); }}
+                    className={`flex items-center gap-1.5 px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === "timetable_group" || timetableCats.some((tc) => tc.id === catFilter) ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-50"}`}
+                  >
+                    <span className="text-[13px]">📚</span>
+                    授業
+                    <span className="text-[10px] opacity-70">{timetableCats.length}</span>
+                  </button>
+                )}
+                {cats.filter((c) => !c.timetableId).map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => { setCatFilter(c.id); setShowCourseFilters(false); }}
+                    className={`flex items-center gap-1.5 px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === c.id ? "text-white" : "text-gray-500 hover:bg-gray-50"}`}
+                    style={catFilter === c.id ? { backgroundColor: c.color } : {}}
+                  >
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: catFilter === c.id ? "rgba(255,255,255,0.7)" : c.color }} />{c.label}
+                  </button>
+                ))}
               </div>
               {showCourseFilters && timetableCats.length > 0 && (
-                <div className="flex gap-1.5 overflow-x-auto pb-1">
+                <div className="flex gap-1.5 overflow-x-auto pb-1 pt-1 border-t border-gray-100">
+                  <button
+                    onClick={() => setCatFilter("timetable_group")}
+                    className={`px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === "timetable_group" ? "bg-gray-200 text-gray-900" : "text-gray-400 hover:text-gray-600"}`}
+                  >
+                    授業すべて
+                  </button>
                   {timetableCats.map((c) => (
                     <button key={c.id} onClick={() => setCatFilter(c.id)} className={`flex items-center gap-1.5 px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === c.id ? "text-white" : "text-gray-500 hover:bg-gray-50"}`} style={catFilter === c.id ? { backgroundColor: c.color } : {}}>
                       <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: catFilter === c.id ? "rgba(255,255,255,0.7)" : c.color }} />{c.label}
@@ -750,7 +803,22 @@ export default function Home() {
               <div className="px-4 py-3.5 border-b border-gray-100 flex items-center justify-between"><span className="text-sm text-gray-900">完了エフェクト</span><span className="text-sm text-gray-400">近日公開</span></div>
               <div className="px-4 py-3.5 flex items-center justify-between"><span className="text-sm text-gray-900">言語</span><span className="text-sm text-gray-400">日本語</span></div>
             </div>
-            <div className="mx-4 mt-4"><button onClick={handleResetAllData} className="text-sm text-red-600 font-semibold min-h-11">データを初期化</button></div><p className="px-4 pt-3 text-xs text-gray-400">今後のアップデートで壁紙テーマやパーティクルエフェクトのカスタマイズが追加されます。</p>
+
+            <div className="mt-4 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
+              <div className="px-4 py-3 border-b border-gray-100">
+                <div className="text-sm font-semibold text-gray-900">学期の切り替え</div>
+                <div className="text-xs text-gray-500 mt-1 leading-relaxed">時間割と授業カテゴリ、それに紐づく繰り返しタスクを一括で削除します。新しい学期の準備にどうぞ。</div>
+              </div>
+              <button
+                onClick={handleResetSemester}
+                className="w-full px-4 py-3 text-left text-sm font-medium text-rose-600 active:bg-rose-50 min-h-11"
+              >
+                学期をリセットする
+              </button>
+            </div>
+
+            <div className="mx-4 mt-4"><button onClick={handleResetAllData} className="text-sm text-red-600 font-semibold min-h-11">すべてのデータを初期化</button></div>
+            <p className="px-4 pt-3 text-xs text-gray-400">今後のアップデートで壁紙テーマやパーティクルエフェクトのカスタマイズが追加されます。</p>
           </div>
         </div>
       )}
