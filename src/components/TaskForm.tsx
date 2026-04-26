@@ -245,7 +245,6 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     } else {
       if (recurrence !== "none" && !isTimetableRecurring && repeatEndDate && new Date(repeatEndDate).getTime() < new Date(deadline).getTime()) { setFormError("最終締切日は初回締切日以降に設定してください"); return; }
       if (recurrence === "biweekly" && (biweeklyInterval < 2 || biweeklyInterval > 8)) { setFormError("隔週の間隔は2〜8週間で入力してください"); return; }
-      if (startMode === "custom" && customStartDate && new Date(customStartDate).getTime() > new Date(deadline).getTime()) { setFormError("タスク表示開始日は締切より前に設定してください"); return; }
       if (isTimetableRecurring && !classStartDate) { setFormError("授業の開始日を入力してください"); return; }
     }
     setFormError("");
@@ -276,9 +275,8 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       return;
     }
 
-    const preset = START_PRESETS.find((p) => p.id === startMode);
-    const startOffsetDays: number | null = preset?.daysBefore != null ? preset.daysBefore : null;
-    const startDate: string | null = computedStartDateForFirstOccurrence;
+    const startOffsetDays: number | null = null;
+    const startDate: string | null = null;
 
     onSave({
       id: task?.parentId || task?.id || uid(),
@@ -592,7 +590,6 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       sections.push(NormalRecurringScheduleBlock);
     }
     sections.push(PriorityCard);
-    sections.push(StartDateCard);
     sections.push(ReminderCard);
     sections.push(UrlMemoCard);
     return sections;

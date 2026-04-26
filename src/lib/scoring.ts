@@ -20,8 +20,9 @@ export const diffDays = (from: Date, to: Date): number => {
 };
 
 export const isActiveOn = (task: Task, today: Date = new Date()): boolean => {
-  if (!task.startDate) return true;
-  return diffDays(today, new Date(task.startDate)) <= 0;
+  void task;
+  void today;
+  return true;
 };
 
 export const isDueToday = (task: Task, today: Date = new Date()): boolean => {
@@ -47,7 +48,7 @@ export const taskFacts = (task: Task, today: Date = new Date()): TaskFacts => {
   const daysToDue = hasDeadline ? diffDays(today, new Date(task.deadline)) : null;
   const overdue = hasDeadline && new Date(task.deadline).getTime() < startOfDay(today).getTime();
   const dueToday = hasDeadline && daysToDue === 0;
-  const started = !task.startDate || diffDays(today, new Date(task.startDate)) <= 0;
-  const startingToday = !!task.startDate && diffDays(today, new Date(task.startDate)) === 0;
+  const started = true;
+  const startingToday = false;
   return { overdue, dueToday, daysToDue, started, startingToday };
 };

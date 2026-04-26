@@ -113,7 +113,6 @@ const TaskCard = ({
             {facts.dueToday && <Badge tone="red">今日締切</Badge>}
             {!facts.overdue && !facts.dueToday && facts.daysToDue !== null && facts.daysToDue <= 3 && <Badge tone="orange">締切{facts.daysToDue}日</Badge>}
             {task.priority && <Badge tone="red">最優先</Badge>}
-            {facts.startingToday && <Badge tone="blue">今日から表示</Badge>}
           </div>
         </div>
       </div>
@@ -125,8 +124,7 @@ export default function TodayView({ tasks, cats, onComplete, onEdit }: TodayView
   const today = useMemo(() => new Date(), []);
   const list = useMemo(() => {
     const active = tasks.filter((t) => !t.completed && isActiveOn(t, today));
-    const shown = active.filter((t) => isOverdue(t, today) || isDueToday(t, today) || t.priority || (t.startDate && isActiveOn(t, today)) || !t.startDate || t.kind === "event");
-    return shown.sort((a, b) => {
+    return active.sort((a, b) => {
       const ao = isOverdue(a, today);
       const bo = isOverdue(b, today);
       if (ao !== bo) return ao ? -1 : 1;
@@ -140,7 +138,7 @@ export default function TodayView({ tasks, cats, onComplete, onEdit }: TodayView
   if (list.length === 0) {
     return (
       <div className="px-4 py-8">
-        <EmptyState title="今日のタスクなし" description="締切が近づくと、ここに自動で現れます。" />
+        <EmptyState title="今日のタスクなし" description="タスクを追加すると、ここに表示されます。" />
       </div>
     );
   }
