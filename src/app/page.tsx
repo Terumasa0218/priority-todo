@@ -691,7 +691,7 @@ export default function Home() {
         />
       </div>
 
-      <div className="max-w-lg mx-auto w-full flex-1 overflow-y-auto pb-24">
+      <div className={`${view === "calendar" ? "w-full" : "max-w-lg mx-auto"} w-full flex-1 overflow-y-auto pb-24`}>
         {view === "list" && (
           <>
             <div className="px-4 pt-3 pb-1">
@@ -763,7 +763,7 @@ export default function Home() {
           </>
         )}
 
-        {view === "calendar" && <div className="px-4 py-4"><CalendarView tasks={allExpanded} cats={cats} month={calMonth} setMonth={setCalMonth} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onAddClick={(d) => openNew(d)} onEditTask={(t) => { setEditTask(t); setPrefillDate(null); setShowForm(true); }} /></div>}
+        {view === "calendar" && <div className="pt-3"><CalendarView tasks={allExpanded} cats={cats} month={calMonth} setMonth={setCalMonth} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onAddClick={(d) => openNew(d)} onEditTask={(t) => { setEditTask(t); setPrefillDate(null); setShowForm(true); }} /></div>}
         {view === "timetable" && <TimetableView items={timetable} setItems={setTimetable} setCats={setCats} config={timetableConfig} setConfig={setTimetableConfig} onShare={handleShareTimetable} tasks={tasks} cats={cats} />}
         {view === "group" && <GroupView groups={groups} setGroups={setGroups} />}
         {view === "completed" && <div><div className="px-4 py-3 flex items-center justify-between"><span className="text-sm font-semibold text-gray-900">達成済み</span><span className="text-[11px] text-gray-400">{completed.length}件</span></div><CompletedList tasks={completed} cats={cats} onRestore={handleRestore} /></div>}
