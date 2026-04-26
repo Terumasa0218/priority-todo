@@ -79,7 +79,7 @@ export default function CategoryPicker({ cats, setCats, selected, onSelect }: Ca
               </div>
               <div className="flex gap-2">
                 <button onClick={() => setCreating(false)} className="flex-1 py-2 rounded-lg text-xs font-medium text-gray-500 bg-gray-100">取消</button>
-                <button onClick={handleCreate} disabled={!newLabel.trim()} className="flex-1 py-2 rounded-lg text-xs font-medium text-white bg-gray-900 disabled:bg-gray-300">作成</button>
+                <button onClick={handleCreate} disabled={!newLabel.trim()} className="flex-1 py-2 rounded-lg text-xs font-medium text-white bg-[#007AFF] disabled:bg-gray-300">作成</button>
               </div>
             </div>
           )}

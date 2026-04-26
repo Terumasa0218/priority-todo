@@ -131,7 +131,7 @@ export default function GroupView({ groups, setGroups }: GroupViewProps) {
         {showCreate && (
           <div className="mb-4 bg-white rounded-xl border border-gray-100 p-4 space-y-3">
             <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="グループ名" className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm placeholder-gray-400 focus:outline-none focus:border-gray-400" autoFocus onKeyDown={(e) => e.key === "Enter" && createGroup()} />
-            <div className="flex gap-2"><button onClick={() => setShowCreate(false)} className="flex-1 py-2 rounded-lg text-xs font-medium text-gray-500 bg-gray-100">取消</button><button onClick={createGroup} disabled={!newName.trim()} className="flex-1 py-2 rounded-lg text-xs font-medium text-white bg-gray-900 disabled:bg-gray-300">作成</button></div>
+            <div className="flex gap-2"><button onClick={() => setShowCreate(false)} className="flex-1 py-2 rounded-lg text-xs font-medium text-gray-500 bg-gray-100">取消</button><button onClick={createGroup} disabled={!newName.trim()} className="flex-1 py-2 rounded-lg text-xs font-medium text-white bg-[#007AFF] disabled:bg-gray-300">作成</button></div>
           </div>
         )}
         {groups.length === 0 ? (
@@ -180,7 +180,7 @@ export default function GroupView({ groups, setGroups }: GroupViewProps) {
               <select value={taskAssignee} onChange={(e) => setTaskAssignee(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none">
                 <option value="">担当者なし</option>{group.members.map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
               </select>
-              <div className="flex gap-2"><button onClick={() => setShowAddTask(false)} className="flex-1 py-2 rounded-lg text-xs font-medium text-gray-500 bg-gray-100">取消</button><button onClick={() => addTask(group.id)} disabled={!taskTitle.trim()} className="flex-1 py-2 rounded-lg text-xs font-medium text-white bg-gray-900 disabled:bg-gray-300">追加</button></div>
+              <div className="flex gap-2"><button onClick={() => setShowAddTask(false)} className="flex-1 py-2 rounded-lg text-xs font-medium text-gray-500 bg-gray-100">取消</button><button onClick={() => addTask(group.id)} disabled={!taskTitle.trim()} className="flex-1 py-2 rounded-lg text-xs font-medium text-white bg-[#007AFF] disabled:bg-gray-300">追加</button></div>
             </div>
           )}
           {group.tasks.length === 0 ? <div className="py-8 text-center text-sm text-gray-400">タスクはまだありません</div> : (
@@ -229,7 +229,7 @@ export default function GroupView({ groups, setGroups }: GroupViewProps) {
           {showAddMember && (
             <div className="mb-3 flex gap-2">
               <input type="text" value={memberName} onChange={(e) => setMemberName(e.target.value)} placeholder="名前" className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm placeholder-gray-400 focus:outline-none" autoFocus onKeyDown={(e) => e.key === "Enter" && addMember(group.id)} />
-              <button onClick={() => addMember(group.id)} disabled={!memberName.trim()} className="px-3 py-2 rounded-lg text-xs font-medium text-white bg-gray-900 disabled:bg-gray-300">追加</button>
+              <button onClick={() => addMember(group.id)} disabled={!memberName.trim()} className="px-3 py-2 rounded-lg text-xs font-medium text-white bg-[#007AFF] disabled:bg-gray-300">追加</button>
               <button onClick={() => setShowAddMember(false)} className="px-2 text-xs text-gray-400">取消</button>
             </div>
           )}

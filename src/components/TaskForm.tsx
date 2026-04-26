@@ -255,7 +255,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         <span className="text-sm text-gray-900 mb-2 block font-medium">繰り返し</span>
         <div className="flex gap-1.5 flex-wrap">
           {RECUR_OPTIONS.map((r) => (
-            <button key={r.id} onClick={() => setRecurrence(r.id)} className={`px-2.5 py-1.5 rounded-lg text-xs ${recurrence === r.id ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-500"}`}>{r.label}</button>
+            <button key={r.id} onClick={() => setRecurrence(r.id)} className={`px-2.5 py-1.5 rounded-lg text-xs transition-colors ${recurrence === r.id ? "bg-[#007AFF] text-white" : "bg-gray-100 text-gray-500"}`}>{r.label}</button>
           ))}
         </div>
       </div>
@@ -305,7 +305,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
               <button
                 key={p.id}
                 onClick={() => setStartMode(p.id)}
-                className={`flex flex-col items-center px-3 py-1.5 rounded-lg text-xs font-medium leading-tight ${startMode === p.id ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600"}`}
+                className={`flex flex-col items-center px-3 py-1.5 rounded-lg text-xs font-medium leading-tight transition-colors ${startMode === p.id ? "bg-[#007AFF] text-white" : "bg-gray-100 text-gray-600"}`}
               >
                 <span>{p.label}</span>
                 {chipDate && <span className="text-[9px] opacity-70 mt-0.5">{chipDate}</span>}
@@ -455,7 +455,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         <div className="flex items-center justify-between px-4 py-3 min-h-[52px]">
           <button onClick={onClose} className="text-sm text-blue-500 font-medium px-2 py-1 -mx-2">キャンセル</button>
           <span className="text-sm font-semibold text-gray-900">{isEdit ? "タスクの編集" : "新しいタスク"}</span>
-          <button onClick={handleSave} className="text-sm font-bold text-white bg-blue-500 hover:bg-blue-600 px-4 py-1.5 rounded-full shadow-sm">保存</button>
+          <button onClick={handleSave} className="text-sm font-bold text-white bg-[#007AFF] hover:bg-[#0062CC] px-4 py-1.5 rounded-full shadow-sm active:scale-[0.98] transition-transform">保存</button>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto pb-24 safe-bottom">
