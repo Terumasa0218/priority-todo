@@ -89,7 +89,6 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
         action={
           <div className="flex items-center gap-1">
             <button onClick={() => setMonth(new Date(y, m - 1))} className="min-h-11 min-w-11 p-2 hover:bg-slate-100 rounded-xl" aria-label="前の月"><IconChevL size={16} /></button>
-            <button onClick={() => setMonth(new Date())} className="min-h-11 px-3 text-[11px] font-medium text-slate-500 hover:bg-slate-100 rounded-xl" aria-label="今日">今日</button>
             <button onClick={() => setMonth(new Date(y, m + 1))} className="min-h-11 min-w-11 p-2 hover:bg-slate-100 rounded-xl" aria-label="次の月"><IconChevR size={16} /></button>
           </div>
         }
@@ -114,7 +113,7 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
             <div
               key={idx}
               onClick={() => day && setSelectedDate(new Date(y, m, day))}
-              className={`min-h-[92px] p-1.5 transition-colors ${day ? "cursor-pointer" : ""}`}
+              className={`min-h-[106px] p-1.5 transition-colors ${day ? "cursor-pointer" : ""}`}
               style={sel ? { boxShadow: "inset 0 0 0 2px #111827", backgroundColor: "#fff" } : tod ? { backgroundColor: "#EFF6FF" } : { backgroundColor: "#fff" }}
             >
               {day && (
