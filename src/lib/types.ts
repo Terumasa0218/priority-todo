@@ -8,8 +8,8 @@ export interface Task {
   endTime?: string;  // ISO。event のときだけ意味を持つ（終了時刻）
   category: string; // カテゴリID
   priority: boolean; // 最優先（リスト先頭固定）
-  startDate?: string | null; // 着手開始日 (ISO). 未指定なら即表示
-  // 締切から N 日前を着手開始日とする規則。繰り返しタスクでは各 occurrence の
+  startDate?: string | null; // タスク表示開始日 (ISO). 未指定なら即表示
+  // 締切から N 日前をタスク表示開始日とする規則。繰り返しタスクでは各 occurrence の
   // 締切から再計算される。null/undefined のときは startDate を直接使用（旧仕様互換）。
   startOffsetDays?: number | null;
   recurrence: "none" | "daily" | "weekly" | "biweekly" | "monthly";

@@ -190,7 +190,8 @@ export default function Home() {
     let mounted = true;
     const sync = async () => {
       setSyncing(true);
-      setTasks(loadTasks().map(withTaskDefaults));
+      const localTasks = loadTasks().map(withTaskDefaults);
+      setTasks(localTasks);
       setCats(loadCategories());
       setGroups(loadGroups());
       setTimetable(loadTimetable().map((it) => ({ ...it, period: migratePeriod(it.period as string | number) })));
@@ -205,7 +206,12 @@ export default function Home() {
           snapshot.timetable.length > 0 ||
           snapshot.cats.length > 1;
         if (cloudHasData) {
-          setTasks(snapshot.tasks.map(withTaskDefaults));
+          // クラウド書き込みが debounce 中にタブを閉じた等で取りこぼした
+          // ローカル限定のタスクを救済する（id 一致しないものをマージ）
+          const cloudTasks = snapshot.tasks.map(withTaskDefaults);
+          const cloudIds = new Set(cloudTasks.map((t) => t.id));
+          const onlyLocal = localTasks.filter((t) => !cloudIds.has(t.id));
+          setTasks([...cloudTasks, ...onlyLocal]);
           setCats(snapshot.cats);
           setGroups(snapshot.groups);
           setTimetable(snapshot.timetable.map((it) => ({ ...it, period: migratePeriod(it.period as string | number) })));
@@ -375,12 +381,21 @@ export default function Home() {
     setTasks((prev) => {
       const ex = prev.find((t) => t.id === data.id);
       const payload = withTaskDefaults(data);
-      return ex ? prev.map((t) => (t.id === data.id ? { ...t, ...payload } : t)) : [...prev, payload];
+      const next = ex ? prev.map((t) => (t.id === data.id ? { ...t, ...payload } : t)) : [...prev, payload];
+      // localStorage に即時反映してフォーム閉じ→リロード時の取りこぼしを防ぐ
+      try { saveTasks(next); } catch { /* ignore */ }
+      // クラウドにも即時に書き込む（debounce 待ちで失われるのを防ぐ）
+      if (user) {
+        saveCloudSnapshot(user.uid, { tasks: next, cats, groups, timetable, timetableConfig }).catch((err) => {
+          console.error("Immediate cloud save failed:", err);
+        });
+      }
+      return next;
     });
     setShowForm(false);
     setEditTask(null);
     setPrefillDate(null);
-  }, []);
+  }, [user, cats, groups, timetable, timetableConfig]);
 
   const handleComplete = useCallback((task: Task) => {
     if (task.kind === "event") return; // 予定は完了の概念なし

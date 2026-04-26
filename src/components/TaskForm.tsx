@@ -4,6 +4,7 @@ import { Task, Category, TimetableItem } from "@/lib/types";
 import { REMINDERS, DAY } from "@/lib/constants";
 import { uid, calcOccurrenceCount } from "@/lib/utils";
 import CategoryPicker from "./CategoryPicker";
+import DatePickerField from "./DatePickerField";
 
 interface TaskFormProps {
   task: Task | null;
@@ -61,15 +62,10 @@ const inferStartMode = (task: Task | null): StartMode => {
 const fmtDateMD = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`;
 const fmtDateMDW = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}(${DAY[d.getDay()]})`;
 
-// 同じ曜日の最も近い日付に snap（毎週/隔週繰り返しの最終締切日制約用）
-const snapToSameWeekday = (target: Date, anchor: Date): Date => {
-  const t = new Date(target);
-  const aDay = anchor.getDay();
-  const tDay = t.getDay();
-  const diff = (aDay - tDay + 7) % 7;
-  if (diff !== 0) t.setDate(t.getDate() + diff);
-  return t;
-};
+// 共通 UI ヘルパー（コンポーネント外で定義してリレンダー時の再マウントを防ぐ）
+const Card = ({ children }: { children: React.ReactNode }) => (
+  <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">{children}</div>
+);
 
 export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate, cats, setCats, timetable }: TaskFormProps) {
   const isEdit = !!task;
@@ -100,10 +96,21 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const [startMode, setStartMode] = useState<StartMode>(inferStartMode(task));
   const [customStartDate, setCustomStartDate] = useState<string>(task?.startDate ? toDateOnly(task.startDate) : "");
   const [classDayOfWeek, setClassDayOfWeek] = useState<number>(task?.classDayOfWeek ?? new Date(task?.deadline || deadline).getDay());
-  const [biweeklyInterval, setBiweeklyInterval] = useState<number>(task?.biweeklyInterval ?? 2);
+  // 数字入力は string で保持して、空欄入力中の強制リセットを防ぐ。読み取りは useMemo で sanitize する
+  const [biweeklyIntervalStr, setBiweeklyIntervalStr] = useState<string>(String(task?.biweeklyInterval ?? 2));
   // 授業科目用の追加 state
   const [classStartDate, setClassStartDate] = useState<string>(task?.classStartDate || "");
-  const [classCount, setClassCount] = useState<number>(task?.repeatCount || 14);
+  const [classCountStr, setClassCountStr] = useState<string>(String(task?.repeatCount || 14));
+  const biweeklyInterval = useMemo(() => {
+    const n = parseInt(biweeklyIntervalStr, 10);
+    if (isNaN(n) || n < 2) return 2;
+    return Math.min(8, n);
+  }, [biweeklyIntervalStr]);
+  const classCount = useMemo(() => {
+    const n = parseInt(classCountStr, 10);
+    if (isNaN(n) || n < 1) return 1;
+    return Math.min(50, n);
+  }, [classCountStr]);
   const [showError, setShowError] = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -156,7 +163,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     };
   }, [isTimetableRecurring, classStartDate, deadline, classCount, intervalDays]);
 
-  // ---- 着手開始日 ----
+  // ---- タスク表示開始日 ----
   const computedStartDateForFirstOccurrence = useMemo(() => {
     if (startMode === "immediate") return null;
     if (startMode === "custom") return customStartDate || null;
@@ -216,7 +223,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     } else {
       if (recurrence !== "none" && !isTimetableRecurring && repeatEndDate && new Date(repeatEndDate).getTime() < new Date(deadline).getTime()) { setFormError("最終締切日は初回締切日以降に設定してください"); return; }
       if (recurrence === "biweekly" && (biweeklyInterval < 2 || biweeklyInterval > 8)) { setFormError("隔週の間隔は2〜8週間で入力してください"); return; }
-      if (startMode === "custom" && customStartDate && new Date(customStartDate).getTime() > new Date(deadline).getTime()) { setFormError("着手開始日は締切より前に設定してください"); return; }
+      if (startMode === "custom" && customStartDate && new Date(customStartDate).getTime() > new Date(deadline).getTime()) { setFormError("タスク表示開始日は締切より前に設定してください"); return; }
       if (isTimetableRecurring && !classStartDate) { setFormError("授業の開始日を入力してください"); return; }
     }
     setFormError("");
@@ -280,18 +287,6 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       biweeklyInterval: recurrence === "biweekly" ? biweeklyInterval : undefined,
     });
   };
-
-  // ===== UI helpers =====
-  const Card = ({ children }: { children: React.ReactNode }) => (
-    <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">{children}</div>
-  );
-
-  const SectionTitle = ({ children, hint }: { children: React.ReactNode; hint?: React.ReactNode }) => (
-    <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-      <span className="text-sm text-gray-900 font-medium">{children}</span>
-      {hint && <span className="text-[10px] text-gray-400">{hint}</span>}
-    </div>
-  );
 
   // 種別切替
   const KindSwitch = (
@@ -368,7 +363,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const StartDateCard = (
     <Card>
       <div className="px-4 py-3">
-        <span className="text-sm text-gray-900 font-medium block mb-2">着手開始日</span>
+        <span className="text-sm text-gray-900 font-medium block mb-2">タスク表示開始日</span>
         <div className="flex gap-1.5 flex-wrap">
           {START_PRESETS.map((p) => {
             const chipDate = p.daysBefore != null ? (() => {
@@ -389,12 +384,13 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
           })}
         </div>
         {startMode === "custom" && (
-          <input
-            type="date"
-            value={customStartDate}
-            onChange={(e) => setCustomStartDate(e.target.value)}
-            className="mt-2 w-full text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200"
-          />
+          <div className="mt-2">
+            <DatePickerField
+              value={customStartDate}
+              onChange={(v) => setCustomStartDate(v)}
+              placeholder="開始日を選択"
+            />
+          </div>
         )}
         <div className="mt-2 text-xs font-medium text-blue-600 leading-relaxed">{startHelpText}</div>
       </div>
@@ -430,20 +426,38 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         <div className="px-4 py-3 border-b border-gray-100">
           <label className="text-sm text-gray-900 font-medium">何週間に1回提出</label>
           <div className="mt-1 flex items-center gap-2 text-sm">
-            <input type="number" min={2} max={8} value={biweeklyInterval} onChange={(e) => setBiweeklyInterval(Number(e.target.value || 2))} className="w-20 text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />
+            <input
+              type="number"
+              inputMode="numeric"
+              min={2}
+              max={8}
+              value={biweeklyIntervalStr}
+              onChange={(e) => setBiweeklyIntervalStr(e.target.value)}
+              onBlur={() => setBiweeklyIntervalStr(String(biweeklyInterval))}
+              className="w-20 text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200"
+            />
             <span className="text-gray-500">週間おき</span>
           </div>
         </div>
       )}
       <div className="px-4 py-3 border-b border-gray-100">
         <label className="block text-sm mb-2 text-gray-900 font-medium">授業の開始日</label>
-        <input type="date" value={classStartDate} onChange={(e) => setClassStartDate(e.target.value)} className="w-full text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />
+        <DatePickerField value={classStartDate} onChange={(v) => setClassStartDate(v)} placeholder="第1回授業の日付" />
         <div className="text-[11px] text-gray-400 mt-1">第1回授業の日付。例: 4/3</div>
       </div>
       <div className="px-4 py-3 border-b border-gray-100">
         <label className="block text-sm mb-2 text-gray-900 font-medium">授業の回数</label>
         <div className="flex items-center gap-2">
-          <input type="number" min={1} max={50} value={classCount} onChange={(e) => setClassCount(Number(e.target.value || 14))} className="w-24 text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={50}
+            value={classCountStr}
+            onChange={(e) => setClassCountStr(e.target.value)}
+            onBlur={() => setClassCountStr(String(classCount))}
+            className="w-24 text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200"
+          />
           <span className="text-sm text-gray-500">回</span>
         </div>
         <div className="text-[11px] text-gray-400 mt-1">半期は通常 14〜15 回</div>
@@ -467,32 +481,38 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         <div className="px-4 py-3 border-b border-gray-100">
           <label className="text-sm text-gray-900 font-medium">何週間に1回</label>
           <div className="mt-1 flex items-center gap-2 text-sm">
-            <input type="number" min={2} max={8} value={biweeklyInterval} onChange={(e) => setBiweeklyInterval(Number(e.target.value || 2))} className="w-20 text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />
+            <input
+              type="number"
+              inputMode="numeric"
+              min={2}
+              max={8}
+              value={biweeklyIntervalStr}
+              onChange={(e) => setBiweeklyIntervalStr(e.target.value)}
+              onBlur={() => setBiweeklyIntervalStr(String(biweeklyInterval))}
+              className="w-20 text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200"
+            />
             <span className="text-gray-500">週間おき</span>
           </div>
         </div>
       )}
       <div className="px-4 py-3">
         <label className="text-sm text-gray-900 font-medium block mb-2">最終締切日</label>
-        <input
-          type="date"
+        <DatePickerField
           value={repeatEndDate}
+          onChange={(v) => setRepeatEndDate(v)}
           min={toDateOnly(deadline)}
-          onChange={(e) => {
-            const v = e.target.value;
-            // 毎週/隔週は初回締切と同じ曜日に snap
-            if (v && (recurrence === "weekly" || recurrence === "biweekly")) {
-              const snapped = snapToSameWeekday(new Date(`${v}T00:00:00`), new Date(deadline));
-              setRepeatEndDate(snapped.toISOString().slice(0, 10));
-            } else {
-              setRepeatEndDate(v);
+          isDateDisabled={(d) => {
+            // 毎週/隔週: 初回締切と同じ曜日のみ選択可
+            if (recurrence === "weekly" || recurrence === "biweekly") {
+              return d.getDay() !== new Date(deadline).getDay();
             }
+            return false;
           }}
-          className="w-full text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200"
+          placeholder="最終回の締切日を選択"
         />
         <div className="text-xs text-gray-400 mt-1">
           全{occurrenceCount}回
-          {(recurrence === "weekly" || recurrence === "biweekly") && "（初回と同じ曜日に自動調整）"}
+          {(recurrence === "weekly" || recurrence === "biweekly") && "（初回と同じ曜日のみ選択可）"}
         </div>
       </div>
     </Card>

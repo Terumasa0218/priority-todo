@@ -113,7 +113,7 @@ const TaskCard = ({
             {facts.dueToday && <Badge tone="red">今日締切</Badge>}
             {!facts.overdue && !facts.dueToday && facts.daysToDue !== null && facts.daysToDue <= 3 && <Badge tone="orange">締切{facts.daysToDue}日</Badge>}
             {task.priority && <Badge tone="red">最優先</Badge>}
-            {facts.startingToday && <Badge tone="blue">今日から着手</Badge>}
+            {facts.startingToday && <Badge tone="blue">今日から表示</Badge>}
           </div>
         </div>
       </div>
