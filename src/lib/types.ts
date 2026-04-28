@@ -8,9 +8,11 @@ export interface Task {
   endTime?: string;  // ISO。event のときだけ意味を持つ（終了時刻）
   category: string; // カテゴリID
   priority: boolean; // 最優先（リスト先頭固定）
-  startDate?: string | null; // タスク表示開始日 (ISO). 未指定なら即表示
-  // 締切から N 日前をタスク表示開始日とする規則。繰り返しタスクでは各 occurrence の
-  // 締切から再計算される。null/undefined のときは startDate を直接使用（旧仕様互換）。
+  // タスク開始日。今日リストに出し始める日（ISO）。未指定なら即時表示。
+  // 「日付指定」モード時のみ使う。プリセット選択時は startOffsetDays を使う。
+  startDate?: string | null;
+  // 締切から N 日前を表示開始とする規則。繰り返しタスクでは各 occurrence の
+  // 締切から再計算される。
   startOffsetDays?: number | null;
   recurrence: "none" | "daily" | "weekly" | "biweekly" | "monthly";
   classDayOfWeek?: number; // 0-6
@@ -28,6 +30,9 @@ export interface Task {
   completed: boolean;
   completedAt: string | null;
   completedOccurrences: string[];
+  // 先延ばしされた occurrence。key = occurrence の deadline ISO の slice(0, 16)、
+  // value = "YYYY-MM-DD"（その日まで「今日のタスク」に出さない）
+  snoozedOccurrences?: Record<string, string>;
   order: number | null;
   createdAt: string;
   // 展開時に付与

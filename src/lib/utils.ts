@@ -111,9 +111,12 @@ export const calcOccurrenceCount = (task: Task): number => {
   return count;
 };
 
-// occurrence 個別の startDate を返す。task.startOffsetDays が設定されていれば
-// 締切から N 日前を起点にする。そうでなければ親 task.startDate を継承。
+// occurrence 個別の startDate を返す。snoozedOccurrences があれば最優先、
+// なければ task.startOffsetDays から逆算、無ければ親 task.startDate を継承。
 const occurrenceStartDate = (task: Task, deadline: Date): string | null | undefined => {
+  const key = deadline.toISOString().slice(0, 16);
+  const snooze = task.snoozedOccurrences?.[key];
+  if (snooze) return new Date(`${snooze}T00:00:00`).toISOString();
   if (typeof task.startOffsetDays === "number") {
     const start = new Date(deadline);
     start.setDate(start.getDate() - task.startOffsetDays);
@@ -121,6 +124,21 @@ const occurrenceStartDate = (task: Task, deadline: Date): string | null | undefi
     return start.toISOString();
   }
   return task.startDate;
+};
+
+// タスクが「今日のタスク」に出てよい開始日を返す。先延ばし→startDate→startOffsetDays の順で評価。
+export const getEffectiveStartDate = (task: Task): string | null => {
+  const key = task.deadline.slice(0, 16);
+  const snooze = task.snoozedOccurrences?.[key];
+  if (snooze) return new Date(`${snooze}T00:00:00`).toISOString();
+  if (task.startDate) return task.startDate;
+  if (typeof task.startOffsetDays === "number") {
+    const start = new Date(task.deadline);
+    start.setDate(start.getDate() - task.startOffsetDays);
+    start.setHours(0, 0, 0, 0);
+    return start.toISOString();
+  }
+  return null;
 };
 
 export function expandRecurring(task: Task, horizonDate: Date): Task[] {
