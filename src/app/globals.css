@@ -112,15 +112,18 @@ select {
 }
 
 .segmented-tab {
+  flex: 1 1 0;
+  min-width: 0;
   border-radius: var(--radius-control);
   font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
-  padding: 8px 12px;
+  padding: 8px 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
+  white-space: nowrap;
   transition: all .2s ease;
 }
 

@@ -412,6 +412,18 @@ export default function Home() {
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, completed: false, completedAt: null } : t)));
   }, []);
 
+  const handleSnooze = useCallback((task: Task, snoozeUntilYMD: string) => {
+    const parentId = task.parentId || task.id;
+    const key = task.deadline.slice(0, 16);
+    setTasks((prev) =>
+      prev.map((t) => {
+        if (t.id !== parentId) return t;
+        const next = { ...(t.snoozedOccurrences || {}), [key]: snoozeUntilYMD };
+        return { ...t, snoozedOccurrences: next };
+      })
+    );
+  }, []);
+
   const handleDeleteTask = useCallback((task: Task) => {
     const id = task.parentId || task.id;
     if (task.isOccurrence) {
@@ -664,15 +676,15 @@ export default function Home() {
   return (
     <div className="h-[100dvh] flex flex-col overflow-hidden bg-background prioritodo-app safe-x">
       <header className="sticky top-0 z-40 bg-white border-b border-slate-100 safe-top">
-        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
-          <div><h1 className="text-base font-bold text-gray-900 tracking-tight">PrioriTodo</h1><p className="text-[10px] text-gray-400 tracking-wide">次にやることが、すぐ分かる</p></div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setShowCatMgr(true)} className="p-1.5 hover:bg-gray-100 rounded-lg" title="カテゴリ編集"><IconPalette size={17} stroke="#666" /></button>
-            <button onClick={() => setShowSettings(true)} className="p-1.5 hover:bg-gray-100 rounded-lg" title="設定"><IconSettings size={16} stroke="#666" /></button>
-            <button onClick={() => setShowHelp(true)} className="p-1.5 hover:bg-gray-100 rounded-lg" title="ヘルプ"><IconBook size={16} stroke="#666" /></button>
-            <button onClick={handleLogout} className="text-[11px] text-gray-500 border border-gray-200 px-2 py-1 rounded-md">ログアウト</button>
-            {overdueCount > 0 && <span className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md">{overdueCount}件超過</span>}
-            <div className="text-right leading-none"><div className="text-[10px] text-gray-400">今週</div><div className="text-base font-bold text-gray-900">{weekDone}<span className="text-[10px] text-gray-400 font-normal ml-0.5">達成</span></div></div>
+        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between gap-2">
+          <div className="min-w-0 flex-shrink"><h1 className="text-base font-bold text-gray-900 tracking-tight">PrioriTodo</h1><p className="text-[10px] text-gray-400 tracking-wide truncate">次にやることが、すぐ分かる</p></div>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {overdueCount > 0 && <span className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-md whitespace-nowrap">{overdueCount}件超過</span>}
+            <div className="text-right leading-none whitespace-nowrap mr-1"><div className="text-[9px] text-gray-400">今週</div><div className="text-sm font-bold text-gray-900">{weekDone}<span className="text-[9px] text-gray-400 font-normal ml-0.5">達成</span></div></div>
+            <button onClick={() => setShowCatMgr(true)} className="p-1.5 hover:bg-gray-100 rounded-lg" aria-label="カテゴリ編集"><IconPalette size={16} stroke="#666" /></button>
+            <button onClick={() => setShowSettings(true)} className="p-1.5 hover:bg-gray-100 rounded-lg" aria-label="設定"><IconSettings size={15} stroke="#666" /></button>
+            <button onClick={() => setShowHelp(true)} className="p-1.5 hover:bg-gray-100 rounded-lg" aria-label="ヘルプ"><IconBook size={15} stroke="#666" /></button>
+            <button onClick={handleLogout} className="text-[10px] text-gray-500 border border-gray-200 px-1.5 py-1 rounded-md whitespace-nowrap">ログアウト</button>
           </div>
         </div>
       </header>
@@ -752,6 +764,7 @@ export default function Home() {
                 cats={cats}
                 onComplete={handleComplete}
                 onEdit={(t) => { setEditTask(t); setPrefillDate(null); setShowForm(true); }}
+                onSnooze={handleSnooze}
               />
             ) : sorted.length === 0 ? (
               <div className="px-4 py-8">

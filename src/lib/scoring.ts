@@ -1,4 +1,5 @@
 import { Task } from "./types";
+import { getEffectiveStartDate } from "./utils";
 
 const MS_DAY = 86_400_000;
 
@@ -19,10 +20,12 @@ export const diffDays = (from: Date, to: Date): number => {
   return Math.floor((startOfDay(to).getTime() - startOfDay(from).getTime()) / MS_DAY);
 };
 
+// タスク開始日（startOffsetDays / startDate / snoozedOccurrences 由来）を考慮し、
+// 今日「今日のタスク」に出してよいかどうか
 export const isActiveOn = (task: Task, today: Date = new Date()): boolean => {
-  void task;
-  void today;
-  return true;
+  const eff = getEffectiveStartDate(task);
+  if (!eff) return true;
+  return diffDays(today, new Date(eff)) <= 0;
 };
 
 export const isDueToday = (task: Task, today: Date = new Date()): boolean => {
@@ -39,7 +42,7 @@ export interface TaskFacts {
   overdue: boolean;
   dueToday: boolean;
   daysToDue: number | null;
-  started: boolean; // startDate が past or unset
+  started: boolean; // 開始日が past or unset
   startingToday: boolean;
 }
 
@@ -48,7 +51,8 @@ export const taskFacts = (task: Task, today: Date = new Date()): TaskFacts => {
   const daysToDue = hasDeadline ? diffDays(today, new Date(task.deadline)) : null;
   const overdue = hasDeadline && new Date(task.deadline).getTime() < startOfDay(today).getTime();
   const dueToday = hasDeadline && daysToDue === 0;
-  const started = true;
-  const startingToday = false;
+  const eff = getEffectiveStartDate(task);
+  const started = !eff || diffDays(today, new Date(eff)) <= 0;
+  const startingToday = !!eff && diffDays(today, new Date(eff)) === 0;
   return { overdue, dueToday, daysToDue, started, startingToday };
 };
