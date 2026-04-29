@@ -484,6 +484,25 @@ export default function Home() {
     setShowForm(true);
   };
 
+  // 編集を開く: occurrence (展開された繰り返しの個別回) なら親タスクに解決して開く。
+  // これにより「初回締切日」フォームに常にユーザーが当初入れた値が表示され、
+  // 5週目をタップしても 5週目の deadline が「初回締切日」欄に出る違和感を避ける。
+  const openEdit = useCallback((t: Task) => {
+    if (t.isOccurrence && t.parentId) {
+      const parent = tasks.find((x) => x.id === t.parentId);
+      if (parent) {
+        setEditTask(parent);
+        setPrefillDate(null);
+        setShowForm(true);
+        return;
+      }
+    }
+    setEditTask(t);
+    setPrefillDate(null);
+    setShowForm(true);
+  }, [tasks]);
+
+
   const handleGoogleLogin = async () => {
     if (!auth || !googleProvider || authBusy) return;
     setAuthBusy(true);
@@ -702,7 +721,7 @@ export default function Home() {
             {showOverdueLabel && <div className="px-4 pt-2 pb-1"><span className="text-[10px] font-semibold text-red-500 tracking-widest uppercase">期限超過</span></div>}
             {showPriorityLabel && <div className="px-4 pt-3 pb-1"><span className="text-[10px] font-semibold text-red-500 tracking-widest uppercase">最優先</span></div>}
             {showNormalLabel && <div className="px-4 pt-3 pb-1"><span className="text-[10px] font-semibold text-gray-400 tracking-widest uppercase">その他</span></div>}
-            <TaskRow task={t} cats={cats} idx={i} touchDrag={touchDrag} onComplete={handleComplete} onEdit={(task) => { setEditTask(task); setPrefillDate(null); setShowForm(true); }} onDelete={handleDeleteTask} />
+            <TaskRow task={t} cats={cats} idx={i} touchDrag={touchDrag} onComplete={handleComplete} onEdit={openEdit} onDelete={handleDeleteTask} />
           </div>
         );
       })}
@@ -798,7 +817,7 @@ export default function Home() {
                 tasks={allExpanded.filter((t) => catFilter === "all" || (catFilter === "timetable_group" ? timetableCats.some((c) => c.id === t.category) : t.category === catFilter))}
                 cats={cats}
                 onComplete={handleComplete}
-                onEdit={(t) => { setEditTask(t); setPrefillDate(null); setShowForm(true); }}
+                onEdit={openEdit}
                 onSnooze={handleSnooze}
               />
             ) : sorted.length === 0 ? (
@@ -811,7 +830,7 @@ export default function Home() {
           </>
         )}
 
-        {view === "calendar" && <div className="pt-3"><CalendarView tasks={allExpanded} cats={cats} month={calMonth} setMonth={setCalMonth} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onAddClick={(d) => openNew(d)} onEditTask={(t) => { setEditTask(t); setPrefillDate(null); setShowForm(true); }} /></div>}
+        {view === "calendar" && <div className="pt-3"><CalendarView tasks={allExpanded} cats={cats} month={calMonth} setMonth={setCalMonth} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onAddClick={(d) => openNew(d)} onEditTask={openEdit} /></div>}
         {view === "timetable" && <TimetableView items={timetable} setItems={setTimetable} setCats={setCats} config={timetableConfig} setConfig={setTimetableConfig} onShare={handleShareTimetable} tasks={tasks} cats={cats} />}
         {view === "completed" && <div><div className="px-4 py-3 flex items-center justify-between"><span className="text-sm font-semibold text-gray-900">達成済み</span><span className="text-[11px] text-gray-400">{completed.length}件</span></div><CompletedList tasks={completed} cats={cats} onRestore={handleRestore} /></div>}
       </div>
