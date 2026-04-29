@@ -141,8 +141,15 @@ export const getEffectiveStartDate = (task: Task): string | null => {
   return null;
 };
 
-export function expandRecurring(task: Task, horizonDate: Date): Task[] {
+export interface ExpandRecurringOptions {
+  // 授業日が祝日のときに休講扱いでスキップするか。オンデマンド授業など、
+  // 祝日でも提出が必要なケースでは false を渡す。デフォルト true。
+  skipHolidays?: boolean;
+}
+
+export function expandRecurring(task: Task, horizonDate: Date, options?: ExpandRecurringOptions): Task[] {
   if (!task.recurrence || task.recurrence === "none") return [task];
+  const skipHolidays = options?.skipHolidays ?? true;
   const results: Task[] = [];
   const horizon = new Date(horizonDate);
   const lookback = new Date();
@@ -168,15 +175,13 @@ export function expandRecurring(task: Task, horizonDate: Date): Task[] {
     const base = new Date(task.deadline);
     const offsetDays = task.offsetDays ?? 0;
     const [hh, mm] = (task.offsetTime || "23:59").split(":").map(Number);
-    // 授業の初回授業日: classStartDate が指定されていればそれを使用。
-    // 未指定なら deadline と classDayOfWeek から推定（後方互換）。
     const classDate = task.classStartDate
       ? new Date(`${task.classStartDate}T00:00:00`)
       : firstClassDay(base, task.classDayOfWeek);
     let count = 0;
     while (classDate <= effectiveEnd && count < 240) {
-      // 時間割由来の繰り返しは、授業日が祝日に当たる回はスキップ（休講扱い）
-      if (!isHoliday(classDate)) {
+      // 通常授業のみ: 授業日が祝日の回はスキップ（休講扱い）
+      if (!skipHolidays || !isHoliday(classDate)) {
         const due = new Date(classDate);
         due.setDate(due.getDate() + offsetDays);
         due.setHours(hh || 0, mm || 0, 0, 0);

@@ -3,14 +3,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG, FILTERS, WEEKDAY_LABELS } from "@/lib/constants";
 import { expandRecurring, remaining, uid } from "@/lib/utils";
-import { Category, Group, Task, TimetableConfig, TimetableItem, TouchDragState } from "@/lib/types";
+import { Category, Task, TimetableConfig, TimetableItem, TouchDragState } from "@/lib/types";
 import { IconBook, IconList, IconPalette, IconPlus, IconSettings } from "@/components/Icons";
 import TaskRow from "@/components/TaskRow";
 import TaskForm from "@/components/TaskForm";
 import CategoryManager from "@/components/CategoryManager";
 import CalendarView from "@/components/CalendarView";
 import CompletedList from "@/components/CompletedList";
-import GroupView from "@/components/GroupView";
 import TimetableView from "@/components/TimetableView";
 import TodayView from "@/components/TodayView";
 import SegmentedTabs from "@/components/ui/SegmentedTabs";
@@ -21,9 +20,9 @@ import { signInWithPopup, signOut, onAuthStateChanged, signInWithRedirect, User,
 import { deleteCloudSnapshot, loadCloudSnapshot, migrateLocalToCloudOnce, saveCloudSnapshot } from "@/lib/cloudStorage";
 import { createTimetableShareToken, loadTimetableShareToken } from "@/lib/timetableShare";
 import { AuthIssue, resolveAuthIssue } from "@/lib/authErrorCatalog";
-import { loadCategories, loadGroups, loadTasks, loadTimetable, loadTimetableConfig, saveCategories, saveGroups, saveTasks, saveTimetable, saveTimetableConfig } from "@/lib/storage";
+import { loadCategories, loadTasks, loadTimetable, loadTimetableConfig, saveCategories, saveTasks, saveTimetable, saveTimetableConfig } from "@/lib/storage";
 
-type View = "list" | "calendar" | "timetable" | "group" | "completed";
+type View = "list" | "calendar" | "timetable" | "completed";
 const isInAppBrowser = () => /FBAN|FBAV|Instagram|Line|Twitter|wv|WebView|GSA|LinkedInApp|Slack|Discord|GitHub/i.test(navigator.userAgent);
 const isMobileDevice = () => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -52,7 +51,6 @@ const withTaskDefaults = (task: Task): Task => ({
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [cats, setCats] = useState<Category[]>(DEFAULT_CATS);
-  const [groups, setGroups] = useState<Group[]>([]);
   const [timetable, setTimetable] = useState<TimetableItem[]>([]);
   const [timetableConfig, setTimetableConfig] = useState<TimetableConfig>(DEFAULT_TIMETABLE_CONFIG);
   const [view, setView] = useState<View>("list");
@@ -193,7 +191,6 @@ export default function Home() {
       const localTasks = loadTasks().map(withTaskDefaults);
       setTasks(localTasks);
       setCats(loadCategories());
-      setGroups(loadGroups());
       setTimetable(loadTimetable().map((it) => ({ ...it, period: migratePeriod(it.period as string | number) })));
       setTimetableConfig(loadTimetableConfig());
       try {
@@ -202,18 +199,29 @@ export default function Home() {
         if (!mounted) return;
         const cloudHasData =
           snapshot.tasks.length > 0 ||
-          snapshot.groups.length > 0 ||
           snapshot.timetable.length > 0 ||
           snapshot.cats.length > 1;
         if (cloudHasData) {
-          // クラウド書き込みが debounce 中にタブを閉じた等で取りこぼした
-          // ローカル限定のタスクを救済する（id 一致しないものをマージ）
+          // 同 id のタスクは「より進んだ状態」(完了 / 完了 occurrence / 先延ばし数が多い方) を優先する。
+          // クラウド書き込みが debounce 中に失敗してもローカル側の完了などが復活しないように。
           const cloudTasks = snapshot.tasks.map(withTaskDefaults);
-          const cloudIds = new Set(cloudTasks.map((t) => t.id));
-          const onlyLocal = localTasks.filter((t) => !cloudIds.has(t.id));
-          setTasks([...cloudTasks, ...onlyLocal]);
+          const localById = new Map(localTasks.map((t) => [t.id, t]));
+          const cloudById = new Map(cloudTasks.map((t) => [t.id, t]));
+          const allIds = new Set<string>([...localById.keys(), ...cloudById.keys()]);
+          const progress = (t: Task) =>
+            (t.completed ? 1 : 0) +
+            (t.completedOccurrences?.length || 0) +
+            Object.keys(t.snoozedOccurrences || {}).length;
+          const merged: Task[] = [];
+          for (const id of allIds) {
+            const lo = localById.get(id);
+            const cl = cloudById.get(id);
+            if (lo && !cl) merged.push(lo);
+            else if (!lo && cl) merged.push(cl);
+            else if (lo && cl) merged.push(progress(lo) > progress(cl) ? lo : cl);
+          }
+          setTasks(merged);
           setCats(snapshot.cats);
-          setGroups(snapshot.groups);
           setTimetable(snapshot.timetable.map((it) => ({ ...it, period: migratePeriod(it.period as string | number) })));
           setTimetableConfig(snapshot.timetableConfig);
         }
@@ -235,20 +243,19 @@ export default function Home() {
     if (!ready) return;
     saveTasks(tasks);
     saveCategories(cats);
-    saveGroups(groups);
     saveTimetable(timetable);
     saveTimetableConfig(timetableConfig);
-  }, [tasks, cats, groups, timetable, timetableConfig, ready]);
+  }, [tasks, cats, timetable, timetableConfig, ready]);
 
   useEffect(() => {
     if (!ready || !user) return;
     const timer = setTimeout(() => {
-      saveCloudSnapshot(user.uid, { tasks, cats, groups, timetable, timetableConfig }).catch((err) => {
+      saveCloudSnapshot(user.uid, { tasks, cats, timetable, timetableConfig }).catch((err) => {
         console.error("Cloud sync failed:", err);
       });
     }, 400);
     return () => clearTimeout(timer);
-  }, [tasks, cats, groups, timetable, timetableConfig, ready, user]);
+  }, [tasks, cats, timetable, timetableConfig, ready, user]);
 
   useEffect(() => {
     if (!ready || !user) return;
@@ -296,37 +303,32 @@ export default function Home() {
 
   const timetableCats = useMemo(() => cats.filter((c) => !!c.timetableId), [cats]);
 
+  // オンデマンド授業（period が "オンデマンド..." で始まる）は祝日スキップしない
+  const onDemandTimetableIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const t of timetable) {
+      if (typeof t.period === "string" && t.period.startsWith("オンデマンド")) {
+        ids.add(t.id);
+      }
+    }
+    return ids;
+  }, [timetable]);
+
   const allExpanded = useMemo(() => {
     const horizon = new Date();
     horizon.setDate(horizon.getDate() + 90);
     const exp: Task[] = [];
     active.forEach((t) => {
-      if (t.recurrence && t.recurrence !== "none") exp.push(...expandRecurring(t, horizon));
-      else exp.push(t);
-    });
-    groups.forEach((g) => {
-      g.tasks.filter((t) => t.assignee === "自分" && !t.completed).forEach((t) => {
-        exp.push({
-          ...t,
-          id: `grp_${g.id}_${t.id}`,
-          isGroupTask: true,
-          groupName: g.name,
-          category: "default",
-          priority: false,
-          recurrence: "none",
-          repeatCount: null,
-          repeatEndDate: null,
-          reminder: "none",
-          memo: "",
-          url: "",
-          completedAt: null,
-          completedOccurrences: [],
-          order: null,
-        });
-      });
+      if (t.recurrence && t.recurrence !== "none") {
+        const cat = cats.find((c) => c.id === t.category);
+        const isOnDemand = !!(cat?.timetableId && onDemandTimetableIds.has(cat.timetableId));
+        exp.push(...expandRecurring(t, horizon, { skipHolidays: !isOnDemand }));
+      } else {
+        exp.push(t);
+      }
     });
     return exp;
-  }, [active, groups]);
+  }, [active, cats, onDemandTimetableIds]);
 
   const sorted = useMemo(() => {
     const now = Date.now();
@@ -377,68 +379,104 @@ export default function Home() {
   }, [completed]);
   const overdueCount = allExpanded.filter((t) => new Date(t.deadline).getTime() < Date.now()).length;
 
-  const handleSave = useCallback((data: Task) => {
-    setTasks((prev) => {
-      const ex = prev.find((t) => t.id === data.id);
-      const payload = withTaskDefaults(data);
-      const next = ex ? prev.map((t) => (t.id === data.id ? { ...t, ...payload } : t)) : [...prev, payload];
-      // localStorage に即時反映してフォーム閉じ→リロード時の取りこぼしを防ぐ
-      try { saveTasks(next); } catch { /* ignore */ }
-      // クラウドにも即時に書き込む（debounce 待ちで失われるのを防ぐ）
-      if (user) {
-        saveCloudSnapshot(user.uid, { tasks: next, cats, groups, timetable, timetableConfig }).catch((err) => {
-          console.error("Immediate cloud save failed:", err);
-        });
-      }
-      return next;
-    });
-    setShowForm(false);
-    setEditTask(null);
-    setPrefillDate(null);
-  }, [user, cats, groups, timetable, timetableConfig]);
+  // タスク変更を localStorage とクラウドに即時反映する。
+  // クラウド側 useEffect の 400ms debounce 中にアプリが閉じても取りこぼさない。
+  const persistTasks = useCallback(
+    (updater: (prev: Task[]) => Task[]) => {
+      setTasks((prev) => {
+        const next = updater(prev);
+        try { saveTasks(next); } catch { /* ignore */ }
+        if (user) {
+          saveCloudSnapshot(user.uid, { tasks: next, cats, timetable, timetableConfig }).catch((err) => {
+            console.error("Immediate cloud save failed:", err);
+          });
+        }
+        return next;
+      });
+    },
+    [user, cats, timetable, timetableConfig]
+  );
 
-  const handleComplete = useCallback((task: Task) => {
-    if (task.kind === "event") return; // 予定は完了の概念なし
-    if (task.isOccurrence) {
-      const k = task.deadline.slice(0, 16);
-      setTasks((prev) => prev.map((t) => (t.id === task.parentId ? { ...t, completedOccurrences: [...(t.completedOccurrences || []), k] } : t)));
-      setTasks((prev) => [...prev, { ...task, id: uid(), completed: true, completedAt: new Date().toISOString(), isOccurrence: false, parentId: undefined }]);
-    } else {
-      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, completed: true, completedAt: new Date().toISOString() } : t)));
-    }
-  }, []);
+  const handleSave = useCallback(
+    (data: Task) => {
+      persistTasks((prev) => {
+        const ex = prev.find((t) => t.id === data.id);
+        const payload = withTaskDefaults(data);
+        return ex ? prev.map((t) => (t.id === data.id ? { ...t, ...payload } : t)) : [...prev, payload];
+      });
+      setShowForm(false);
+      setEditTask(null);
+      setPrefillDate(null);
+    },
+    [persistTasks]
+  );
 
-  const handleRestore = useCallback((id: string) => {
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, completed: false, completedAt: null } : t)));
-  }, []);
+  const handleComplete = useCallback(
+    (task: Task) => {
+      if (task.kind === "event") return; // 予定は完了の概念なし
+      persistTasks((prev) => {
+        if (task.isOccurrence) {
+          const k = task.deadline.slice(0, 16);
+          const updated = prev.map((t) =>
+            t.id === task.parentId ? { ...t, completedOccurrences: [...(t.completedOccurrences || []), k] } : t
+          );
+          return [
+            ...updated,
+            { ...task, id: uid(), completed: true, completedAt: new Date().toISOString(), isOccurrence: false, parentId: undefined },
+          ];
+        }
+        return prev.map((t) => (t.id === task.id ? { ...t, completed: true, completedAt: new Date().toISOString() } : t));
+      });
+    },
+    [persistTasks]
+  );
 
-  const handleSnooze = useCallback((task: Task, snoozeUntilYMD: string) => {
-    const parentId = task.parentId || task.id;
-    const key = task.deadline.slice(0, 16);
-    setTasks((prev) =>
-      prev.map((t) => {
-        if (t.id !== parentId) return t;
-        const next = { ...(t.snoozedOccurrences || {}), [key]: snoozeUntilYMD };
-        return { ...t, snoozedOccurrences: next };
-      })
-    );
-  }, []);
+  const handleRestore = useCallback(
+    (id: string) => {
+      persistTasks((prev) => prev.map((t) => (t.id === id ? { ...t, completed: false, completedAt: null } : t)));
+    },
+    [persistTasks]
+  );
 
-  const handleDeleteTask = useCallback((task: Task) => {
-    const id = task.parentId || task.id;
-    if (task.isOccurrence) {
-      const k = task.deadline.slice(0, 16);
-      setTasks((prev) => prev.map((t) => (t.id === task.parentId ? { ...t, completedOccurrences: [...(t.completedOccurrences || []), k] } : t)));
-    } else {
-      setTasks((prev) => prev.filter((t) => t.id !== id));
-    }
-  }, []);
+  const handleSnooze = useCallback(
+    (task: Task, snoozeUntilYMD: string) => {
+      const parentId = task.parentId || task.id;
+      const key = task.deadline.slice(0, 16);
+      persistTasks((prev) =>
+        prev.map((t) => {
+          if (t.id !== parentId) return t;
+          const next = { ...(t.snoozedOccurrences || {}), [key]: snoozeUntilYMD };
+          return { ...t, snoozedOccurrences: next };
+        })
+      );
+    },
+    [persistTasks]
+  );
 
-  const handleDeleteFromForm = useCallback((id: string) => {
-    setTasks((prev) => prev.filter((t) => t.id !== id));
-    setShowForm(false);
-    setEditTask(null);
-  }, []);
+  const handleDeleteTask = useCallback(
+    (task: Task) => {
+      const id = task.parentId || task.id;
+      persistTasks((prev) => {
+        if (task.isOccurrence) {
+          const k = task.deadline.slice(0, 16);
+          return prev.map((t) =>
+            t.id === task.parentId ? { ...t, completedOccurrences: [...(t.completedOccurrences || []), k] } : t
+          );
+        }
+        return prev.filter((t) => t.id !== id);
+      });
+    },
+    [persistTasks]
+  );
+
+  const handleDeleteFromForm = useCallback(
+    (id: string) => {
+      persistTasks((prev) => prev.filter((t) => t.id !== id));
+      setShowForm(false);
+      setEditTask(null);
+    },
+    [persistTasks]
+  );
 
   const openNew = (date: Date | null) => {
     setEditTask(null);
@@ -524,7 +562,6 @@ export default function Home() {
     await signOut(auth);
     setTasks([]);
     setCats(DEFAULT_CATS);
-    setGroups([]);
     setTimetable([]);
     setTimetableConfig(DEFAULT_TIMETABLE_CONFIG);
   };
@@ -538,7 +575,6 @@ export default function Home() {
     localStorage.clear();
     setTasks([]);
     setCats(DEFAULT_CATS);
-    setGroups([]);
     setTimetable([]);
     setTimetableConfig(DEFAULT_TIMETABLE_CONFIG);
     window.location.reload();
@@ -697,8 +733,7 @@ export default function Home() {
             { id: "list", label: "タスク" },
             { id: "calendar", label: "カレンダー" },
             { id: "timetable", label: "時間割" },
-            { id: "group", label: "グループ" },
-            { id: "completed", label: "達成済み", count: completed.length },
+            { id: "completed", label: "達成済み" },
           ]}
         />
       </div>
@@ -778,7 +813,6 @@ export default function Home() {
 
         {view === "calendar" && <div className="pt-3"><CalendarView tasks={allExpanded} cats={cats} month={calMonth} setMonth={setCalMonth} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onAddClick={(d) => openNew(d)} onEditTask={(t) => { setEditTask(t); setPrefillDate(null); setShowForm(true); }} /></div>}
         {view === "timetable" && <TimetableView items={timetable} setItems={setTimetable} setCats={setCats} config={timetableConfig} setConfig={setTimetableConfig} onShare={handleShareTimetable} tasks={tasks} cats={cats} />}
-        {view === "group" && <GroupView groups={groups} setGroups={setGroups} />}
         {view === "completed" && <div><div className="px-4 py-3 flex items-center justify-between"><span className="text-sm font-semibold text-gray-900">達成済み</span><span className="text-[11px] text-gray-400">{completed.length}件</span></div><CompletedList tasks={completed} cats={cats} onRestore={handleRestore} /></div>}
       </div>
 

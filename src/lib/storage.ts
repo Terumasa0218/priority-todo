@@ -1,9 +1,8 @@
-import { Task, Category, Group, TimetableItem, TimetableConfig } from "./types";
+import { Task, Category, TimetableItem, TimetableConfig } from "./types";
 import { DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG } from "./constants";
 
 const SK_T = "prioritodo_v6_tasks";
 const SK_C = "prioritodo_v6_cats";
-const SK_G = "prioritodo_v6_groups";
 const SK_TT = "prioritodo_v6_timetable";
 const SK_TTC = "prioritodo_v6_timetable_config";
 
@@ -30,19 +29,6 @@ export const loadCategories = (): Category[] => {
 export const saveCategories = (c: Category[]) => {
   try {
     localStorage.setItem(SK_C, JSON.stringify(c));
-  } catch { /* ignore */ }
-};
-
-export const loadGroups = (): Group[] => {
-  try {
-    return JSON.parse(localStorage.getItem(SK_G) || "[]") || [];
-  } catch {
-    return [];
-  }
-};
-export const saveGroups = (g: Group[]) => {
-  try {
-    localStorage.setItem(SK_G, JSON.stringify(g));
   } catch { /* ignore */ }
 };
 

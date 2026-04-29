@@ -216,7 +216,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       category,
       priority: false,
       recurrence,
-      repeatCount: task?.repeatCount || 15,
+      repeatCount: task?.repeatCount || 14,
       repeatEndDate,
       reminder,
       memo,
@@ -284,7 +284,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       startDate: computedStartDate,
       startOffsetDays: computedStartOffsetDays,
       recurrence,
-      repeatCount: recurrence === "none" ? null : (isTimetableRecurring ? classCount : (task?.repeatCount || 15)),
+      repeatCount: recurrence === "none" ? null : (isTimetableRecurring ? classCount : (task?.repeatCount || 14)),
       repeatEndDate: recurrence === "none"
         ? null
         : (isTimetableRecurring ? (derivedFromClassSchedule?.repeatEndDate || null) : repeatEndDate),
@@ -604,8 +604,8 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         />
         <div className="text-xs text-gray-400 mt-1">
           全{occurrenceCount}回
-          {(recurrence === "weekly" || recurrence === "biweekly") && "（繰り返し日に一致する日付のみ選択可）"
-          || (recurrence === "monthly" && "（毎月の繰り返し日に一致する日付のみ選択可）")}
+          {(recurrence === "weekly" || recurrence === "biweekly") && "（初回と同じ曜日のみ選択可）"}
+          {recurrence === "monthly" && "（初回と同じ日付のみ選択可）"}
         </div>
       </div>
     </Card>

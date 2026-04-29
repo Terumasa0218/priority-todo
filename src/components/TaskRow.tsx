@@ -125,12 +125,11 @@ export default function TaskRow({ task, cats, onComplete, onEdit, onDelete, idx,
           <button ref={checkRef} onClick={handleComplete}
             className="w-5 h-5 rounded-md border-2 border-gray-300 hover:border-green-500 hover:bg-green-50 transition-all flex-shrink-0 mt-0.5" />
           {/* Content */}
-          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => !task.isGroupTask && onEdit(task)}>
+          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onEdit(task)}>
             <div className="flex items-center gap-2">
               {task.priority && <IconFlag filled size={13} />}
               <span className={`text-sm font-semibold truncate ${isOverdue ? "text-rose-700" : "text-slate-900"}`}>{task.title}</span>
               {task.recurrence && task.recurrence !== "none" && <IconRepeat size={12} stroke="#889096" />}
-              {task.isGroupTask && <span className="text-[9px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded flex-shrink-0">{task.groupName}</span>}
             </div>
             <div className="flex items-center gap-2 mt-1">
               <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />

@@ -38,8 +38,6 @@ export interface Task {
   // 展開時に付与
   parentId?: string;
   isOccurrence?: boolean;
-  isGroupTask?: boolean;
-  groupName?: string;
 }
 
 export interface Category {
@@ -68,29 +66,6 @@ export interface TimetableConfig {
   maxPeriod: number; // 6, 8, 10 ...
   showOnDemand: boolean;
   onDemandSlotsByDay: number[]; // 月〜金のオンデマンド枠数
-}
-
-export interface Group {
-  id: string;
-  name: string;
-  members: GroupMember[];
-  tasks: GroupTask[];
-  createdAt: string;
-}
-
-export interface GroupMember {
-  id: string;
-  name: string;
-  isMe: boolean;
-}
-
-export interface GroupTask {
-  id: string;
-  title: string;
-  deadline: string;
-  assignee: string | null;
-  completed: boolean;
-  createdAt: string;
 }
 
 export interface TouchDragState {
