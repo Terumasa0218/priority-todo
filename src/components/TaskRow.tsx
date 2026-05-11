@@ -101,9 +101,11 @@ export default function TaskRow({ task, cats, onComplete, onEdit, onDelete, idx,
     <div className={`relative overflow-hidden px-3 py-1 ${popping ? "task-shrink" : ""}`}>
       {burst && <ParticleBurst x={burst.x} y={burst.y} />}
       {/* Delete button behind (swipe) */}
-      <div className="absolute right-3 top-1 bottom-1 w-20 bg-rose-500 rounded-r-2xl flex items-center justify-center">
-        <button onClick={() => onDelete(task)} className="text-white text-xs font-medium">削除</button>
-      </div>
+      {(showDeleteBtn || swipeX < -2) && (
+        <div className="absolute right-3 top-1 bottom-1 w-20 bg-rose-500 rounded-r-2xl flex items-center justify-center">
+          <button onClick={() => onDelete(task)} className="text-white text-xs font-medium">削除</button>
+        </div>
+      )}
       {/* Card */}
       <div
         className="relative transition-transform"

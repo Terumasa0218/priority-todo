@@ -1,4 +1,4 @@
-import { Category, TimetableConfig } from "./types";
+import { AppSettings, Category, TimetableConfig } from "./types";
 
 export const DAY = ["日", "月", "火", "水", "木", "金", "土"];
 export const WEEKDAY_LABELS = ["", "月", "火", "水", "木", "金"] as const;
@@ -56,6 +56,10 @@ export const DEFAULT_TIMETABLE_CONFIG: TimetableConfig = {
   maxPeriod: 6,
   showOnDemand: true,
   onDemandSlotsByDay: [0, 0, 0, 0, 0],
+};
+
+export const DEFAULT_APP_SETTINGS: AppSettings = {
+  skipHolidayClasses: true,
 };
 
 export const MEMBER_COLORS = [
