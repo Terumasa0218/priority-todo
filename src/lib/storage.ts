@@ -6,6 +6,7 @@ const SK_C = "prioritodo_v6_cats";
 const SK_TT = "prioritodo_v6_timetable";
 const SK_TTC = "prioritodo_v6_timetable_config";
 const SK_SETTINGS = "prioritodo_v6_app_settings";
+const LEGACY_SKIP_HOLIDAY_CLASSES = "prioritodo_skip_holiday_classes";
 
 export const loadTasks = (): Task[] => {
   try {
@@ -79,11 +80,16 @@ export const saveTimetableConfig = (config: TimetableConfig) => {
 export const loadAppSettings = (): AppSettings => {
   try {
     const raw = JSON.parse(localStorage.getItem(SK_SETTINGS) || "null");
-    return {
-      skipHolidayClasses: typeof raw?.skipHolidayClasses === "boolean"
-        ? raw.skipHolidayClasses
-        : DEFAULT_APP_SETTINGS.skipHolidayClasses,
-    };
+    if (typeof raw?.skipHolidayClasses === "boolean") {
+      return { skipHolidayClasses: raw.skipHolidayClasses };
+    }
+
+    const legacy = localStorage.getItem(LEGACY_SKIP_HOLIDAY_CLASSES);
+    if (legacy === "0" || legacy === "1") {
+      return { skipHolidayClasses: legacy === "1" };
+    }
+
+    return DEFAULT_APP_SETTINGS;
   } catch {
     return DEFAULT_APP_SETTINGS;
   }
@@ -92,5 +98,6 @@ export const loadAppSettings = (): AppSettings => {
 export const saveAppSettings = (settings: AppSettings) => {
   try {
     localStorage.setItem(SK_SETTINGS, JSON.stringify(settings));
+    localStorage.removeItem(LEGACY_SKIP_HOLIDAY_CLASSES);
   } catch { /* ignore */ }
 };
