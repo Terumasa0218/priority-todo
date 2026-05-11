@@ -1,12 +1,13 @@
 import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
-import { Category, Task, TimetableConfig, TimetableItem } from "./types";
-import { DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG } from "./constants";
+import { AppSettings, Category, Task, TimetableConfig, TimetableItem } from "./types";
+import { DEFAULT_APP_SETTINGS, DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG } from "./constants";
 import { db } from "./firebase";
 import {
   loadCategories,
   loadTasks,
   loadTimetable,
   loadTimetableConfig,
+  loadAppSettings,
 } from "./storage";
 
 export interface AppSnapshot {
@@ -14,6 +15,7 @@ export interface AppSnapshot {
   cats: Category[];
   timetable: TimetableItem[];
   timetableConfig: TimetableConfig;
+  settings: AppSettings;
 }
 
 const MIGRATION_PREFIX = "prioritodo_v6_migrated_";
@@ -23,6 +25,7 @@ const emptySnapshot: AppSnapshot = {
   cats: DEFAULT_CATS,
   timetable: [],
   timetableConfig: DEFAULT_TIMETABLE_CONFIG,
+  settings: DEFAULT_APP_SETTINGS,
 };
 
 const userDoc = (uid: string) => {
@@ -35,6 +38,11 @@ const normalizeSnapshot = (raw: Partial<AppSnapshot> | null | undefined): AppSna
   cats: Array.isArray(raw?.cats) && raw.cats.length > 0 ? raw.cats : DEFAULT_CATS,
   timetable: Array.isArray(raw?.timetable) ? raw.timetable : [],
   timetableConfig: raw?.timetableConfig || DEFAULT_TIMETABLE_CONFIG,
+  settings: {
+    skipHolidayClasses: typeof raw?.settings?.skipHolidayClasses === "boolean"
+      ? raw.settings.skipHolidayClasses
+      : DEFAULT_APP_SETTINGS.skipHolidayClasses,
+  },
 });
 
 export const loadCloudSnapshot = async (uid: string): Promise<AppSnapshot> => {
@@ -64,6 +72,7 @@ const localSnapshot = (): AppSnapshot =>
     cats: loadCategories(),
     timetable: loadTimetable(),
     timetableConfig: loadTimetableConfig(),
+    settings: loadAppSettings(),
   });
 
 const hasLocalData = (snapshot: AppSnapshot) =>

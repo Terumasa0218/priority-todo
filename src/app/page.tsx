@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG, FILTERS, WEEKDAY_LABELS } from "@/lib/constants";
+import { DEFAULT_APP_SETTINGS, DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG, FILTERS, WEEKDAY_LABELS } from "@/lib/constants";
 import { expandRecurring, remaining, uid } from "@/lib/utils";
-import { Category, Task, TimetableConfig, TimetableItem, TouchDragState } from "@/lib/types";
+import { AppSettings, Category, Task, TimetableConfig, TimetableItem, TouchDragState } from "@/lib/types";
 import { IconBook, IconList, IconPalette, IconPlus, IconSettings } from "@/components/Icons";
 import TaskRow from "@/components/TaskRow";
 import TaskForm from "@/components/TaskForm";
@@ -20,7 +20,7 @@ import { signInWithPopup, signOut, onAuthStateChanged, signInWithRedirect, User,
 import { deleteCloudSnapshot, loadCloudSnapshot, migrateLocalToCloudOnce, saveCloudSnapshot } from "@/lib/cloudStorage";
 import { createTimetableShareToken, loadTimetableShareToken } from "@/lib/timetableShare";
 import { AuthIssue, resolveAuthIssue } from "@/lib/authErrorCatalog";
-import { loadCategories, loadTasks, loadTimetable, loadTimetableConfig, saveCategories, saveTasks, saveTimetable, saveTimetableConfig } from "@/lib/storage";
+import { loadAppSettings, loadCategories, loadTasks, loadTimetable, loadTimetableConfig, saveAppSettings, saveCategories, saveTasks, saveTimetable, saveTimetableConfig } from "@/lib/storage";
 
 type View = "list" | "calendar" | "timetable" | "completed";
 const isInAppBrowser = () => /FBAN|FBAV|Instagram|Line|Twitter|wv|WebView|GSA|LinkedInApp|Slack|Discord|GitHub/i.test(navigator.userAgent);
@@ -53,6 +53,7 @@ export default function Home() {
   const [cats, setCats] = useState<Category[]>(DEFAULT_CATS);
   const [timetable, setTimetable] = useState<TimetableItem[]>([]);
   const [timetableConfig, setTimetableConfig] = useState<TimetableConfig>(DEFAULT_TIMETABLE_CONFIG);
+  const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [view, setView] = useState<View>("list");
   const [activeFilter, setActiveFilter] = useState("today");
   const [catFilter, setCatFilter] = useState("all");
@@ -193,6 +194,7 @@ export default function Home() {
       setCats(loadCategories());
       setTimetable(loadTimetable().map((it) => ({ ...it, period: migratePeriod(it.period as string | number) })));
       setTimetableConfig(loadTimetableConfig());
+      setAppSettings(loadAppSettings());
       try {
         await migrateLocalToCloudOnce(user.uid);
         const snapshot = await loadCloudSnapshot(user.uid);
@@ -200,7 +202,8 @@ export default function Home() {
         const cloudHasData =
           snapshot.tasks.length > 0 ||
           snapshot.timetable.length > 0 ||
-          snapshot.cats.length > 1;
+          snapshot.cats.length > 1 ||
+          snapshot.settings.skipHolidayClasses !== DEFAULT_APP_SETTINGS.skipHolidayClasses;
         if (cloudHasData) {
           // 同 id のタスクは「より進んだ状態」(完了 / 完了 occurrence / 先延ばし数が多い方) を優先する。
           // クラウド書き込みが debounce 中に失敗してもローカル側の完了などが復活しないように。
@@ -224,6 +227,7 @@ export default function Home() {
           setCats(snapshot.cats);
           setTimetable(snapshot.timetable.map((it) => ({ ...it, period: migratePeriod(it.period as string | number) })));
           setTimetableConfig(snapshot.timetableConfig);
+          setAppSettings(snapshot.settings);
         }
         setReady(true);
       } catch (err) {
@@ -245,17 +249,18 @@ export default function Home() {
     saveCategories(cats);
     saveTimetable(timetable);
     saveTimetableConfig(timetableConfig);
-  }, [tasks, cats, timetable, timetableConfig, ready]);
+    saveAppSettings(appSettings);
+  }, [tasks, cats, timetable, timetableConfig, appSettings, ready]);
 
   useEffect(() => {
     if (!ready || !user) return;
     const timer = setTimeout(() => {
-      saveCloudSnapshot(user.uid, { tasks, cats, timetable, timetableConfig }).catch((err) => {
+      saveCloudSnapshot(user.uid, { tasks, cats, timetable, timetableConfig, settings: appSettings }).catch((err) => {
         console.error("Cloud sync failed:", err);
       });
     }, 400);
     return () => clearTimeout(timer);
-  }, [tasks, cats, timetable, timetableConfig, ready, user]);
+  }, [tasks, cats, timetable, timetableConfig, appSettings, ready, user]);
 
   useEffect(() => {
     if (!ready || !user) return;
@@ -322,13 +327,13 @@ export default function Home() {
       if (t.recurrence && t.recurrence !== "none") {
         const cat = cats.find((c) => c.id === t.category);
         const isOnDemand = !!(cat?.timetableId && onDemandTimetableIds.has(cat.timetableId));
-        exp.push(...expandRecurring(t, horizon, { skipHolidays: !isOnDemand }));
+        exp.push(...expandRecurring(t, horizon, { skipHolidays: isOnDemand ? false : appSettings.skipHolidayClasses }));
       } else {
         exp.push(t);
       }
     });
     return exp;
-  }, [active, cats, onDemandTimetableIds]);
+  }, [active, cats, onDemandTimetableIds, appSettings.skipHolidayClasses]);
 
   const sorted = useMemo(() => {
     const now = Date.now();
@@ -387,14 +392,14 @@ export default function Home() {
         const next = updater(prev);
         try { saveTasks(next); } catch { /* ignore */ }
         if (user) {
-          saveCloudSnapshot(user.uid, { tasks: next, cats, timetable, timetableConfig }).catch((err) => {
+          saveCloudSnapshot(user.uid, { tasks: next, cats, timetable, timetableConfig, settings: appSettings }).catch((err) => {
             console.error("Immediate cloud save failed:", err);
           });
         }
         return next;
       });
     },
-    [user, cats, timetable, timetableConfig]
+    [user, cats, timetable, timetableConfig, appSettings]
   );
 
   const handleSave = useCallback(
@@ -880,6 +885,26 @@ export default function Home() {
               <div className="px-4 py-3.5 border-b border-gray-100 flex items-center justify-between"><span className="text-sm text-gray-900">壁紙</span><span className="text-sm text-gray-400">近日公開</span></div>
               <div className="px-4 py-3.5 border-b border-gray-100 flex items-center justify-between"><span className="text-sm text-gray-900">完了エフェクト</span><span className="text-sm text-gray-400">近日公開</span></div>
               <div className="px-4 py-3.5 flex items-center justify-between"><span className="text-sm text-gray-900">言語</span><span className="text-sm text-gray-400">日本語</span></div>
+            </div>
+
+            <div className="mt-4 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
+              <div className="px-4 py-3 border-b border-gray-100">
+                <div className="text-sm font-semibold text-gray-900">大学・授業ルール</div>
+                <div className="text-xs text-gray-500 mt-1 leading-relaxed">国公立・私立など大学ごとの祝日授業ルールに合わせて、授業課題の自動展開を調整します。</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAppSettings((prev) => ({ ...prev, skipHolidayClasses: !prev.skipHolidayClasses }))}
+                className="w-full px-4 py-3.5 flex items-center justify-between text-left active:bg-gray-50 min-h-14"
+              >
+                <div className="pr-4">
+                  <div className="text-sm font-medium text-gray-900">祝日は休講としてスキップ</div>
+                  <div className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">オフにすると、祝日でも通常授業の課題を作成します。オンデマンドは常にスキップしません。</div>
+                </div>
+                <span className={`relative inline-flex h-7 w-12 flex-shrink-0 rounded-full transition-colors ${appSettings.skipHolidayClasses ? "bg-[#007AFF]" : "bg-gray-300"}`} aria-hidden="true">
+                  <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${appSettings.skipHolidayClasses ? "translate-x-5" : "translate-x-0.5"}`} />
+                </span>
+              </button>
             </div>
 
             <div className="mt-4 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
