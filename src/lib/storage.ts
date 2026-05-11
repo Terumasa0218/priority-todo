@@ -1,10 +1,12 @@
-import { Task, Category, TimetableItem, TimetableConfig } from "./types";
-import { DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG } from "./constants";
+import { AppSettings, Task, Category, TimetableItem, TimetableConfig } from "./types";
+import { DEFAULT_APP_SETTINGS, DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG } from "./constants";
 
 const SK_T = "prioritodo_v6_tasks";
 const SK_C = "prioritodo_v6_cats";
 const SK_TT = "prioritodo_v6_timetable";
 const SK_TTC = "prioritodo_v6_timetable_config";
+const SK_SETTINGS = "prioritodo_v6_app_settings";
+const LEGACY_SKIP_HOLIDAY_CLASSES = "prioritodo_skip_holiday_classes";
 
 export const loadTasks = (): Task[] => {
   try {
@@ -71,5 +73,31 @@ export const loadTimetableConfig = (): TimetableConfig => {
 export const saveTimetableConfig = (config: TimetableConfig) => {
   try {
     localStorage.setItem(SK_TTC, JSON.stringify(config));
+  } catch { /* ignore */ }
+};
+
+
+export const loadAppSettings = (): AppSettings => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SK_SETTINGS) || "null");
+    if (typeof raw?.skipHolidayClasses === "boolean") {
+      return { skipHolidayClasses: raw.skipHolidayClasses };
+    }
+
+    const legacy = localStorage.getItem(LEGACY_SKIP_HOLIDAY_CLASSES);
+    if (legacy === "0" || legacy === "1") {
+      return { skipHolidayClasses: legacy === "1" };
+    }
+
+    return DEFAULT_APP_SETTINGS;
+  } catch {
+    return DEFAULT_APP_SETTINGS;
+  }
+};
+
+export const saveAppSettings = (settings: AppSettings) => {
+  try {
+    localStorage.setItem(SK_SETTINGS, JSON.stringify(settings));
+    localStorage.removeItem(LEGACY_SKIP_HOLIDAY_CLASSES);
   } catch { /* ignore */ }
 };
