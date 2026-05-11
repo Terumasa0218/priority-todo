@@ -196,6 +196,10 @@ export default function Home() {
       setTimetableConfig(loadTimetableConfig());
       setAppSettings(loadAppSettings());
       try {
+        const raw = localStorage.getItem("prioritodo_skip_holiday_classes");
+        if (raw !== null) setSkipHolidayClasses(raw === "1");
+      } catch { /* ignore */ }
+      try {
         await migrateLocalToCloudOnce(user.uid);
         const snapshot = await loadCloudSnapshot(user.uid);
         if (!mounted) return;
@@ -885,6 +889,16 @@ export default function Home() {
               <div className="px-4 py-3.5 border-b border-gray-100 flex items-center justify-between"><span className="text-sm text-gray-900">壁紙</span><span className="text-sm text-gray-400">近日公開</span></div>
               <div className="px-4 py-3.5 border-b border-gray-100 flex items-center justify-between"><span className="text-sm text-gray-900">完了エフェクト</span><span className="text-sm text-gray-400">近日公開</span></div>
               <div className="px-4 py-3.5 flex items-center justify-between"><span className="text-sm text-gray-900">言語</span><span className="text-sm text-gray-400">日本語</span></div>
+            </div>
+            <div className="mt-4 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
+              <div className="px-4 py-3 border-b border-gray-100">
+                <div className="text-sm font-semibold text-gray-900">授業日の祝日扱い</div>
+                <div className="text-xs text-gray-500 mt-1 leading-relaxed">大学ルールに合わせて、祝日でも授業課題を出すか切り替えます。</div>
+              </div>
+              <label className="px-4 py-3.5 flex items-center justify-between">
+                <span className="text-sm text-gray-900">祝日は休講としてスキップ</span>
+                <input type="checkbox" checked={skipHolidayClasses} onChange={(e) => setSkipHolidayClasses(e.target.checked)} />
+              </label>
             </div>
 
             <div className="mt-4 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
