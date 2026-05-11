@@ -54,6 +54,10 @@ export default function Home() {
   const [timetable, setTimetable] = useState<TimetableItem[]>([]);
   const [timetableConfig, setTimetableConfig] = useState<TimetableConfig>(DEFAULT_TIMETABLE_CONFIG);
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const skipHolidayClasses = appSettings.skipHolidayClasses;
+  const setSkipHolidayClasses = useCallback((next: boolean) => {
+    setAppSettings((prev) => ({ ...prev, skipHolidayClasses: next }));
+  }, []);
   const [view, setView] = useState<View>("list");
   const [activeFilter, setActiveFilter] = useState("today");
   const [catFilter, setCatFilter] = useState("all");
@@ -933,6 +937,26 @@ export default function Home() {
                 </div>
                 <span className={`relative inline-flex h-7 w-12 flex-shrink-0 rounded-full transition-colors ${appSettings.skipHolidayClasses ? "bg-[#007AFF]" : "bg-gray-300"}`} aria-hidden="true">
                   <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${appSettings.skipHolidayClasses ? "translate-x-5" : "translate-x-0.5"}`} />
+                </span>
+              </button>
+            </div>
+
+            <div className="mt-4 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
+              <div className="px-4 py-3 border-b border-gray-100">
+                <div className="text-sm font-semibold text-gray-900">大学・授業ルール</div>
+                <div className="text-xs text-gray-500 mt-1 leading-relaxed">国公立・私立など大学ごとの祝日授業ルールに合わせて、授業課題の自動展開を調整します。</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSkipHolidayClasses(!skipHolidayClasses)}
+                className="w-full px-4 py-3.5 flex items-center justify-between text-left active:bg-gray-50 min-h-14"
+              >
+                <div className="pr-4">
+                  <div className="text-sm font-medium text-gray-900">祝日は休講としてスキップ</div>
+                  <div className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">オフにすると、祝日でも通常授業の課題を作成します。オンデマンドは常にスキップしません。</div>
+                </div>
+                <span className={`relative inline-flex h-7 w-12 flex-shrink-0 rounded-full transition-colors ${skipHolidayClasses ? "bg-[#007AFF]" : "bg-gray-300"}`} aria-hidden="true">
+                  <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${skipHolidayClasses ? "translate-x-5" : "translate-x-0.5"}`} />
                 </span>
               </button>
             </div>
