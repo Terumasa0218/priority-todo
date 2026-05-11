@@ -68,6 +68,11 @@ export interface TimetableConfig {
   onDemandSlotsByDay: number[]; // 月〜金のオンデマンド枠数
 }
 
+export interface AppSettings {
+  // 授業繰り返しタスクで、授業日が祝日の回を休講扱いとして飛ばすか。
+  skipHolidayClasses: boolean;
+}
+
 export interface TouchDragState {
   active: boolean;
   dragIdx: number | null;

@@ -1,5 +1,5 @@
 "use client";
-import React, { useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { Task, Category } from "@/lib/types";
 import { DAY } from "@/lib/constants";
 import { holidayName } from "@/lib/holidays";
@@ -54,6 +54,13 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
     ? `${selectedDate.getFullYear()}年${selectedDate.getMonth() + 1}月${selectedDate.getDate()}日(${DAY[selectedDate.getDay()]})`
     : "";
   const selHoliday = selectedDate ? holidayName(selectedDate) : null;
+
+  const detailsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!selectedDate) return;
+    detailsRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [selectedDate]);
 
   const fmtTime = (d: string) => {
     const o = new Date(d);
@@ -146,9 +153,10 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
       </div>
       {selectedDate && (
         <div
-          className="fixed inset-x-0 bottom-0 z-50 w-full max-w-lg mx-auto bg-white rounded-t-3xl shadow-2xl sheet-slide-up flex flex-col border-t border-slate-100"
-          style={{ maxHeight: "55dvh", paddingBottom: "env(safe-area-inset-bottom)" }}
-          role="dialog"
+          ref={detailsRef}
+          className="mt-3 mx-4 bg-white rounded-3xl shadow-sm sheet-slide-up flex flex-col border border-slate-100 overflow-hidden"
+          role="region"
+          aria-live="polite"
         >
             <div className="flex items-center justify-center pt-2 pb-1">
               <div className="w-10 h-1 rounded-full bg-slate-200" />
@@ -162,7 +170,7 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
                 <IconX size={16} />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto">
+            <div className="max-h-[38dvh] overflow-y-auto">
               {selTasks.length === 0 ? (
                 <EmptyState title="予定はありません" description="この日は余白です。追加して整えましょう。" className="!border-none !shadow-none !bg-transparent py-7" />
               ) : (
