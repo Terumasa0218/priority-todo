@@ -88,7 +88,7 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
   };
 
   return (
-    <div>
+    <div className={selectedDate ? "pb-[56dvh]" : ""}>
       <SectionHeader
         title={`${y}年 ${m + 1}月`}
         className="mb-2 px-4"
