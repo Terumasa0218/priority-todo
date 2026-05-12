@@ -27,6 +27,11 @@ export interface Task {
   reminder: string;
   memo: string;
   url: string;
+  // Moodle ICS 取り込み由来の課題を重複判定・更新検知するためのメタ情報。
+  moodleUid?: string;
+  moodleLastModified?: string | null;
+  moodleCategoryCode?: string;
+  moodleSourceHash?: string;
   completed: boolean;
   completedAt: string | null;
   completedOccurrences: string[];
@@ -54,6 +59,9 @@ export interface TimetableItem {
   period: string; // "1・2限" 等、または "オンデマンドN"
   teacher: string;
   room: string;
+  // Moodle連携を使う授業では、CATEGORIES の下4桁を時間割番号として保存する。
+  moodleEnabled?: boolean;
+  timetableCode?: string;
   attendancePresent?: number;
   attendanceAbsent?: number;
   attendanceLate?: number;

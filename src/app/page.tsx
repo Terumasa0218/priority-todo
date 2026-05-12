@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { DEFAULT_APP_SETTINGS, DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG, FILTERS, WEEKDAY_LABELS } from "@/lib/constants";
 import { expandRecurring, remaining, uid } from "@/lib/utils";
 import { AppSettings, Category, Task, TimetableConfig, TimetableItem, TouchDragState } from "@/lib/types";
+import { MoodleImportCandidate } from "@/lib/moodleIcs";
 import { IconBook, IconList, IconPalette, IconPlus, IconSettings } from "@/components/Icons";
 import TaskRow from "@/components/TaskRow";
 import TaskForm from "@/components/TaskForm";
@@ -11,6 +12,7 @@ import CategoryManager from "@/components/CategoryManager";
 import CalendarView from "@/components/CalendarView";
 import CompletedList from "@/components/CompletedList";
 import TimetableView from "@/components/TimetableView";
+import MoodleImportView from "@/components/MoodleImportView";
 import TodayView from "@/components/TodayView";
 import SegmentedTabs from "@/components/ui/SegmentedTabs";
 import SurfaceCard from "@/components/ui/SurfaceCard";
@@ -22,7 +24,7 @@ import { createTimetableShareToken, loadTimetableShareToken } from "@/lib/timeta
 import { AuthIssue, resolveAuthIssue } from "@/lib/authErrorCatalog";
 import { loadAppSettings, loadCategories, loadTasks, loadTimetable, loadTimetableConfig, saveAppSettings, saveCategories, saveTasks, saveTimetable, saveTimetableConfig } from "@/lib/storage";
 
-type View = "list" | "calendar" | "timetable" | "completed";
+type View = "list" | "calendar" | "timetable" | "moodle" | "completed";
 const isInAppBrowser = () => /FBAN|FBAV|Instagram|Line|Twitter|wv|WebView|GSA|LinkedInApp|Slack|Discord|GitHub/i.test(navigator.userAgent);
 const isMobileDevice = () => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -420,6 +422,44 @@ export default function Home() {
     [persistTasks]
   );
 
+
+  const handleMoodleImport = useCallback(
+    (candidates: MoodleImportCandidate[]) => {
+      persistTasks((prev) => {
+        const existingUids = new Set(prev.map((task) => task.moodleUid).filter(Boolean));
+        const imported = candidates
+          .filter((candidate) => !existingUids.has(candidate.uid))
+          .map((candidate) => ({
+            id: uid(),
+            title: candidate.title,
+            kind: "todo" as const,
+            deadline: candidate.deadline,
+            category: candidate.categoryId || "default",
+            priority: false,
+            startDate: null,
+            startOffsetDays: 3,
+            recurrence: "none" as const,
+            repeatCount: null,
+            repeatEndDate: null,
+            reminder: "1day",
+            memo: candidate.description,
+            url: candidate.url,
+            moodleUid: candidate.uid,
+            moodleLastModified: candidate.lastModified,
+            moodleCategoryCode: candidate.timetableCode,
+            moodleSourceHash: candidate.sourceHash,
+            completed: false,
+            completedAt: null,
+            completedOccurrences: [],
+            order: null,
+            createdAt: new Date().toISOString(),
+          }));
+        return imported.length > 0 ? [...prev, ...imported] : prev;
+      });
+    },
+    [persistTasks]
+  );
+
   const handleComplete = useCallback(
     (task: Task) => {
       if (task.kind === "event") return; // 予定は完了の概念なし
@@ -738,22 +778,22 @@ export default function Home() {
   );
 
   return (
-    <div className="h-[100dvh] flex flex-col overflow-hidden bg-background prioritodo-app safe-x">
-      <header className="sticky top-0 z-40 bg-white border-b border-slate-100 safe-top">
+    <div className="app-shell h-[100dvh] flex flex-col overflow-hidden bg-background prioritodo-app safe-x">
+      <header className="glass-header sticky top-0 z-40 safe-top">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between gap-2">
-          <div className="min-w-0 flex-shrink"><h1 className="text-base font-bold text-gray-900 tracking-tight">PrioriTodo</h1><p className="text-[10px] text-gray-400 tracking-wide truncate">次にやることが、すぐ分かる</p></div>
+          <div className="min-w-0 flex-shrink"><h1 className="text-lg font-black text-slate-950 tracking-tight">PrioriTodo</h1><p className="text-[11px] text-slate-500 tracking-wide truncate">今日やる課題を、迷わず整理</p></div>
           <div className="flex items-center gap-1 flex-shrink-0">
             {overdueCount > 0 && <span className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-md whitespace-nowrap">{overdueCount}件超過</span>}
             <div className="text-right leading-none whitespace-nowrap mr-1"><div className="text-[9px] text-gray-400">今週</div><div className="text-sm font-bold text-gray-900">{weekDone}<span className="text-[9px] text-gray-400 font-normal ml-0.5">達成</span></div></div>
-            <button onClick={() => setShowCatMgr(true)} className="p-1.5 hover:bg-gray-100 rounded-lg" aria-label="カテゴリ編集"><IconPalette size={16} stroke="#666" /></button>
-            <button onClick={() => setShowSettings(true)} className="p-1.5 hover:bg-gray-100 rounded-lg" aria-label="設定"><IconSettings size={15} stroke="#666" /></button>
-            <button onClick={() => setShowHelp(true)} className="p-1.5 hover:bg-gray-100 rounded-lg" aria-label="ヘルプ"><IconBook size={15} stroke="#666" /></button>
-            <button onClick={handleLogout} className="text-[10px] text-gray-500 border border-gray-200 px-1.5 py-1 rounded-md whitespace-nowrap">ログアウト</button>
+            <button onClick={() => setShowCatMgr(true)} className="p-2 hover:bg-white/70 rounded-2xl transition-all active:scale-95" aria-label="カテゴリ編集"><IconPalette size={16} stroke="#666" /></button>
+            <button onClick={() => setShowSettings(true)} className="p-2 hover:bg-white/70 rounded-2xl transition-all active:scale-95" aria-label="設定"><IconSettings size={15} stroke="#666" /></button>
+            <button onClick={() => setShowHelp(true)} className="p-2 hover:bg-white/70 rounded-2xl transition-all active:scale-95" aria-label="ヘルプ"><IconBook size={15} stroke="#666" /></button>
+            <button onClick={handleLogout} className="text-[10px] text-slate-600 bg-white/60 border border-white/70 px-2 py-1.5 rounded-full whitespace-nowrap shadow-sm active:scale-95 transition-transform">ログアウト</button>
           </div>
         </div>
       </header>
 
-      <div className="max-w-lg mx-auto px-4 pt-3">
+      <div className="max-w-lg mx-auto px-4 pt-4">
         <SegmentedTabs
           value={view}
           onChange={(id) => setView(id as View)}
@@ -761,6 +801,7 @@ export default function Home() {
             { id: "list", label: "タスク" },
             { id: "calendar", label: "カレンダー" },
             { id: "timetable", label: "時間割" },
+            { id: "moodle", label: "Moodle" },
             { id: "completed", label: "達成済み" },
           ]}
         />
@@ -776,7 +817,7 @@ export default function Home() {
                 items={FILTERS.map((f) => ({ id: f.id, label: f.label }))}
               />
             </div>
-            <SurfaceCard className="mx-4 mb-2 px-3 py-2 space-y-1.5 !rounded-2xl">
+            <SurfaceCard className="mx-4 mb-3 px-3 py-2.5 space-y-1.5 !rounded-[22px]">
               <div className="flex gap-1.5 overflow-x-auto">
                 <button
                   onClick={() => { setCatFilter("all"); setShowCourseFilters(false); }}
@@ -841,12 +882,13 @@ export default function Home() {
 
         {view === "calendar" && <div className="pt-3"><CalendarView tasks={allExpanded} cats={cats} month={calMonth} setMonth={setCalMonth} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onAddClick={(d) => openNew(d)} onEditTask={openEdit} /></div>}
         {view === "timetable" && <TimetableView items={timetable} setItems={setTimetable} setCats={setCats} config={timetableConfig} setConfig={setTimetableConfig} onShare={handleShareTimetable} tasks={tasks} cats={cats} />}
+        {view === "moodle" && <MoodleImportView tasks={tasks} cats={cats} timetable={timetable} onImport={handleMoodleImport} />}
         {view === "completed" && <div><div className="px-4 py-3 flex items-center justify-between"><span className="text-sm font-semibold text-gray-900">達成済み</span><span className="text-[11px] text-gray-400">{completed.length}件</span></div><CompletedList tasks={completed} cats={cats} onRestore={handleRestore} /></div>}
       </div>
 
       <button
         onClick={() => openNew(null)}
-        className="fixed right-6 z-40 w-14 h-14 bg-[#007AFF] hover:bg-[#0062CC] text-white rounded-full shadow-lg hover:shadow-xl transition-all active:scale-95 flex items-center justify-center"
+        className="floating-fab fixed right-6 z-40 w-14 h-14 text-white rounded-full transition-all flex items-center justify-center"
         style={{ bottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}
       ><IconPlus size={20} sw={2.5} /></button>
       {showForm && <TaskForm task={editTask} prefillDate={prefillDate} cats={cats} setCats={setCats} timetable={timetable} onSave={handleSave} onDelete={handleDeleteFromForm} onClose={() => { setShowForm(false); setEditTask(null); setPrefillDate(null); }} />}
