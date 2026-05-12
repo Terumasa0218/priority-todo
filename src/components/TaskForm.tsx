@@ -41,6 +41,37 @@ const RECUR_OPTIONS: { id: Task["recurrence"]; label: string }[] = [
   { id: "daily", label: "毎日" },
 ];
 
+
+const COURSE_TEMPLATES = [
+  {
+    id: "response",
+    label: "レスポンスカード",
+    description: "毎週・当日から表示",
+    recurrence: "weekly" as Task["recurrence"],
+    startOffset: 0,
+    deadlineTime: "23:59",
+    title: "レスポンスカード",
+  },
+  {
+    id: "quiz",
+    label: "小テスト",
+    description: "毎週・1日前から表示",
+    recurrence: "weekly" as Task["recurrence"],
+    startOffset: 1,
+    deadlineTime: "23:59",
+    title: "小テスト",
+  },
+  {
+    id: "report",
+    label: "レポート",
+    description: "単発・1週間前から表示",
+    recurrence: "none" as Task["recurrence"],
+    startOffset: 7,
+    deadlineTime: "23:59",
+    title: "レポート",
+  },
+] as const;
+
 const toDateOnly = (iso: string): string => iso.slice(0, 10);
 
 const inferStartState = (task: Task | null): { mode: StartMode; offsetStr: string; date: string } => {
@@ -306,6 +337,18 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     });
   };
 
+  const applyCourseTemplate = (template: typeof COURSE_TEMPLATES[number]) => {
+    if (!title.trim()) setTitle(template.title);
+    setRecurrence(template.recurrence);
+    setStartMode("offset");
+    setStartOffsetDaysStr(String(template.startOffset));
+    updateDeadlineTime(template.deadlineTime);
+    if (template.recurrence !== "none") {
+      setShowAdvanced(true);
+      if (isTimetableCourse && !classStartDate) setClassStartDate(deadlineDate);
+    }
+  };
+
   // 種別切替
   const KindSwitch = (
     <div className="mt-3 mx-4 rounded-[24px] border border-white/80 bg-white p-1.5 shadow-[0_12px_32px_rgba(27,39,75,0.07)]">
@@ -322,6 +365,33 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       </div>
     </div>
   );
+
+  const CourseTemplateCard = kind === "todo" ? (
+    <Card>
+      <div className="px-4 py-3">
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <div>
+            <span className="text-sm text-gray-900 font-semibold block">よく使う課題</span>
+            <span className="text-[11px] text-gray-400 block mt-0.5">Moodleなしでも授業ごとの定番課題を素早く作れます</span>
+          </div>
+          {selectedCat && <span className="text-[10px] text-gray-400 rounded-full bg-gray-100 px-2 py-1 max-w-[120px] truncate">{selectedCat.label}</span>}
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {COURSE_TEMPLATES.map((template) => (
+            <button
+              key={template.id}
+              type="button"
+              onClick={() => applyCourseTemplate(template)}
+              className="min-h-[74px] rounded-2xl bg-gray-50 px-2.5 py-2 text-left active:scale-[0.98] transition-transform"
+            >
+              <span className="block text-xs font-bold text-gray-900 leading-tight">{template.label}</span>
+              <span className="block text-[10px] text-gray-500 mt-1 leading-snug">{template.description}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </Card>
+  ) : null;
 
   const RecurrenceCard = (
     <Card>
@@ -649,6 +719,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     if (recurrence === "none") {
       sections.push(DeadlineCard);
     }
+    sections.push(CourseTemplateCard);
     sections.push(StartDateCard);
     sections.push(UrlMemoCard);
     sections.push(AdvancedToggleCard);
