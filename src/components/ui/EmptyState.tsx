@@ -10,10 +10,10 @@ interface EmptyStateProps {
 
 export default function EmptyState({ title, description, icon, className = "" }: EmptyStateProps) {
   return (
-    <div className={`surface-card p-8 text-center ${className}`}>
-      {icon && <div className="mx-auto mb-3 w-10 h-10 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400">{icon}</div>}
-      <p className="text-sm font-medium text-slate-700">{title}</p>
-      {description && <p className="text-xs text-slate-500 mt-1">{description}</p>}
+    <div className={`surface-card p-8 text-center overflow-hidden ${className}`}>
+      {icon && <div className="mx-auto mb-3 w-12 h-12 rounded-3xl bg-gradient-to-br from-sky-50 to-indigo-50 shadow-inner flex items-center justify-center text-slate-400">{icon}</div>}
+      <p className="text-sm font-bold text-slate-800">{title}</p>
+      {description && <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">{description}</p>}
     </div>
   );
 }

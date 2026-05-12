@@ -738,22 +738,22 @@ export default function Home() {
   );
 
   return (
-    <div className="h-[100dvh] flex flex-col overflow-hidden bg-background prioritodo-app safe-x">
-      <header className="sticky top-0 z-40 bg-white border-b border-slate-100 safe-top">
+    <div className="app-shell h-[100dvh] flex flex-col overflow-hidden bg-background prioritodo-app safe-x">
+      <header className="glass-header sticky top-0 z-40 safe-top">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between gap-2">
-          <div className="min-w-0 flex-shrink"><h1 className="text-base font-bold text-gray-900 tracking-tight">PrioriTodo</h1><p className="text-[10px] text-gray-400 tracking-wide truncate">次にやることが、すぐ分かる</p></div>
+          <div className="min-w-0 flex-shrink"><h1 className="text-lg font-black text-slate-950 tracking-tight">PrioriTodo</h1><p className="text-[11px] text-slate-500 tracking-wide truncate">今日やる課題を、迷わず整理</p></div>
           <div className="flex items-center gap-1 flex-shrink-0">
             {overdueCount > 0 && <span className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-md whitespace-nowrap">{overdueCount}件超過</span>}
             <div className="text-right leading-none whitespace-nowrap mr-1"><div className="text-[9px] text-gray-400">今週</div><div className="text-sm font-bold text-gray-900">{weekDone}<span className="text-[9px] text-gray-400 font-normal ml-0.5">達成</span></div></div>
-            <button onClick={() => setShowCatMgr(true)} className="p-1.5 hover:bg-gray-100 rounded-lg" aria-label="カテゴリ編集"><IconPalette size={16} stroke="#666" /></button>
-            <button onClick={() => setShowSettings(true)} className="p-1.5 hover:bg-gray-100 rounded-lg" aria-label="設定"><IconSettings size={15} stroke="#666" /></button>
-            <button onClick={() => setShowHelp(true)} className="p-1.5 hover:bg-gray-100 rounded-lg" aria-label="ヘルプ"><IconBook size={15} stroke="#666" /></button>
-            <button onClick={handleLogout} className="text-[10px] text-gray-500 border border-gray-200 px-1.5 py-1 rounded-md whitespace-nowrap">ログアウト</button>
+            <button onClick={() => setShowCatMgr(true)} className="p-2 hover:bg-white/70 rounded-2xl transition-all active:scale-95" aria-label="カテゴリ編集"><IconPalette size={16} stroke="#666" /></button>
+            <button onClick={() => setShowSettings(true)} className="p-2 hover:bg-white/70 rounded-2xl transition-all active:scale-95" aria-label="設定"><IconSettings size={15} stroke="#666" /></button>
+            <button onClick={() => setShowHelp(true)} className="p-2 hover:bg-white/70 rounded-2xl transition-all active:scale-95" aria-label="ヘルプ"><IconBook size={15} stroke="#666" /></button>
+            <button onClick={handleLogout} className="text-[10px] text-slate-600 bg-white/60 border border-white/70 px-2 py-1.5 rounded-full whitespace-nowrap shadow-sm active:scale-95 transition-transform">ログアウト</button>
           </div>
         </div>
       </header>
 
-      <div className="max-w-lg mx-auto px-4 pt-3">
+      <div className="max-w-lg mx-auto px-4 pt-4">
         <SegmentedTabs
           value={view}
           onChange={(id) => setView(id as View)}
@@ -776,7 +776,7 @@ export default function Home() {
                 items={FILTERS.map((f) => ({ id: f.id, label: f.label }))}
               />
             </div>
-            <SurfaceCard className="mx-4 mb-2 px-3 py-2 space-y-1.5 !rounded-2xl">
+            <SurfaceCard className="mx-4 mb-3 px-3 py-2.5 space-y-1.5 !rounded-[22px]">
               <div className="flex gap-1.5 overflow-x-auto">
                 <button
                   onClick={() => { setCatFilter("all"); setShowCourseFilters(false); }}
@@ -846,7 +846,7 @@ export default function Home() {
 
       <button
         onClick={() => openNew(null)}
-        className="fixed right-6 z-40 w-14 h-14 bg-[#007AFF] hover:bg-[#0062CC] text-white rounded-full shadow-lg hover:shadow-xl transition-all active:scale-95 flex items-center justify-center"
+        className="floating-fab fixed right-6 z-40 w-14 h-14 text-white rounded-full transition-all flex items-center justify-center"
         style={{ bottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}
       ><IconPlus size={20} sw={2.5} /></button>
       {showForm && <TaskForm task={editTask} prefillDate={prefillDate} cats={cats} setCats={setCats} timetable={timetable} onSave={handleSave} onDelete={handleDeleteFromForm} onClose={() => { setShowForm(false); setEditTask(null); setPrefillDate(null); }} />}
