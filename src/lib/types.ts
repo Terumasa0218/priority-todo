@@ -27,6 +27,11 @@ export interface Task {
   reminder: string;
   memo: string;
   url: string;
+  // Moodle ICS 取り込み由来の課題を重複判定・更新検知するためのメタ情報。
+  moodleUid?: string;
+  moodleLastModified?: string | null;
+  moodleCategoryCode?: string;
+  moodleSourceHash?: string;
   completed: boolean;
   completedAt: string | null;
   completedOccurrences: string[];

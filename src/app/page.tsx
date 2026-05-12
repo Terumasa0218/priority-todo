@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { DEFAULT_APP_SETTINGS, DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG, FILTERS, WEEKDAY_LABELS } from "@/lib/constants";
 import { expandRecurring, remaining, uid } from "@/lib/utils";
 import { AppSettings, Category, Task, TimetableConfig, TimetableItem, TouchDragState } from "@/lib/types";
+import { MoodleImportCandidate } from "@/lib/moodleIcs";
 import { IconBook, IconList, IconPalette, IconPlus, IconSettings } from "@/components/Icons";
 import TaskRow from "@/components/TaskRow";
 import TaskForm from "@/components/TaskForm";
@@ -11,6 +12,7 @@ import CategoryManager from "@/components/CategoryManager";
 import CalendarView from "@/components/CalendarView";
 import CompletedList from "@/components/CompletedList";
 import TimetableView from "@/components/TimetableView";
+import MoodleImportView from "@/components/MoodleImportView";
 import TodayView from "@/components/TodayView";
 import SegmentedTabs from "@/components/ui/SegmentedTabs";
 import SurfaceCard from "@/components/ui/SurfaceCard";
@@ -22,7 +24,7 @@ import { createTimetableShareToken, loadTimetableShareToken } from "@/lib/timeta
 import { AuthIssue, resolveAuthIssue } from "@/lib/authErrorCatalog";
 import { loadAppSettings, loadCategories, loadTasks, loadTimetable, loadTimetableConfig, saveAppSettings, saveCategories, saveTasks, saveTimetable, saveTimetableConfig } from "@/lib/storage";
 
-type View = "list" | "calendar" | "timetable" | "completed";
+type View = "list" | "calendar" | "timetable" | "moodle" | "completed";
 const isInAppBrowser = () => /FBAN|FBAV|Instagram|Line|Twitter|wv|WebView|GSA|LinkedInApp|Slack|Discord|GitHub/i.test(navigator.userAgent);
 const isMobileDevice = () => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -420,6 +422,44 @@ export default function Home() {
     [persistTasks]
   );
 
+
+  const handleMoodleImport = useCallback(
+    (candidates: MoodleImportCandidate[]) => {
+      persistTasks((prev) => {
+        const existingUids = new Set(prev.map((task) => task.moodleUid).filter(Boolean));
+        const imported = candidates
+          .filter((candidate) => !existingUids.has(candidate.uid))
+          .map((candidate) => ({
+            id: uid(),
+            title: candidate.title,
+            kind: "todo" as const,
+            deadline: candidate.deadline,
+            category: candidate.categoryId || "default",
+            priority: false,
+            startDate: null,
+            startOffsetDays: 3,
+            recurrence: "none" as const,
+            repeatCount: null,
+            repeatEndDate: null,
+            reminder: "1day",
+            memo: candidate.description,
+            url: candidate.url,
+            moodleUid: candidate.uid,
+            moodleLastModified: candidate.lastModified,
+            moodleCategoryCode: candidate.timetableCode,
+            moodleSourceHash: candidate.sourceHash,
+            completed: false,
+            completedAt: null,
+            completedOccurrences: [],
+            order: null,
+            createdAt: new Date().toISOString(),
+          }));
+        return imported.length > 0 ? [...prev, ...imported] : prev;
+      });
+    },
+    [persistTasks]
+  );
+
   const handleComplete = useCallback(
     (task: Task) => {
       if (task.kind === "event") return; // 予定は完了の概念なし
@@ -761,6 +801,7 @@ export default function Home() {
             { id: "list", label: "タスク" },
             { id: "calendar", label: "カレンダー" },
             { id: "timetable", label: "時間割" },
+            { id: "moodle", label: "Moodle" },
             { id: "completed", label: "達成済み" },
           ]}
         />
@@ -841,6 +882,7 @@ export default function Home() {
 
         {view === "calendar" && <div className="pt-3"><CalendarView tasks={allExpanded} cats={cats} month={calMonth} setMonth={setCalMonth} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onAddClick={(d) => openNew(d)} onEditTask={openEdit} /></div>}
         {view === "timetable" && <TimetableView items={timetable} setItems={setTimetable} setCats={setCats} config={timetableConfig} setConfig={setTimetableConfig} onShare={handleShareTimetable} tasks={tasks} cats={cats} />}
+        {view === "moodle" && <MoodleImportView tasks={tasks} cats={cats} timetable={timetable} onImport={handleMoodleImport} />}
         {view === "completed" && <div><div className="px-4 py-3 flex items-center justify-between"><span className="text-sm font-semibold text-gray-900">達成済み</span><span className="text-[11px] text-gray-400">{completed.length}件</span></div><CompletedList tasks={completed} cats={cats} onRestore={handleRestore} /></div>}
       </div>
 
