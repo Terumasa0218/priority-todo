@@ -33,6 +33,12 @@ const fmtTime = (iso: string) => {
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const toYMD = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
+const SectionLabel = ({ children }: { children: React.ReactNode }) => (
+  <div className="px-4 pt-4 pb-1.5">
+    <span className="text-[10px] font-bold text-slate-400 tracking-[0.18em] uppercase">{children}</span>
+  </div>
+);
+
 const EventCard = ({
   task,
   cats,
@@ -47,7 +53,7 @@ const EventCard = ({
   const end = task.endTime ? fmtTime(task.endTime) : null;
 
   return (
-    <div className="surface-card px-4 py-3 cursor-pointer" onClick={() => onEdit(task)}>
+    <div className="surface-card task-card px-4 py-3 cursor-pointer" onClick={() => onEdit(task)}>
       <div className="flex items-start gap-3">
         <div className="flex-shrink-0 w-1 self-stretch rounded-full" style={{ backgroundColor: cat.color, minHeight: "32px" }} />
         <div className="flex-1 min-w-0">
@@ -119,15 +125,15 @@ const TaskCard = ({
   };
 
   return (
-    <div className={`surface-card ${accent} px-4 py-3`}>
+    <div className={`surface-card task-card ${accent} px-4 py-3.5`}>
       <div className="flex items-start gap-3">
         <button
           onClick={() => onComplete(task)}
           aria-label="完了"
-          className="mt-0.5 w-5 h-5 rounded-md border-2 border-gray-300 hover:border-green-500 hover:bg-green-50 transition-all flex-shrink-0"
+          className="task-complete-button mt-0.5 w-5 h-5 rounded-lg border-0 hover:bg-green-50 transition-all flex-shrink-0"
         />
         <div
-          className="flex-1 min-w-0 cursor-pointer select-none"
+          className="relative flex-1 min-w-0 cursor-pointer select-none"
           onClick={handleClick}
           onTouchStart={startLong}
           onTouchEnd={cancelLong}
@@ -306,8 +312,8 @@ export default function TodayView({ tasks, cats, onComplete, onEdit, onSnooze }:
 
   if (totalCount === 0) {
     return (
-      <div className="px-4 py-8">
-        <EmptyState title="今日のタスクなし" description="今やるべきことはありません。" />
+      <div className="px-4 py-10">
+        <EmptyState title="今日の課題はありません" description="締切前の課題だけを見せるので、今は休んで大丈夫です。" />
       </div>
     );
   }
@@ -327,30 +333,24 @@ export default function TodayView({ tasks, cats, onComplete, onEdit, onSnooze }:
       />
     );
 
-  const SectionLabel = ({ children }: { children: React.ReactNode }) => (
-    <div className="px-4 pt-3 pb-1">
-      <span className="text-[10px] font-semibold text-slate-400 tracking-widest uppercase">{children}</span>
-    </div>
-  );
-
   return (
     <div className="pb-4">
       {overdueList.length > 0 && (
         <>
           <SectionLabel><span className="text-rose-500">期限超過</span></SectionLabel>
-          <div className="px-4 space-y-2">{overdueList.map(renderRow)}</div>
+          <div className="px-4 space-y-2.5">{overdueList.map(renderRow)}</div>
         </>
       )}
       {priorityList.length > 0 && (
         <>
           <SectionLabel>優先タスク</SectionLabel>
-          <div className="px-4 space-y-2">{priorityList.map(renderRow)}</div>
+          <div className="px-4 space-y-2.5">{priorityList.map(renderRow)}</div>
         </>
       )}
       {taskList.length > 0 && (
         <>
           {(overdueList.length > 0 || priorityList.length > 0) && <SectionLabel>タスク</SectionLabel>}
-          <div className={`${overdueList.length > 0 || priorityList.length > 0 ? "px-4" : "px-4 py-3"} space-y-2`}>
+          <div className={`${overdueList.length > 0 || priorityList.length > 0 ? "px-4" : "px-4 py-4"} space-y-2.5`}>
             {taskList.map(renderRow)}
           </div>
         </>
