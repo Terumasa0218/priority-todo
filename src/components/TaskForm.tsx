@@ -63,7 +63,7 @@ const toDateTimeLocal = (d: Date): string => {
 
 // 共通 UI ヘルパー（コンポーネント外で定義してリレンダー時の再マウントを防ぐ）
 const Card = ({ children }: { children: React.ReactNode }) => (
-  <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">{children}</div>
+  <div className="surface-card mt-3 mx-4 overflow-hidden !rounded-[22px]">{children}</div>
 );
 
 export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate, cats, setCats, timetable }: TaskFormProps) {
@@ -92,6 +92,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const [memo, setMemo] = useState(task?.memo || "");
   const [url, setUrl] = useState(task?.url || "");
   const [priority, setPriority] = useState<boolean>(task?.priority || false);
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(() => !!task && ((task.recurrence && task.recurrence !== "none") || !!task.priority || task.reminder !== "1day"));
   const initialStart = useMemo(() => inferStartState(task), [task]);
   const [startMode, setStartMode] = useState<StartMode>(initialStart.mode);
   const [startOffsetDaysStr, setStartOffsetDaysStr] = useState<string>(initialStart.offsetStr);
@@ -192,16 +193,16 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   }, [startMode, customStartDate]);
 
   const startHelpText = useMemo(() => {
-    if (startMode === "immediate") return "→ 作成時から「今日のタスク」に表示します";
+    if (startMode === "immediate") return "→ 作成時から「今日の課題」に表示します";
     if (startMode === "custom") {
       if (!customStartDate) return "→ 開始日を選択してください";
       const d = new Date(`${customStartDate}T00:00:00`);
-      return `→ ${fmtDateMDW(d)} から「今日のタスク」に表示します`;
+      return `→ ${fmtDateMDW(d)} から「今日の課題」に表示します`;
     }
     // offset
     if (startOffsetDays == null) return "→ 日数を入力してください";
-    if (startOffsetDays === 0) return "→ 締切日当日に「今日のタスク」に表示します";
-    return `→ 締切の${startOffsetDays}日前から「今日のタスク」に表示します`;
+    if (startOffsetDays === 0) return "→ 締切日当日に「今日の課題」に表示します";
+    return `→ 締切の${startOffsetDays}日前から「今日の課題」に表示します`;
   }, [startMode, customStartDate, startOffsetDays]);
 
   const occurrenceCount = useMemo(() => {
@@ -315,7 +316,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
             onClick={() => setKind(k)}
             className={`py-2 rounded-lg text-xs font-medium transition-colors ${kind === k ? "bg-[#007AFF] text-white" : "text-gray-500"}`}
           >
-            {k === "todo" ? "やること" : "予定（時間枠）"}
+            {k === "todo" ? "課題" : "時間が決まった予定"}
           </button>
         ))}
       </div>
@@ -325,7 +326,8 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const RecurrenceCard = (
     <Card>
       <div className="px-4 py-3">
-        <span className="text-sm text-gray-900 mb-2 block font-medium">繰り返し</span>
+        <span className="text-sm text-gray-900 mb-1 block font-medium">繰り返し</span>
+        <span className="text-[11px] text-gray-400 block mb-2">毎週の小テストやレスポンスカードに使います</span>
         <div className="flex gap-1.5 flex-wrap">
           {RECUR_OPTIONS.map((r) => (
             <button key={r.id} onClick={() => setRecurrence(r.id)} className={`px-2.5 py-1.5 rounded-lg text-xs transition-colors ${recurrence === r.id ? "bg-[#007AFF] text-white" : "bg-gray-100 text-gray-500"}`}>{r.label}</button>
@@ -390,8 +392,8 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const StartDateCard = (
     <Card>
       <div className="px-4 py-3">
-        <span className="text-sm text-gray-900 font-medium block mb-1">タスク開始日</span>
-        <span className="text-[11px] text-gray-400 block mb-2">締切の何日前から「今日のタスク」に出すか</span>
+        <span className="text-sm text-gray-900 font-medium block mb-1">いつから取りかかる？</span>
+        <span className="text-[11px] text-gray-400 block mb-2">締切の何日前から「今日の課題」に出すか</span>
         <div className="flex gap-1.5 flex-wrap">
           {START_PRESETS.map((p) => {
             const isSelected =
@@ -470,16 +472,19 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
 
   const UrlMemoCard = (
     <Card>
-      <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="URL" className="w-full px-4 py-3 text-sm border-b border-gray-100" />
-      <textarea value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="メモ" rows={3} className="w-full px-4 py-3 text-sm resize-none" />
+      <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="提出先URL・資料URL（任意）" className="w-full px-4 py-3 text-sm border-b border-gray-100" />
+      <textarea value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="メモ（任意）" rows={3} className="w-full px-4 py-3 text-sm resize-none" />
     </Card>
   );
 
   const ReminderCard = (
     <Card>
-      <div className="px-4 py-3 flex items-center justify-between">
-        <span className="text-sm text-gray-900 font-medium">通知アラーム</span>
-        <select value={reminder} onChange={(e) => setReminder(e.target.value)} className="text-sm">
+      <div className="px-4 py-3 flex items-center justify-between gap-3">
+        <div>
+          <span className="text-sm text-gray-900 font-medium">締切前の通知</span>
+          <div className="text-[10px] text-gray-400">通知機能は環境依存です。締切の指定時間前の目安として保存します。</div>
+        </div>
+        <select value={reminder} onChange={(e) => setReminder(e.target.value)} className="text-sm bg-transparent">
           {REMINDERS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
         </select>
       </div>
@@ -544,6 +549,22 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         <div className="text-[11px] text-gray-400 mt-1">第1回の課題提出日。以降の回はこれを基準に自動展開（祝日は休講としてスキップ）</div>
       </div>
     </Card>
+  );
+
+  const AdvancedToggleCard = (
+    <div className="mx-4 mt-3">
+      <button
+        type="button"
+        onClick={() => setShowAdvanced((v) => !v)}
+        className="w-full surface-card !rounded-[22px] px-4 py-3 text-left flex items-center justify-between active:scale-[0.99] transition-transform"
+      >
+        <div>
+          <div className="text-sm font-semibold text-gray-900">詳細設定</div>
+          <div className="text-[11px] text-gray-400 mt-0.5">繰り返し・最優先・通知を必要なときだけ設定</div>
+        </div>
+        <span className="text-xs font-semibold text-blue-500">{showAdvanced ? "閉じる" : "開く"}</span>
+      </button>
+    </div>
   );
 
   // 通常カテゴリの繰り返しブロック
@@ -611,54 +632,59 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     </Card>
   );
 
-  // セクション順
+  // セクション順: まず課題登録に必要な項目だけ見せ、詳細設定は折りたたむ
   const renderSections = (): React.ReactNode[] => {
     const sections: React.ReactNode[] = [];
     if (kind === "event") {
       sections.push(EventTimeCard);
-      sections.push(PriorityCard);
-      sections.push(ReminderCard);
       sections.push(UrlMemoCard);
+      sections.push(AdvancedToggleCard);
+      if (showAdvanced) {
+        sections.push(PriorityCard);
+        sections.push(ReminderCard);
+      }
       return sections;
     }
 
-    sections.push(RecurrenceCard);
     if (recurrence === "none") {
       sections.push(DeadlineCard);
-    } else if (isTimetableRecurring) {
-      sections.push(TimetableScheduleBlock);
-    } else {
-      sections.push(NormalRecurringScheduleBlock);
     }
     sections.push(StartDateCard);
-    sections.push(PriorityCard);
-    sections.push(ReminderCard);
     sections.push(UrlMemoCard);
+    sections.push(AdvancedToggleCard);
+    if (showAdvanced) {
+      sections.push(RecurrenceCard);
+      if (recurrence !== "none") {
+        sections.push(isTimetableRecurring ? TimetableScheduleBlock : NormalRecurringScheduleBlock);
+      }
+      sections.push(PriorityCard);
+      sections.push(ReminderCard);
+    }
     return sections;
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col safe-x" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
-      <div className="bg-white border-b border-gray-200 safe-top">
+    <div className="fixed inset-0 z-50 app-shell bg-background flex flex-col safe-x" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
+      <div className="glass-header safe-top">
         <div className="flex items-center justify-between px-4 py-3 min-h-[52px]">
           <button onClick={onClose} className="text-sm text-blue-500 font-medium px-2 py-1 -mx-2">キャンセル</button>
-          <span className="text-sm font-semibold text-gray-900">{isEdit ? (kind === "event" ? "予定の編集" : "タスクの編集") : (kind === "event" ? "新しい予定" : "新しいタスク")}</span>
+          <span className="text-sm font-semibold text-gray-900">{isEdit ? (kind === "event" ? "予定の編集" : "課題の編集") : (kind === "event" ? "新しい予定" : "新しい課題")}</span>
           <button onClick={handleSave} disabled={saving} className="text-sm font-bold text-white bg-[#007AFF] hover:bg-[#0062CC] disabled:opacity-50 disabled:cursor-not-allowed px-4 py-1.5 rounded-full shadow-sm active:scale-[0.98] transition-transform">保存</button>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto pb-24 safe-bottom">
-        {/* やること / 予定 切り替え */}
+        {/* 課題 / 予定 切り替え */}
         {KindSwitch}
 
-        <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
+        <div className="surface-card mt-3 mx-4 overflow-hidden !rounded-[22px]">
           <input
             type="text"
             value={title}
             onChange={(e) => { setTitle(e.target.value); if (e.target.value.trim()) setShowError(false); }}
             placeholder={
               showError && !title.trim()
-                ? (kind === "event" ? "予定名を入力してください" : "タスク名を入力してください")
-                : (kind === "event" ? "予定名を入力" : "タスク名を入力")
+                ? (kind === "event" ? "予定名を入力してください" : "課題名を入力してください")
+                : (kind === "event" ? "予定名を入力" : "課題名を入力")
             }
             className={`w-full px-4 py-3.5 text-sm text-gray-900 focus:outline-none border-b ${
               showError && !title.trim()
