@@ -63,7 +63,7 @@ const toDateTimeLocal = (d: Date): string => {
 
 // 共通 UI ヘルパー（コンポーネント外で定義してリレンダー時の再マウントを防ぐ）
 const Card = ({ children }: { children: React.ReactNode }) => (
-  <div className="surface-card mt-3 mx-4 overflow-hidden !rounded-[22px]">{children}</div>
+  <div className="mt-3 mx-4 overflow-hidden rounded-[28px] border border-white/80 bg-white shadow-[0_18px_48px_rgba(27,39,75,0.08),0_2px_8px_rgba(27,39,75,0.04)]">{children}</div>
 );
 
 export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate, cats, setCats, timetable }: TaskFormProps) {
@@ -308,13 +308,13 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
 
   // 種別切替
   const KindSwitch = (
-    <div className="mt-3 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100 p-1">
+    <div className="mt-3 mx-4 rounded-[24px] border border-white/80 bg-white p-1.5 shadow-[0_12px_32px_rgba(27,39,75,0.07)]">
       <div className="grid grid-cols-2 gap-1">
         {(["todo", "event"] as const).map((k) => (
           <button
             key={k}
             onClick={() => setKind(k)}
-            className={`py-2 rounded-lg text-xs font-medium transition-colors ${kind === k ? "bg-[#007AFF] text-white" : "text-gray-500"}`}
+            className={`min-h-11 py-2 rounded-[18px] text-sm font-semibold transition-colors ${kind === k ? "bg-[#007AFF] text-white shadow-[0_8px_18px_rgba(0,122,255,0.22)]" : "text-gray-500"}`}
           >
             {k === "todo" ? "課題" : "時間が決まった予定"}
           </button>
@@ -341,11 +341,11 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     <Card>
       <div className="px-4 py-3">
         <label className="block text-sm mb-2 text-gray-900 font-medium">締切</label>
-        <div className="grid grid-cols-3 gap-2">
-          <div className="col-span-2">
+        <div className="grid grid-cols-[minmax(0,1fr)_112px] gap-2">
+          <div className="min-w-0">
             <DatePickerField value={deadlineDate} onChange={updateDeadlineDate} placeholder="締切日を選択" />
           </div>
-          <input type="time" value={deadlineTime} onChange={(e) => updateDeadlineTime(e.target.value)} className="w-full text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />
+          <input type="time" value={deadlineTime} onChange={(e) => updateDeadlineTime(e.target.value)} className="min-w-0 w-full text-sm bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-200" />
         </div>
       </div>
     </Card>
@@ -356,11 +356,11 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     <Card>
       <div className="px-4 py-3 border-b border-gray-100">
         <label className="block text-sm mb-2 text-gray-900 font-medium">開始時刻</label>
-        <div className="grid grid-cols-3 gap-2">
-          <div className="col-span-2">
+        <div className="grid grid-cols-[minmax(0,1fr)_112px] gap-2">
+          <div className="min-w-0">
             <DatePickerField value={deadlineDate} onChange={updateDeadlineDate} placeholder="開始日を選択" />
           </div>
-          <input type="time" value={deadlineTime} onChange={(e) => updateDeadlineTime(e.target.value)} className="w-full text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />
+          <input type="time" value={deadlineTime} onChange={(e) => updateDeadlineTime(e.target.value)} className="min-w-0 w-full text-sm bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-200" />
         </div>
       </div>
       <div className="px-4 py-3">
@@ -540,11 +540,11 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       </div>
       <div className="px-4 py-3">
         <label className="block text-sm mb-2 text-gray-900 font-medium">初回締切日</label>
-        <div className="grid grid-cols-3 gap-2">
-        <div className="col-span-2">
+        <div className="grid grid-cols-[minmax(0,1fr)_112px] gap-2">
+        <div className="min-w-0">
           <DatePickerField value={deadlineDate} onChange={updateDeadlineDate} placeholder="初回締切日を選択" />
         </div>
-        <input type="time" value={deadlineTime} onChange={(e) => updateDeadlineTime(e.target.value)} className="w-full text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />
+        <input type="time" value={deadlineTime} onChange={(e) => updateDeadlineTime(e.target.value)} className="min-w-0 w-full text-sm bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-200" />
       </div>
         <div className="text-[11px] text-gray-400 mt-1">第1回の課題提出日。以降の回はこれを基準に自動展開（祝日は休講としてスキップ）</div>
       </div>
@@ -556,7 +556,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       <button
         type="button"
         onClick={() => setShowAdvanced((v) => !v)}
-        className="w-full surface-card !rounded-[22px] px-4 py-3 text-left flex items-center justify-between active:scale-[0.99] transition-transform"
+        className="w-full rounded-[24px] border border-white/80 bg-white px-4 py-3 text-left flex items-center justify-between shadow-[0_12px_32px_rgba(27,39,75,0.07)] active:scale-[0.99] transition-transform"
       >
         <div>
           <div className="text-sm font-semibold text-gray-900">詳細設定</div>
@@ -572,11 +572,11 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     <Card>
       <div className="px-4 py-3 border-b border-gray-100">
         <label className="block text-sm mb-2 text-gray-900 font-medium">初回締切日</label>
-        <div className="grid grid-cols-3 gap-2">
-          <div className="col-span-2">
+        <div className="grid grid-cols-[minmax(0,1fr)_112px] gap-2">
+          <div className="min-w-0">
             <DatePickerField value={deadlineDate} onChange={updateDeadlineDate} placeholder="初回締切日を選択" />
           </div>
-          <input type="time" value={deadlineTime} onChange={(e) => updateDeadlineTime(e.target.value)} className="w-full text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200" />
+          <input type="time" value={deadlineTime} onChange={(e) => updateDeadlineTime(e.target.value)} className="min-w-0 w-full text-sm bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-200" />
         </div>
       </div>
       {recurrence === "biweekly" && (
@@ -664,8 +664,8 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   };
 
   return (
-    <div className="fixed inset-0 z-50 app-shell bg-background flex flex-col safe-x" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
-      <div className="glass-header safe-top">
+    <div className="fixed inset-0 z-50 flex flex-col bg-[#F7F8FC] safe-x" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
+      <div className="bg-white/95 border-b border-slate-200/70 shadow-[0_10px_28px_rgba(27,39,75,0.06)] safe-top">
         <div className="flex items-center justify-between px-4 py-3 min-h-[52px]">
           <button onClick={onClose} className="text-sm text-blue-500 font-medium px-2 py-1 -mx-2">キャンセル</button>
           <span className="text-sm font-semibold text-gray-900">{isEdit ? (kind === "event" ? "予定の編集" : "課題の編集") : (kind === "event" ? "新しい予定" : "新しい課題")}</span>
@@ -676,7 +676,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         {/* 課題 / 予定 切り替え */}
         {KindSwitch}
 
-        <div className="surface-card mt-3 mx-4 overflow-hidden !rounded-[22px]">
+        <div className="mt-3 mx-4 overflow-hidden rounded-[28px] border border-white/80 bg-white shadow-[0_18px_48px_rgba(27,39,75,0.08),0_2px_8px_rgba(27,39,75,0.04)]">
           <input
             type="text"
             value={title}
