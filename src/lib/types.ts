@@ -54,6 +54,9 @@ export interface TimetableItem {
   period: string; // "1・2限" 等、または "オンデマンドN"
   teacher: string;
   room: string;
+  // Moodle連携を使う授業では、CATEGORIES の下4桁を時間割番号として保存する。
+  moodleEnabled?: boolean;
+  timetableCode?: string;
   attendancePresent?: number;
   attendanceAbsent?: number;
   attendanceLate?: number;

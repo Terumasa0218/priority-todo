@@ -58,6 +58,11 @@ const buildPeriods = (maxPeriod: number) => {
 
 const buildPeriodGroups = buildPeriods;
 
+const normalizeTimetableCode = (value: string | undefined) => {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  return digits.slice(-4);
+};
+
 export default function TimetableView({ items, setItems, setCats, config, setConfig, onShare, tasks, cats }: TimetableViewProps) {
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [showError, setShowError] = useState(false);
@@ -127,6 +132,8 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
         period,
         teacher: "",
         room: "",
+        moodleEnabled: false,
+        timetableCode: "",
         color: defaultColor,
         absenceLimit: 5,
         attendanceAbsent: 0,
@@ -139,7 +146,15 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
   };
 
   const openEdit = (item: TimetableItem) => {
-    setEditing({ mode: "edit", item: { ...item, period: normalizePeriod(item.period) } });
+    setEditing({
+      mode: "edit",
+      item: {
+        ...item,
+        period: normalizePeriod(item.period),
+        moodleEnabled: !!item.moodleEnabled,
+        timetableCode: normalizeTimetableCode(item.timetableCode),
+      },
+    });
     setShowError(false);
   };
 
@@ -157,7 +172,8 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
 
   const handleSave = () => {
     if (!editing) return;
-    if (!editing.item.name.trim()) {
+    const normalizedCode = normalizeTimetableCode(editing.item.timetableCode);
+    if (!editing.item.name.trim() || (editing.item.moodleEnabled && normalizedCode.length !== 4)) {
       setShowError(true);
       return;
     }
@@ -165,6 +181,8 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
       ...editing.item,
       name: editing.item.name.trim(),
       period: normalizePeriod(editing.item.period),
+      moodleEnabled: !!editing.item.moodleEnabled,
+      timetableCode: editing.item.moodleEnabled ? normalizedCode : "",
     };
     setItems((prev) => {
       const filtered = prev.filter((it) => {
@@ -264,6 +282,8 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
       return tasks.filter((t) => !t.completed && t.category === cat.id).length;
     })()
     : 0;
+  const moodleLinkedCount = normalizedItems.filter((it) => it.moodleEnabled && normalizeTimetableCode(it.timetableCode).length === 4).length;
+  const editingCode = normalizeTimetableCode(editing?.item.timetableCode);
 
   return (
     <div className="px-3 py-3">
@@ -271,6 +291,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
         <div>
           <div className="text-sm font-semibold text-gray-900">時間割</div>
           <div className="text-[11px] text-gray-500 mt-0.5">今日 {todayClassCount}コマ・今日締切 {todayPending}件</div>
+          <div className="text-[11px] text-gray-400 mt-0.5">Moodle連携 {moodleLinkedCount}件</div>
         </div>
         <div className="flex items-center gap-1">
           <button onClick={handleShare} disabled={sharing} className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900 px-2.5 py-1.5 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
@@ -316,6 +337,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
                   >
                     <div className="text-[11px] font-semibold text-gray-900 leading-tight line-clamp-3">{item.name}</div>
                     {item.room && <div className="text-[10px] text-gray-500 truncate mt-1">{item.room}</div>}
+                    {item.moodleEnabled && item.timetableCode && <div className="text-[9px] font-semibold text-blue-600 mt-1">Moodle {item.timetableCode}</div>}
                   </button>
                 );
               })}
@@ -361,6 +383,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
                           style={{ backgroundColor: `${item.color}1F`, borderLeft: `3px solid ${item.color}` }}
                         >
                           <div className="text-[10px] font-semibold text-gray-900 leading-tight line-clamp-2">{item.name}</div>
+                          {item.moodleEnabled && item.timetableCode && <div className="text-[8px] font-semibold text-blue-600 mt-0.5">{item.timetableCode}</div>}
                         </button>
                       );
                     })
@@ -467,6 +490,45 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
                   オンデマンド枠 {DAYS.find((d) => d.value === editing.item.day)?.label}曜 {editingOnDemandSlot + 1}
                 </div>
               )}
+              <div className="px-4 py-3 border-b border-gray-100 bg-blue-50/40">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-gray-900">Moodle連携</div>
+                    <div className="text-[11px] text-gray-500 mt-0.5">Moodleカレンダーの CATEGORIES 下4桁で課題を自動分類します。</div>
+                  </div>
+                  <button
+                    type="button"
+                    aria-pressed={!!editing.item.moodleEnabled}
+                    onClick={() => {
+                      setEditing((prev) => prev ? { ...prev, item: { ...prev.item, moodleEnabled: !prev.item.moodleEnabled } } : prev);
+                      setShowError(false);
+                    }}
+                    className={`relative mt-0.5 w-12 h-7 rounded-full transition-colors flex-shrink-0 ${editing.item.moodleEnabled ? "bg-[#1688F2]" : "bg-gray-300"}`}
+                  >
+                    <span className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-transform ${editing.item.moodleEnabled ? "translate-x-6" : "translate-x-1"}`} />
+                  </button>
+                </div>
+                {editing.item.moodleEnabled && (
+                  <div className="mt-3">
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">時間割番号 <span className="text-rose-500">必須</span></label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={editing.item.timetableCode || ""}
+                      onChange={(e) => {
+                        const code = normalizeTimetableCode(e.target.value);
+                        setEditing((prev) => prev ? { ...prev, item: { ...prev.item, timetableCode: code } } : prev);
+                        if (code.length === 4) setShowError(false);
+                      }}
+                      placeholder="例: 3001"
+                      maxLength={4}
+                      className={`w-full px-3 py-2.5 rounded-xl border text-sm bg-white focus:outline-none ${showError && editing.item.moodleEnabled && editingCode.length !== 4 ? "border-red-300 bg-red-50/50" : "border-blue-100"}`}
+                    />
+                    <div className="mt-1 text-[11px] text-gray-500">例: 26-4-3001 の場合は <span className="font-semibold text-gray-700">3001</span> だけ入力します。</div>
+                    {showError && editing.item.moodleEnabled && editingCode.length !== 4 && <div className="mt-1 text-xs text-red-500">Moodle連携ありの場合は4桁の時間割番号が必要です。</div>}
+                  </div>
+                )}
+              </div>
               <input
                 type="text"
                 value={editing.item.teacher}

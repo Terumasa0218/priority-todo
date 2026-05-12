@@ -116,7 +116,7 @@ export default function TaskRow({ task, cats, onComplete, onEdit, onDelete, idx,
         onContextMenu={handleContextMenu}
       >
         <div
-          className={`surface-card flex items-start gap-3 px-4 py-3.5 transition-colors ${
+          className={`surface-card task-card flex items-start gap-3 px-4 py-3.5 transition-colors ${
             touchDrag.active && touchDrag.dragIdx === idx ? "opacity-50 bg-gray-100" : ""
           } ${isOverdue ? "bg-rose-50/80" : task.priority ? "bg-rose-50/50" : ""}`}
           style={task.priority || isOverdue ? { borderLeft: "3px solid #CD2B31" } : { borderLeft: "3px solid transparent" }}
@@ -125,9 +125,9 @@ export default function TaskRow({ task, cats, onComplete, onEdit, onDelete, idx,
           <div className="text-gray-300 flex-shrink-0 mt-0.5"><IconGrip size={14} /></div>
           {/* Checkbox */}
           <button ref={checkRef} onClick={handleComplete}
-            className="w-5 h-5 rounded-md border-2 border-gray-300 hover:border-green-500 hover:bg-green-50 transition-all flex-shrink-0 mt-0.5" />
+            className="task-complete-button w-5 h-5 rounded-lg border-0 hover:bg-green-50 transition-all flex-shrink-0 mt-0.5" />
           {/* Content */}
-          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onEdit(task)}>
+          <div className="relative flex-1 min-w-0 cursor-pointer" onClick={() => onEdit(task)}>
             <div className="flex items-center gap-2">
               {task.priority && <IconFlag filled size={13} />}
               <span className={`text-sm font-semibold truncate ${isOverdue ? "text-rose-700" : "text-slate-900"}`}>{task.title}</span>

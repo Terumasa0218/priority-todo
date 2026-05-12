@@ -2,21 +2,24 @@
 
 :root {
   /* iOS 純正風 トークン */
-  --background: #F2F2F7;        /* iOS Settings 背景 */
-  --foreground: #000000;
-  --surface: #FFFFFF;
-  --surface-muted: #F2F2F7;
-  --border-subtle: #E5E5EA;
-  --separator: #C6C6C8;
-  --text-secondary: #6E6E73;    /* iOS キャプション色 */
-  --text-tertiary: #C7C7CC;
-  --accent: #007AFF;            /* iOS システムブルー */
-  --accent-pressed: #0062CC;
-  --danger: #FF3B30;            /* iOS システムレッド */
-  --priority: #E11D48;          /* 既存の最優先色（rose-600） */
-  --radius-card: 20px;
-  --radius-control: 14px;
-  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.03);
+  --background: #F7F7FB;
+  --foreground: #111827;
+  --surface: rgba(255, 255, 255, 0.86);
+  --surface-strong: #FFFFFF;
+  --surface-muted: rgba(244, 246, 251, 0.88);
+  --border-subtle: rgba(148, 163, 184, 0.20);
+  --separator: rgba(148, 163, 184, 0.20);
+  --text-secondary: #667085;
+  --text-tertiary: #A8B0BE;
+  --accent: #1688F2;
+  --accent-pressed: #0B6FCC;
+  --accent-soft: #E7F2FF;
+  --danger: #FF3B30;
+  --priority: #E11D48;
+  --radius-card: 24px;
+  --radius-control: 16px;
+  --shadow-soft: 0 18px 48px rgba(27, 39, 75, 0.08), 0 2px 8px rgba(27, 39, 75, 0.04);
+  --shadow-lifted: 0 24px 70px rgba(27, 39, 75, 0.16), 0 6px 20px rgba(27, 39, 75, 0.08);
 }
 
 @theme inline {
@@ -25,9 +28,14 @@
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(circle at 14% -10%, rgba(99, 102, 241, 0.13), transparent 32%),
+    radial-gradient(circle at 90% 4%, rgba(14, 165, 233, 0.14), transparent 26%),
+    linear-gradient(180deg, #FCFCFF 0%, var(--background) 44%, #F3F5FA 100%);
   color: var(--foreground);
   font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
 }
 
 html,
@@ -62,7 +70,12 @@ select {
 
 @keyframes taskShrink {
   0% { transform: scale(1); opacity: 1; }
-  100% { transform: scale(0); opacity: 0; height: 0; padding: 0; margin: 0; border: none; overflow: hidden; }
+  100% { transform: scale(.96); opacity: 0; height: 0; padding: 0; margin: 0; border: none; overflow: hidden; }
+}
+
+@keyframes softPopIn {
+  from { transform: translateY(10px) scale(.985); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
 }
 
 .task-shrink {
@@ -95,20 +108,79 @@ select {
 
 .calendar-task-bar { border-radius: 3px; margin-bottom: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+.app-shell {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(22, 136, 242, 0.10), transparent 30%),
+    radial-gradient(circle at 88% 8%, rgba(124, 58, 237, 0.10), transparent 24%),
+    transparent;
+}
+
+.glass-header {
+  background: rgba(255, 255, 255, 0.78);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.72);
+  box-shadow: 0 12px 32px rgba(27, 39, 75, 0.05);
+  -webkit-backdrop-filter: blur(22px) saturate(1.35);
+  backdrop-filter: blur(22px) saturate(1.35);
+}
+
 .surface-card {
   background: var(--surface);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid rgba(255, 255, 255, 0.74);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-soft);
+  -webkit-backdrop-filter: blur(18px) saturate(1.18);
+  backdrop-filter: blur(18px) saturate(1.18);
+}
+
+.task-card {
+  position: relative;
+  overflow: hidden;
+  animation: softPopIn .28s cubic-bezier(.2,.82,.25,1) both;
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+
+.task-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(135deg, rgba(255,255,255,.68), transparent 46%);
+  opacity: .72;
+}
+
+.task-card:active {
+  transform: scale(.992);
+  box-shadow: 0 12px 34px rgba(27, 39, 75, 0.10);
+}
+
+.task-complete-button {
+  background: linear-gradient(180deg, #fff, #F8FAFC);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, .22), 0 2px 8px rgba(15, 23, 42, .05);
+}
+
+.task-complete-button:active {
+  transform: scale(.88);
+}
+
+.floating-fab {
+  background: linear-gradient(135deg, #27A2FF 0%, #006FE6 100%);
+  box-shadow: 0 18px 42px rgba(22, 136, 242, .34), inset 0 1px 0 rgba(255,255,255,.34);
+}
+
+.floating-fab:active {
+  transform: translateY(1px) scale(.95);
 }
 
 .segmented-tabs {
-  background: var(--surface-muted);
-  border: 1px solid var(--border-subtle);
-  border-radius: calc(var(--radius-control) + 2px);
-  padding: 4px;
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  border-radius: calc(var(--radius-control) + 8px);
+  padding: 5px;
   display: flex;
-  gap: 4px;
+  gap: 5px;
+  box-shadow: 0 12px 32px rgba(27, 39, 75, 0.06), inset 0 1px 0 rgba(255,255,255,.65);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  backdrop-filter: blur(18px) saturate(1.2);
 }
 
 .segmented-tab {
@@ -124,11 +196,24 @@ select {
   justify-content: center;
   gap: 4px;
   white-space: nowrap;
-  transition: all .2s ease;
+  transition: transform .18s ease, background-color .18s ease, color .18s ease, box-shadow .18s ease;
+}
+
+.segmented-tab:active {
+  transform: scale(.98);
 }
 
 .segmented-tab-active {
-  background: #fff;
+  background: rgba(255,255,255,.94);
   color: #0f172a;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  box-shadow: 0 8px 18px rgba(27, 39, 75, 0.08), inset 0 1px 0 rgba(255,255,255,.8);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
 }
