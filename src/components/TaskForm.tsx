@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Task, Category, TimetableItem } from "@/lib/types";
 import { REMINDERS, DAY } from "@/lib/constants";
 import { uid, calcOccurrenceCount } from "@/lib/utils";
@@ -89,17 +89,17 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const [memo, setMemo] = useState(task?.memo || "");
   const [url, setUrl] = useState(task?.url || "");
   const [priority, setPriority] = useState<boolean>(task?.priority || false);
-  const [showAdvanced, setShowAdvanced] = useState<boolean>(() => !!task && ((task.recurrence && task.recurrence !== "none") || task.reminder !== "1day"));
+  const [repeatSettingsEnabled, setRepeatSettingsEnabled] = useState<boolean>(() => !!task && ((task.recurrence && task.recurrence !== "none") || task.reminder !== "1day"));
   const initialStart = inferStartState(task, task?.deadline ? toDateTimeLocal(new Date(task.deadline)) : getDefault());
   const [showStartPeriod, setShowStartPeriod] = useState<boolean>(() => !!(initialStart.date || initialStart.time));
   const [customStartDate, setCustomStartDate] = useState<string>(initialStart.date);
   const [customStartTime, setCustomStartTime] = useState<string>(initialStart.time);
-  const [classDayOfWeek, setClassDayOfWeek] = useState<number>(task?.classDayOfWeek ?? new Date(task?.deadline || deadline).getDay());
   // 数字入力は string で保持して、空欄入力中の強制リセットを防ぐ。読み取りは useMemo で sanitize する
   const [biweeklyIntervalStr, setBiweeklyIntervalStr] = useState<string>(String(task?.biweeklyInterval ?? 2));
   // 授業科目用の追加 state
   const [classStartDate, setClassStartDate] = useState<string>(task?.classStartDate || "");
   const [classCountStr, setClassCountStr] = useState<string>(String(task?.repeatCount || 14));
+  const [repeatEndMode, setRepeatEndMode] = useState<"count" | "date">(() => (task?.repeatEndDate && !task?.repeatCount ? "date" : "count"));
   const biweeklyInterval = useMemo(() => {
     const n = parseInt(biweeklyIntervalStr, 10);
     if (isNaN(n) || n < 2) return 2;
@@ -137,36 +137,25 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   };
 
   const selectedCat = cats.find((c) => c.id === category);
+  const selectedTimetable = selectedCat?.timetableId ? timetable.find((t) => t.id === selectedCat.timetableId) : null;
   const isTimetableCourse = !!selectedCat?.timetableId;
-  const isTimetableRecurring = isTimetableCourse && (recurrence === "weekly" || recurrence === "biweekly");
+  const isClassBasedRecurring = recurrence === "weekly" || recurrence === "biweekly";
   const intervalDays = recurrence === "biweekly" ? Math.max(2, biweeklyInterval) * 7 : 7;
-
-  // 授業科目: カテゴリが時間割なら自動で classDayOfWeek を補完
-  useEffect(() => {
-    if (!selectedCat?.timetableId) return;
-    const hit = timetable.find((t) => t.id === selectedCat.timetableId);
-    if (hit) setClassDayOfWeek(hit.day);
-  }, [selectedCat, timetable]);
-
-  // 授業科目: 開始日選択時、その曜日に classDayOfWeek を上書き
-  useEffect(() => {
-    if (!classStartDate) return;
-    const d = new Date(`${classStartDate}T00:00:00`);
-    setClassDayOfWeek(d.getDay());
-  }, [classStartDate]);
-
-  // 通常カテゴリ繰り返し: 終了日の自動初期化
-  useEffect(() => {
-    if (recurrence === "none" || isTimetableRecurring) return;
-    if (repeatEndDate) return;
+  const classDayOfWeek = useMemo(() => {
+    if (classStartDate) return new Date(`${classStartDate}T00:00:00`).getDay();
+    if (selectedTimetable) return selectedTimetable.day;
+    return task?.classDayOfWeek ?? new Date(task?.deadline || deadline).getDay();
+  }, [classStartDate, deadline, selectedTimetable, task?.classDayOfWeek, task?.deadline]);
+  const defaultRepeatEndDate = useMemo(() => {
     const d = new Date(deadline);
     d.setDate(d.getDate() + 7 * 14);
-    setRepeatEndDate(toDateTimeLocal(d).slice(0, 10));
-  }, [recurrence, deadline, repeatEndDate, isTimetableRecurring]);
+    return toDateTimeLocal(d).slice(0, 10);
+  }, [deadline]);
+  const effectiveRepeatEndDate = repeatEndDate || defaultRepeatEndDate;
 
   // 授業科目スケジュールから保存用の値を導出
   const derivedFromClassSchedule = useMemo(() => {
-    if (!isTimetableRecurring || !classStartDate) return null;
+    if (!isClassBasedRecurring || !classStartDate) return null;
     const start = new Date(`${classStartDate}T00:00:00`);
     const dl = new Date(deadline);
     const dlDateOnly = new Date(dl);
@@ -183,9 +172,9 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     return {
       offsetTime,
       offsetDays,
-      repeatEndDate: toDateTimeLocal(lastDue).slice(0, 10),
+      repeatEndDate: repeatEndMode === "date" ? repeatEndDate : toDateTimeLocal(lastDue).slice(0, 10),
     };
-  }, [isTimetableRecurring, classStartDate, deadline, classCount, intervalDays]);
+  }, [isClassBasedRecurring, classStartDate, deadline, classCount, intervalDays, repeatEndDate, repeatEndMode]);
 
   // ---- タスク開始日 ----
   // 保存用: startOffsetDays / startDate（ISO） を導出
@@ -203,8 +192,32 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
 
   const occurrenceCount = useMemo(() => {
     if (recurrence === "none") return 1;
-    if (isTimetableRecurring) return Math.max(1, classCount);
-    if (!repeatEndDate) return 1;
+    if (isClassBasedRecurring) {
+      if (repeatEndMode === "count" || !repeatEndDate) return Math.max(1, classCount);
+      if (!classStartDate) return 1;
+      return calcOccurrenceCount({
+        ...(task || {} as Task),
+        id: task?.id || "tmp",
+        title,
+        deadline: new Date(deadline).toISOString(),
+        category,
+        priority: false,
+        recurrence,
+        repeatCount: classCount,
+        repeatEndDate,
+        reminder,
+        memo,
+        url,
+        completed: false,
+        completedAt: null,
+        completedOccurrences: task?.completedOccurrences || [],
+        order: task?.order ?? null,
+        createdAt: task?.createdAt || new Date().toISOString(),
+        classDayOfWeek,
+        classStartDate,
+        biweeklyInterval,
+      });
+    }
     return calcOccurrenceCount({
       ...(task || {} as Task),
       id: task?.id || "tmp",
@@ -214,7 +227,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       priority: false,
       recurrence,
       repeatCount: task?.repeatCount || 14,
-      repeatEndDate,
+      repeatEndDate: effectiveRepeatEndDate,
       reminder,
       memo,
       url,
@@ -226,7 +239,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       classDayOfWeek,
       biweeklyInterval,
     });
-  }, [recurrence, repeatEndDate, isTimetableRecurring, classCount, task, title, deadline, category, reminder, memo, url, classDayOfWeek, biweeklyInterval]);
+  }, [recurrence, repeatEndDate, effectiveRepeatEndDate, isClassBasedRecurring, repeatEndMode, classCount, task, title, deadline, category, reminder, memo, url, classDayOfWeek, classStartDate, biweeklyInterval]);
 
   const [saving, setSaving] = useState(false);
   const handleSave = () => {
@@ -235,9 +248,10 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     if (isEventEdit) {
       if (endTime && new Date(endTime).getTime() < new Date(deadline).getTime()) { setFormError("終了時刻は開始時刻より後にしてください"); return; }
     } else {
-      if (recurrence !== "none" && !isTimetableRecurring && repeatEndDate && new Date(repeatEndDate).getTime() < new Date(deadline).getTime()) { setFormError("最終締切日は初回締切日以降に設定してください"); return; }
+      if (recurrence !== "none" && !isClassBasedRecurring && new Date(effectiveRepeatEndDate).getTime() < new Date(deadline).getTime()) { setFormError("最終締切日は初回締切日以降に設定してください"); return; }
       if (recurrence === "biweekly" && (biweeklyInterval < 2 || biweeklyInterval > 8)) { setFormError("隔週の間隔は2〜8週間で入力してください"); return; }
-      if (isTimetableRecurring && !classStartDate) { setFormError("授業の開始日を入力してください"); return; }
+      if (isClassBasedRecurring && !classStartDate) { setFormError("初回授業日を入力してください"); return; }
+      if (isClassBasedRecurring && repeatEndMode === "date" && !repeatEndDate) { setFormError("最終締切日を入力してください"); return; }
       if (computedStartDate && new Date(computedStartDate).getTime() > new Date(deadline).getTime()) { setFormError("取り組む期間の開始日時は締切以前にしてください"); return; }
     }
     setFormError("");
@@ -279,10 +293,10 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       startDate: computedStartDate,
       startOffsetDays: computedStartOffsetDays,
       recurrence,
-      repeatCount: recurrence === "none" ? null : (isTimetableRecurring ? classCount : (task?.repeatCount || 14)),
+      repeatCount: recurrence === "none" ? null : (isClassBasedRecurring ? (repeatEndMode === "count" ? classCount : occurrenceCount) : (task?.repeatCount || 14)),
       repeatEndDate: recurrence === "none"
         ? null
-        : (isTimetableRecurring ? (derivedFromClassSchedule?.repeatEndDate || null) : repeatEndDate),
+        : (isClassBasedRecurring ? (derivedFromClassSchedule?.repeatEndDate || null) : effectiveRepeatEndDate),
       reminder,
       memo,
       url,
@@ -292,32 +306,148 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       snoozedOccurrences: task?.snoozedOccurrences,
       order: task?.order ?? null,
       createdAt: task?.createdAt || new Date().toISOString(),
-      offsetTime: isTimetableRecurring ? derivedFromClassSchedule?.offsetTime : undefined,
-      classDayOfWeek: isTimetableRecurring ? classDayOfWeek : undefined,
-      classStartDate: isTimetableRecurring ? classStartDate : undefined,
-      offsetDays: isTimetableRecurring ? derivedFromClassSchedule?.offsetDays : undefined,
+      offsetTime: isClassBasedRecurring ? derivedFromClassSchedule?.offsetTime : undefined,
+      classDayOfWeek: isClassBasedRecurring ? classDayOfWeek : undefined,
+      classStartDate: isClassBasedRecurring ? classStartDate : undefined,
+      offsetDays: isClassBasedRecurring ? derivedFromClassSchedule?.offsetDays : undefined,
       biweeklyInterval: recurrence === "biweekly" ? biweeklyInterval : undefined,
     });
   };
 
-  const RecurrenceCard = (
-    <Card>
-      <div className="px-4 py-3">
+  const ClassBasedRepeatFields = (
+    <>
+      <div className="px-4 py-3 border-t border-gray-100">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-sm text-gray-900 font-medium">授業日基準で作成</div>
+            <div className="text-[11px] text-gray-400 mt-1">
+              初回授業日から毎週/隔週で授業日を進め、初回課題提出日との日数差で締切を作ります。
+            </div>
+          </div>
+          <div className="shrink-0 text-xs text-gray-500">{DAY[classDayOfWeek]}曜日</div>
+        </div>
+      </div>
+      {recurrence === "biweekly" && (
+        <div className="px-4 py-3 border-t border-gray-100">
+          <label className="text-sm text-gray-900 font-medium">何週間に1回提出</label>
+          <div className="mt-2 flex items-center gap-2 text-sm">
+            <input
+              type="number"
+              inputMode="numeric"
+              min={2}
+              max={8}
+              value={biweeklyIntervalStr}
+              onChange={(e) => setBiweeklyIntervalStr(e.target.value)}
+              onBlur={() => setBiweeklyIntervalStr(String(biweeklyInterval))}
+              className="w-20 h-[44px] text-sm bg-gray-50 rounded-xl px-3 py-2 border border-gray-200"
+            />
+            <span className="text-gray-500">週間おき</span>
+          </div>
+        </div>
+      )}
+      <div className="px-4 py-3 border-t border-gray-100">
+        <label className="block text-sm mb-2 text-gray-900 font-medium">初回授業日</label>
+        <DatePickerField value={classStartDate} onChange={(v) => setClassStartDate(v)} placeholder="第1回授業の日付" />
+        <div className="text-[11px] text-gray-400 mt-1">
+          {isTimetableCourse ? "時間割カテゴリの曜日を自動で使います。変更するとその曜日で生成します。" : "ここで選んだ曜日を授業曜日として使います。"}
+        </div>
+      </div>
+      <div className="px-4 py-3 border-t border-gray-100">
+        <div className="mb-2 text-sm text-gray-900 font-medium">終了条件</div>
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          {(["count", "date"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setRepeatEndMode(mode)}
+              className={`h-9 rounded-xl text-xs font-semibold transition-colors ${repeatEndMode === mode ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-500"}`}
+            >
+              {mode === "count" ? "授業回数" : "最終締切日"}
+            </button>
+          ))}
+        </div>
+        {repeatEndMode === "count" ? (
+          <div>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={50}
+                value={classCountStr}
+                onChange={(e) => setClassCountStr(e.target.value)}
+                onBlur={() => setClassCountStr(String(classCount))}
+                className="w-24 h-[44px] text-sm bg-gray-50 rounded-xl px-3 py-2 border border-gray-200"
+              />
+              <span className="text-sm text-gray-500">回</span>
+            </div>
+            <div className="text-[11px] text-gray-400 mt-1">半期は通常 14〜15 回。現在の設定では全{occurrenceCount}回です。</div>
+          </div>
+        ) : (
+          <div>
+            <DatePickerField
+              value={repeatEndDate}
+              onChange={(v) => setRepeatEndDate(v)}
+              min={deadlineDate}
+              isDateDisabled={(d) => d.getTime() < new Date(`${deadlineDate}T00:00:00`).getTime()}
+              placeholder="最終締切日を選択"
+            />
+            <div className="text-[11px] text-gray-400 mt-1">現在の設定では全{occurrenceCount}回です。</div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  const SimpleRepeatEndFields = recurrence !== "none" && !isClassBasedRecurring ? (
+    <div className="px-4 py-3 border-t border-gray-100">
+      <label className="text-sm text-gray-900 font-medium block mb-2">最終締切日</label>
+      <DatePickerField
+        value={effectiveRepeatEndDate}
+        onChange={(v) => setRepeatEndDate(v)}
+        min={deadlineDate}
+        isDateDisabled={(d) => d.getTime() < new Date(`${deadlineDate}T00:00:00`).getTime()}
+        placeholder="最終締切日を選択"
+      />
+      <div className="text-xs text-gray-400 mt-1">全{occurrenceCount}回</div>
+    </div>
+  ) : null;
+
+  const RepeatSettingsFields = repeatSettingsEnabled ? (
+    <>
+      <div className="px-4 py-3 border-t border-gray-100">
         <span className="text-sm text-gray-900 mb-1 block font-medium">繰り返し</span>
         <span className="text-[11px] text-gray-400 block mb-2">毎週の小テストやレスポンスカードに使います</span>
         <div className="flex gap-1.5 flex-wrap">
-          {RECUR_OPTIONS.map((r) => (
-            <button key={r.id} onClick={() => setRecurrence(r.id)} className={`px-2.5 py-1.5 rounded-lg text-xs transition-colors ${recurrence === r.id ? "bg-[#007AFF] text-white" : "bg-gray-100 text-gray-500"}`}>{r.label}</button>
+          {RECUR_OPTIONS.filter((r) => r.id !== "none").map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => setRecurrence(r.id)}
+              className={`px-2.5 py-1.5 rounded-lg text-xs transition-colors ${recurrence === r.id ? "bg-[#007AFF] text-white" : "bg-gray-100 text-gray-500"}`}
+            >
+              {r.label}
+            </button>
           ))}
         </div>
       </div>
-    </Card>
-  );
+      {isClassBasedRecurring ? ClassBasedRepeatFields : SimpleRepeatEndFields}
+      <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between gap-3">
+        <div>
+          <span className="text-sm text-gray-900 font-medium">締切前の通知</span>
+          <div className="text-[10px] text-gray-400">通知機能は環境依存です。締切の指定時間前の目安として保存します。</div>
+        </div>
+        <select value={reminder} onChange={(e) => setReminder(e.target.value)} className="text-sm bg-transparent">
+          {REMINDERS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+        </select>
+      </div>
+    </>
+  ) : null;
 
   const DeadlineCard = (
     <Card>
       <div className="px-4 py-3">
-        <label className="block text-sm mb-2 text-gray-900 font-semibold">{isTimetableRecurring ? "初回課題提出日" : "締切"}</label>
+        <label className="block text-sm mb-2 text-gray-900 font-semibold">{repeatSettingsEnabled && isClassBasedRecurring ? "初回課題提出日" : "締切"}</label>
         <div className="grid grid-cols-[minmax(0,1fr)_88px] gap-2 items-center">
           <div className="min-w-0">
             <DatePickerField value={deadlineDate} onChange={updateDeadlineDate} min={todayDate} placeholder="締切日を選択" />
@@ -331,6 +461,29 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
           />
         </div>
       </div>
+      <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between gap-3">
+        <div>
+          <span className="text-sm text-gray-900 font-medium">繰り返し課題の設定</span>
+          <div className="text-[10px] text-gray-400">毎週課題・隔週課題・通知を設定</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setRepeatSettingsEnabled((enabled) => {
+              const next = !enabled;
+              if (next && recurrence === "none") setRecurrence("weekly");
+              if (!next) setRecurrence("none");
+              return next;
+            });
+          }}
+          aria-label="繰り返し課題の設定"
+          aria-pressed={repeatSettingsEnabled}
+          className={`relative w-11 h-6 rounded-full transition-colors ${repeatSettingsEnabled ? "bg-blue-500" : "bg-gray-300"}`}
+        >
+          <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${repeatSettingsEnabled ? "translate-x-[22px]" : "translate-x-0.5"}`} />
+        </button>
+      </div>
+      {RepeatSettingsFields}
     </Card>
   );
 
@@ -459,171 +612,18 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     </Card>
   );
 
-  const ReminderCard = (
-    <Card>
-      <div className="px-4 py-3 flex items-center justify-between gap-3">
-        <div>
-          <span className="text-sm text-gray-900 font-medium">締切前の通知</span>
-          <div className="text-[10px] text-gray-400">通知機能は環境依存です。締切の指定時間前の目安として保存します。</div>
-        </div>
-        <select value={reminder} onChange={(e) => setReminder(e.target.value)} className="text-sm bg-transparent">
-          {REMINDERS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
-        </select>
-      </div>
-    </Card>
-  );
-
-  // 授業科目の繰り返しブロック（再設計版）
-  const TimetableScheduleBlock = (
-    <Card>
-      <div className="px-4 py-3 border-b border-gray-100">
-        <div className="text-sm mb-1 text-gray-900 font-medium">授業曜日（時間割から自動）</div>
-        <div className="text-xs text-gray-500">{DAY[classDayOfWeek]}曜日</div>
-      </div>
-      {recurrence === "biweekly" && (
-        <div className="px-4 py-3 border-b border-gray-100">
-          <label className="text-sm text-gray-900 font-medium">何週間に1回提出</label>
-          <div className="mt-1 flex items-center gap-2 text-sm">
-            <input
-              type="number"
-              inputMode="numeric"
-              min={2}
-              max={8}
-              value={biweeklyIntervalStr}
-              onChange={(e) => setBiweeklyIntervalStr(e.target.value)}
-              onBlur={() => setBiweeklyIntervalStr(String(biweeklyInterval))}
-              className="w-20 text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200"
-            />
-            <span className="text-gray-500">週間おき</span>
-          </div>
-        </div>
-      )}
-      <div className="px-4 py-3 border-b border-gray-100">
-        <label className="block text-sm mb-2 text-gray-900 font-medium">初回授業日</label>
-        <DatePickerField value={classStartDate} onChange={(v) => setClassStartDate(v)} placeholder="第1回授業の日付" />
-        <div className="text-[11px] text-gray-400 mt-1">第1回授業の日付。例: 4/3</div>
-      </div>
-      <div className="px-4 py-3 border-b border-gray-100">
-        <label className="block text-sm mb-2 text-gray-900 font-medium">授業の回数</label>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            inputMode="numeric"
-            min={1}
-            max={50}
-            value={classCountStr}
-            onChange={(e) => setClassCountStr(e.target.value)}
-            onBlur={() => setClassCountStr(String(classCount))}
-            className="w-24 text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200"
-          />
-          <span className="text-sm text-gray-500">回</span>
-        </div>
-        <div className="text-[11px] text-gray-400 mt-1">半期は通常 14〜15 回</div>
-      </div>
-      <div className="px-4 py-3">
-        <div className="text-sm text-gray-900 font-medium">初回課題提出日</div>
-        <div className="text-xs text-gray-600 mt-1">{deadlineLabel}</div>
-        <div className="text-[11px] text-gray-400 mt-1">上の「初回課題提出日」を第1回として、以降の回を授業日に合わせて自動展開します。</div>
-      </div>
-    </Card>
-  );
-
-  const AdvancedToggleCard = (
-    <div className="mx-4 mt-3">
-      <button
-        type="button"
-        onClick={() => setShowAdvanced((v) => !v)}
-        className="w-full rounded-[24px] border border-white/80 bg-white px-4 py-3 text-left flex items-center justify-between shadow-[0_12px_32px_rgba(27,39,75,0.07)] active:scale-[0.99] transition-transform"
-      >
-        <div>
-          <div className="text-sm font-semibold text-gray-900">詳細設定</div>
-          <div className="text-[11px] text-gray-400 mt-0.5">繰り返し・通知を必要なときだけ設定</div>
-        </div>
-        <span className="text-xs font-semibold text-blue-500">{showAdvanced ? "閉じる" : "開く"}</span>
-      </button>
-    </div>
-  );
-
-  // 通常カテゴリの繰り返しブロック
-  const NormalRecurringScheduleBlock = (
-    <Card>
-      {recurrence === "biweekly" && (
-        <div className="px-4 py-3 border-b border-gray-100">
-          <label className="text-sm text-gray-900 font-medium">何週間に1回</label>
-          <div className="mt-1 flex items-center gap-2 text-sm">
-            <input
-              type="number"
-              inputMode="numeric"
-              min={2}
-              max={8}
-              value={biweeklyIntervalStr}
-              onChange={(e) => setBiweeklyIntervalStr(e.target.value)}
-              onBlur={() => setBiweeklyIntervalStr(String(biweeklyInterval))}
-              className="w-20 text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200"
-            />
-            <span className="text-gray-500">週間おき</span>
-          </div>
-        </div>
-      )}
-      <div className="px-4 py-3">
-        <label className="text-sm text-gray-900 font-medium block mb-2">最終締切日</label>
-        <DatePickerField
-          value={repeatEndDate}
-          onChange={(v) => setRepeatEndDate(v)}
-          min={toDateOnly(deadline)}
-          isDateDisabled={(d) => {
-            if (d.getTime() < new Date(toDateOnly(deadline)).getTime()) return true;
-            if (recurrence === "daily") return false;
-
-            const first = new Date(toDateOnly(deadline));
-            const candidate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-            const cur = new Date(first);
-            let guard = 0;
-            while (cur.getTime() <= candidate.getTime() && guard < 240) {
-              if (cur.getTime() === candidate.getTime()) return false;
-              if (recurrence === "weekly") cur.setDate(cur.getDate() + 7);
-              else if (recurrence === "biweekly") cur.setDate(cur.getDate() + Math.max(2, biweeklyInterval) * 7);
-              else if (recurrence === "monthly") cur.setMonth(cur.getMonth() + 1);
-              else break;
-              guard += 1;
-            }
-            return recurrence === "weekly" || recurrence === "biweekly" || recurrence === "monthly";
-          }}
-          placeholder="最終回の締切日を選択"
-        />
-        <div className="text-xs text-gray-400 mt-1">
-          全{occurrenceCount}回
-          {(recurrence === "weekly" || recurrence === "biweekly") && "（初回と同じ曜日のみ選択可）"}
-          {recurrence === "monthly" && "（初回と同じ日付のみ選択可）"}
-        </div>
-      </div>
-    </Card>
-  );
-
-  // セクション順: まず課題登録に必要な項目だけ見せ、詳細設定は折りたたむ
+  // セクション順: 課題の作成に必要な項目を上から自然に並べる
   const renderSections = (): React.ReactNode[] => {
     const sections: React.ReactNode[] = [];
     if (isEventEdit) {
       sections.push(EventTimeCard);
+      sections.push(PriorityCard);
       sections.push(UrlMemoCard);
-      sections.push(AdvancedToggleCard);
-      if (showAdvanced) {
-        sections.push(PriorityCard);
-        sections.push(ReminderCard);
-      }
       return sections;
     }
 
     sections.push(DeadlineCard);
     sections.push(PriorityCard);
-    sections.push(AdvancedToggleCard);
-    if (showAdvanced) {
-      sections.push(RecurrenceCard);
-      if (recurrence !== "none") {
-        sections.push(isTimetableRecurring ? TimetableScheduleBlock : NormalRecurringScheduleBlock);
-      }
-      sections.push(ReminderCard);
-    }
     sections.push(showStartPeriod ? StartDateCard : StartPeriodToggleCard);
     sections.push(UrlMemoCard);
     return sections;
