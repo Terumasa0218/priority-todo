@@ -213,7 +213,7 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
             </div>
             <button onClick={() => onAddClick(selectedDate)}
               className="flex items-center justify-center gap-2 w-full px-4 py-3.5 text-sm font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 transition-colors border-t border-slate-100">
-              <IconPlus size={15} />新しい予定の作成
+              <IconPlus size={15} />この日に課題を追加
             </button>
         </div>
       )}

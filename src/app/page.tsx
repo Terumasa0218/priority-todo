@@ -886,11 +886,14 @@ export default function Home() {
         {view === "completed" && <div><div className="px-4 py-3 flex items-center justify-between"><span className="text-sm font-semibold text-gray-900">達成済み</span><span className="text-[11px] text-gray-400">{completed.length}件</span></div><CompletedList tasks={completed} cats={cats} onRestore={handleRestore} /></div>}
       </div>
 
-      <button
-        onClick={() => openNew(null)}
-        className="floating-fab fixed right-6 z-40 w-14 h-14 text-white rounded-full transition-all flex items-center justify-center"
-        style={{ bottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}
-      ><IconPlus size={20} sw={2.5} /></button>
+      {view === "list" && (
+        <button
+          onClick={() => openNew(null)}
+          className="floating-fab fixed right-6 z-40 w-14 h-14 text-white rounded-full transition-all flex items-center justify-center"
+          style={{ bottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}
+          aria-label="課題を追加"
+        ><IconPlus size={20} sw={2.5} /></button>
+      )}
       {showForm && <TaskForm task={editTask} prefillDate={prefillDate} cats={cats} setCats={setCats} timetable={timetable} onSave={handleSave} onDelete={handleDeleteFromForm} onClose={() => { setShowForm(false); setEditTask(null); setPrefillDate(null); }} />}
       {showCatMgr && <CategoryManager cats={cats} setCats={setCats} onDeleteCategory={(catId) => setTasks((prev) => prev.map((t) => (t.category === catId ? { ...t, category: "default" } : t)))} onClose={() => setShowCatMgr(false)} />}
 
