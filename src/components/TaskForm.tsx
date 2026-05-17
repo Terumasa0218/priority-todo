@@ -91,6 +91,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const [priority, setPriority] = useState<boolean>(task?.priority || false);
   const [showAdvanced, setShowAdvanced] = useState<boolean>(() => !!task && ((task.recurrence && task.recurrence !== "none") || task.reminder !== "1day"));
   const initialStart = inferStartState(task, task?.deadline ? toDateTimeLocal(new Date(task.deadline)) : getDefault());
+  const [showStartPeriod, setShowStartPeriod] = useState<boolean>(() => !!(initialStart.date || initialStart.time));
   const [customStartDate, setCustomStartDate] = useState<string>(initialStart.date);
   const [customStartTime, setCustomStartTime] = useState<string>(initialStart.time);
   const [classDayOfWeek, setClassDayOfWeek] = useState<number>(task?.classDayOfWeek ?? new Date(task?.deadline || deadline).getDay());
@@ -174,13 +175,15 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     const offsetTime = `${String(dl.getHours()).padStart(2, "0")}:${String(dl.getMinutes()).padStart(2, "0")}`;
     // 授業日 → 締切日 のオフセット日数
     const offsetDays = Math.round((dlDateOnly.getTime() - start.getTime()) / 86_400_000);
-    // 最終回の終了日 (授業日基準)
+    // 最終回の提出日。授業日より後に提出する課題でも最終回が落ちないよう、提出日基準で保存する。
     const lastClass = new Date(start);
     lastClass.setDate(lastClass.getDate() + (Math.max(1, classCount) - 1) * intervalDays);
+    const lastDue = new Date(lastClass);
+    lastDue.setDate(lastDue.getDate() + offsetDays);
     return {
       offsetTime,
       offsetDays,
-      repeatEndDate: toDateTimeLocal(lastClass).slice(0, 10),
+      repeatEndDate: toDateTimeLocal(lastDue).slice(0, 10),
     };
   }, [isTimetableRecurring, classStartDate, deadline, classCount, intervalDays]);
 
@@ -314,7 +317,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const DeadlineCard = (
     <Card>
       <div className="px-4 py-3">
-        <label className="block text-sm mb-2 text-gray-900 font-semibold">締切</label>
+        <label className="block text-sm mb-2 text-gray-900 font-semibold">{isTimetableRecurring ? "初回課題提出日" : "締切"}</label>
         <div className="grid grid-cols-[minmax(0,1fr)_88px] gap-2 items-center">
           <div className="min-w-0">
             <DatePickerField value={deadlineDate} onChange={updateDeadlineDate} min={todayDate} placeholder="締切日を選択" />
@@ -372,8 +375,13 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const StartDateCard = (
     <Card>
       <div className="px-4 py-3">
-        <span className="text-sm text-gray-900 font-semibold block mb-1">課題に取り組む期間</span>
-        <span className="text-[11px] text-gray-400 block mb-3">未入力なら作成した瞬間から表示します。終了は締切と一致します。</span>
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <span className="text-sm text-gray-900 font-semibold block mb-1">課題に取り組む期間</span>
+            <span className="text-[11px] text-gray-400 block">未入力なら作成した瞬間から表示します。終了は締切と一致します。</span>
+          </div>
+          <button type="button" onClick={() => setShowStartPeriod(false)} className="shrink-0 text-xs font-semibold text-blue-500">閉じる</button>
+        </div>
         <div className="grid grid-cols-[minmax(0,1fr)_88px] gap-2 items-end">
           <div className="min-w-0">
             <span className="block text-[11px] text-gray-500 mb-1">開始日</span>
@@ -387,6 +395,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
               min={todayDate}
               rangeStart={customStartDate}
               rangeEnd={deadlineDate}
+              rangeEndFixed
               isDateDisabled={(d) => d.getTime() > new Date(`${deadlineDate}T00:00:00`).getTime()}
             />
           </div>
@@ -403,8 +412,38 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         </div>
         <div className="mt-2 text-xs font-medium text-blue-600 leading-relaxed">{startHelpText}</div>
         <div className="mt-1 text-[11px] text-gray-400 leading-relaxed">締切: {deadlineLabel}</div>
+        {customStartDate && (
+          <button
+            type="button"
+            onClick={() => {
+              setCustomStartDate("");
+              setCustomStartTime("");
+            }}
+            className="mt-3 text-xs font-semibold text-gray-500"
+          >
+            取り組む期間を未設定に戻す
+          </button>
+        )}
       </div>
     </Card>
+  );
+
+  const StartPeriodToggleCard = (
+    <div className="mx-4 mt-3">
+      <button
+        type="button"
+        onClick={() => setShowStartPeriod(true)}
+        className="w-full rounded-[24px] border border-white/80 bg-white px-4 py-3 text-left flex items-center justify-between shadow-[0_12px_32px_rgba(27,39,75,0.07)] active:scale-[0.99] transition-transform"
+      >
+        <div>
+          <div className="text-sm font-semibold text-gray-900">課題に取り組む期間</div>
+          <div className="text-[11px] text-gray-400 mt-0.5">
+            {customStartDate ? startHelpText : "必要なときだけ、今日の課題に表示し始める日時を指定"}
+          </div>
+        </div>
+        <span className="text-xs font-semibold text-blue-500">開く</span>
+      </button>
+    </div>
   );
 
   const UrlMemoCard = (
@@ -460,7 +499,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         </div>
       )}
       <div className="px-4 py-3 border-b border-gray-100">
-        <label className="block text-sm mb-2 text-gray-900 font-medium">授業の開始日</label>
+        <label className="block text-sm mb-2 text-gray-900 font-medium">初回授業日</label>
         <DatePickerField value={classStartDate} onChange={(v) => setClassStartDate(v)} placeholder="第1回授業の日付" />
         <div className="text-[11px] text-gray-400 mt-1">第1回授業の日付。例: 4/3</div>
       </div>
@@ -482,8 +521,9 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         <div className="text-[11px] text-gray-400 mt-1">半期は通常 14〜15 回</div>
       </div>
       <div className="px-4 py-3">
-        <div className="text-sm text-gray-900 font-medium">初回締切</div>
-        <div className="text-[11px] text-gray-400 mt-1">上の締切を第1回として、以降の回を授業日に合わせて自動展開します。</div>
+        <div className="text-sm text-gray-900 font-medium">初回課題提出日</div>
+        <div className="text-xs text-gray-600 mt-1">{deadlineLabel}</div>
+        <div className="text-[11px] text-gray-400 mt-1">上の「初回課題提出日」を第1回として、以降の回を授業日に合わせて自動展開します。</div>
       </div>
     </Card>
   );
@@ -584,7 +624,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       }
       sections.push(ReminderCard);
     }
-    sections.push(StartDateCard);
+    sections.push(showStartPeriod ? StartDateCard : StartPeriodToggleCard);
     sections.push(UrlMemoCard);
     return sections;
   };

@@ -13,6 +13,7 @@ interface DatePickerFieldProps {
   // 期間表示用。開始日ピッカーなど、選択日から終了日までを帯で見せたい場合に使う。
   rangeStart?: string;
   rangeEnd?: string;
+  rangeEndFixed?: boolean;
   placeholder?: string;
   className?: string;
 }
@@ -38,6 +39,7 @@ export default function DatePickerField({
   min,
   rangeStart,
   rangeEnd,
+  rangeEndFixed = false,
   placeholder = "日付を選択",
   className = "",
 }: DatePickerFieldProps) {
@@ -154,33 +156,41 @@ export default function DatePickerField({
                 const isRangeEnd = !!highlightRange && isInRange && sameYMD(d, highlightRange.end);
                 const startsRangeSegment = isInRange && (isRangeStart || i % 7 === 0);
                 const endsRangeSegment = isInRange && (isRangeEnd || i % 7 === 6);
-                const rangeShapeClass = isInRange
-                  ? `${startsRangeSegment ? "rounded-l-2xl" : "rounded-l-none"} ${endsRangeSegment ? "rounded-r-2xl" : "rounded-r-none"}`
-                  : "rounded-full";
-                const rangeColorClass = isInRange
-                  ? isRangeStart || isRangeEnd
-                    ? "bg-blue-500 text-white font-semibold shadow-sm shadow-blue-500/20"
-                    : "bg-blue-500/15 text-white font-semibold"
+                const bandClass = isInRange && !(isRangeStart && isRangeEnd)
+                  ? startsRangeSegment
+                    ? "left-1/2 right-0"
+                    : endsRangeSegment
+                      ? "left-0 right-1/2"
+                      : "left-0 right-0"
                   : "";
+                const dayClass = disabled
+                  ? "text-gray-600 opacity-40"
+                  : isRangeStart
+                    ? "bg-blue-500 text-white font-semibold shadow-sm shadow-blue-500/25"
+                    : isRangeEnd
+                      ? `${rangeEndFixed ? "bg-blue-500/90 ring-4 ring-blue-400/10" : "bg-blue-500"} text-white font-semibold`
+                      : isSelected
+                        ? "bg-blue-500 text-white font-semibold"
+                        : isToday
+                          ? "text-blue-400 font-semibold"
+                          : isInRange
+                            ? "text-white font-semibold"
+                            : "text-white";
                 return (
                   <button
                     key={d.toISOString()}
                     type="button"
                     disabled={disabled}
                     onClick={() => !disabled && setTempSelected(d)}
-                    className={`h-11 w-full text-sm flex items-center justify-center transition-colors ${rangeShapeClass} ${
-                      disabled
-                        ? "text-gray-600 opacity-40 cursor-not-allowed"
-                        : rangeColorClass
-                          ? rangeColorClass
-                          : isSelected
-                          ? "bg-blue-500 text-white font-semibold"
-                          : isToday
-                            ? "text-blue-400 font-semibold"
-                            : "text-white hover:bg-white/10"
+                    className={`relative h-11 w-full text-sm flex items-center justify-center transition-colors ${
+                      disabled ? "cursor-not-allowed" : "hover:bg-white/10"
                     }`}
+                    aria-label={isRangeEnd && rangeEndFixed && !isRangeStart ? `${d.getDate()}日 締切日（固定）` : undefined}
                   >
-                    {d.getDate()}
+                    {bandClass && <span aria-hidden className={`absolute inset-y-1 ${bandClass} bg-blue-500/15`} />}
+                    <span className={`relative z-10 flex h-9 w-9 items-center justify-center rounded-full transition-colors ${dayClass}`}>
+                      {d.getDate()}
+                    </span>
                   </button>
                 );
               })}
