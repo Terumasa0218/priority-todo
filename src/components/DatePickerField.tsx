@@ -10,6 +10,9 @@ interface DatePickerFieldProps {
   isDateDisabled?: (date: Date) => boolean;
   // 入力欄の最小日付 YYYY-MM-DD
   min?: string;
+  // 期間表示用。開始日ピッカーなど、選択日から終了日までを帯で見せたい場合に使う。
+  rangeStart?: string;
+  rangeEnd?: string;
   placeholder?: string;
   className?: string;
 }
@@ -33,6 +36,8 @@ export default function DatePickerField({
   onChange,
   isDateDisabled,
   min,
+  rangeStart,
+  rangeEnd,
   placeholder = "日付を選択",
   className = "",
 }: DatePickerFieldProps) {
@@ -62,6 +67,12 @@ export default function DatePickerField({
   }, [open]);
 
   const minDate = useMemo(() => parseYMD(min || ""), [min]);
+  const highlightRange = useMemo(() => {
+    const start = tempSelected || parseYMD(rangeStart || "");
+    const end = parseYMD(rangeEnd || "");
+    if (!start || !end || start.getTime() > end.getTime()) return null;
+    return { start, end };
+  }, [rangeStart, rangeEnd, tempSelected]);
 
   const grid = useMemo(() => {
     const first = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1);
@@ -132,22 +143,37 @@ export default function DatePickerField({
                 <div key={d} className={`text-center py-1 ${i === 0 ? "text-rose-300" : i === 6 ? "text-blue-300" : ""}`}>{d}</div>
               ))}
             </div>
-            <div className="grid grid-cols-7 gap-1">
+            <div className="grid grid-cols-7 gap-x-0 gap-y-1">
               {grid.map((d, i) => {
-                if (!d) return <div key={`b${i}`} />;
+                if (!d) return <div key={`b${i}`} className="h-11" />;
                 const disabled = isDisabled(d);
                 const isSelected = tempSelected && sameYMD(d, tempSelected);
                 const isToday = sameYMD(d, today);
+                const isInRange = !!highlightRange && !disabled && d.getTime() >= highlightRange.start.getTime() && d.getTime() <= highlightRange.end.getTime();
+                const isRangeStart = !!highlightRange && isInRange && sameYMD(d, highlightRange.start);
+                const isRangeEnd = !!highlightRange && isInRange && sameYMD(d, highlightRange.end);
+                const startsRangeSegment = isInRange && (isRangeStart || i % 7 === 0);
+                const endsRangeSegment = isInRange && (isRangeEnd || i % 7 === 6);
+                const rangeShapeClass = isInRange
+                  ? `${startsRangeSegment ? "rounded-l-2xl" : "rounded-l-none"} ${endsRangeSegment ? "rounded-r-2xl" : "rounded-r-none"}`
+                  : "rounded-full";
+                const rangeColorClass = isInRange
+                  ? isRangeStart || isRangeEnd
+                    ? "bg-blue-500 text-white font-semibold shadow-sm shadow-blue-500/20"
+                    : "bg-blue-500/15 text-white font-semibold"
+                  : "";
                 return (
                   <button
                     key={d.toISOString()}
                     type="button"
                     disabled={disabled}
                     onClick={() => !disabled && setTempSelected(d)}
-                    className={`aspect-square rounded-full text-sm flex items-center justify-center transition-colors ${
+                    className={`h-11 w-full text-sm flex items-center justify-center transition-colors ${rangeShapeClass} ${
                       disabled
                         ? "text-gray-600 opacity-40 cursor-not-allowed"
-                        : isSelected
+                        : rangeColorClass
+                          ? rangeColorClass
+                          : isSelected
                           ? "bg-blue-500 text-white font-semibold"
                           : isToday
                             ? "text-blue-400 font-semibold"
