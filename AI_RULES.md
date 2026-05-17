@@ -58,13 +58,14 @@ Before making changes, the AI agent must:
 3. Read `CLAUDE.md`.
 4. Read `WORKFLOW.md`.
 5. Read `docs/work-plan.md`.
-6. Read `docs/product-market-report.md` when the task affects product direction, prioritization, onboarding, UI strategy, or differentiation.
-7. Read `docs/ui-design-analysis-report.md` when the task affects UI, visual quality, motion, forms, navigation, or interaction design.
-8. Confirm the current working directory is the repository root.
-9. Run `git status --short` or `git status -sb`.
-10. Confirm the canonical remote with `git remote -v`.
-11. Identify the files expected to change.
-12. Avoid touching unrelated files.
+6. Read `docs/phase-implementation-roadmap.md` when the task affects implementation order, phase scope, or milestone planning.
+7. Read `docs/product-market-report.md` when the task affects product direction, prioritization, onboarding, UI strategy, or differentiation.
+8. Read `docs/ui-design-analysis-report.md` when the task affects UI, visual quality, motion, forms, navigation, or interaction design.
+9. Confirm the current working directory is the repository root.
+10. Run `git status --short` or `git status -sb`.
+11. Confirm the canonical remote with `git remote -v`.
+12. Identify the files expected to change.
+13. Avoid touching unrelated files.
 
 ## 3. Default Delivery Policy
 
