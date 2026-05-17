@@ -89,9 +89,15 @@ const firstClassDay = (from: Date, dayOfWeek: number) => {
   return d;
 };
 
+const parseEndBoundary = (value: string) => {
+  const d = new Date(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) d.setHours(23, 59, 59, 999);
+  return d;
+};
+
 export const calcOccurrenceCount = (task: Task): number => {
   if (task.recurrence === "none") return 1;
-  const end = task.repeatEndDate ? new Date(task.repeatEndDate) : new Date(task.deadline);
+  const end = task.repeatEndDate ? parseEndBoundary(task.repeatEndDate) : new Date(task.deadline);
   if (task.recurrence === "monthly") {
     const cur = new Date(task.deadline);
     let count = 0;
@@ -102,7 +108,9 @@ export const calcOccurrenceCount = (task: Task): number => {
     return count;
   }
   if (typeof task.classDayOfWeek !== "number") return Math.max(1, task.repeatCount || 1);
-  const cur = firstClassDay(new Date(task.deadline), task.classDayOfWeek);
+  const cur = task.classStartDate
+    ? new Date(`${task.classStartDate}T00:00:00`)
+    : firstClassDay(new Date(task.deadline), task.classDayOfWeek);
   let count = 0;
   while (cur <= end && count < 240) {
     count += 1;
@@ -154,7 +162,7 @@ export function expandRecurring(task: Task, horizonDate: Date, options?: ExpandR
   const horizon = new Date(horizonDate);
   const lookback = new Date();
   lookback.setDate(lookback.getDate() - 1);
-  const endDate = task.repeatEndDate ? new Date(task.repeatEndDate) : horizon;
+  const endDate = task.repeatEndDate ? parseEndBoundary(task.repeatEndDate) : horizon;
   const effectiveEnd = endDate < horizon ? endDate : horizon;
 
   const pushOccurrence = (current: Date) => {
