@@ -385,6 +385,8 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
               }}
               placeholder="開始日を選択"
               min={todayDate}
+              rangeStart={customStartDate}
+              rangeEnd={deadlineDate}
               isDateDisabled={(d) => d.getTime() > new Date(`${deadlineDate}T00:00:00`).getTime()}
             />
           </div>
