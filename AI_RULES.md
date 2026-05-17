@@ -59,11 +59,12 @@ Before making changes, the AI agent must:
 4. Read `WORKFLOW.md`.
 5. Read `docs/work-plan.md`.
 6. Read `docs/product-market-report.md` when the task affects product direction, prioritization, onboarding, UI strategy, or differentiation.
-7. Confirm the current working directory is the repository root.
-8. Run `git status --short` or `git status -sb`.
-9. Confirm the canonical remote with `git remote -v`.
-10. Identify the files expected to change.
-11. Avoid touching unrelated files.
+7. Read `docs/ui-design-analysis-report.md` when the task affects UI, visual quality, motion, forms, navigation, or interaction design.
+8. Confirm the current working directory is the repository root.
+9. Run `git status --short` or `git status -sb`.
+10. Confirm the canonical remote with `git remote -v`.
+11. Identify the files expected to change.
+12. Avoid touching unrelated files.
 
 ## 3. Default Delivery Policy
 
