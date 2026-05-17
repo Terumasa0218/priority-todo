@@ -20,9 +20,8 @@ interface TaskFormProps {
 // タスク開始日 = 「今日のタスク」に出し始める日。
 //   "immediate": startOffsetDays/startDate ともに null（本日から）
 //   "offset":    startOffsetDays = N (締切の N 日前から)
-//   "custom":    startDate = YYYY-MM-DD (指定日から)
+//   "custom":    startDate = ISO datetime（指定日時から）
 type StartMode = "immediate" | "offset" | "custom";
-type Kind = "todo" | "event";
 
 const START_PRESETS: { id: string; label: string; offset: number | null | "custom" }[] = [
   { id: "immediate", label: "本日から", offset: null },
@@ -73,16 +72,22 @@ const COURSE_TEMPLATES = [
 ] as const;
 
 const toDateOnly = (iso: string): string => iso.slice(0, 10);
+const toTimeOnly = (iso: string): string => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "00:00";
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
 
-const inferStartState = (task: Task | null): { mode: StartMode; offsetStr: string; date: string } => {
-  if (!task) return { mode: "immediate", offsetStr: "", date: "" };
-  if (task.startDate) return { mode: "custom", offsetStr: "", date: toDateOnly(task.startDate) };
-  if (typeof task.startOffsetDays === "number") return { mode: "offset", offsetStr: String(task.startOffsetDays), date: "" };
-  return { mode: "immediate", offsetStr: "", date: "" };
+const inferStartState = (task: Task | null): { mode: StartMode; offsetStr: string; date: string; time: string } => {
+  if (!task) return { mode: "immediate", offsetStr: "", date: "", time: "" };
+  if (task.startDate) return { mode: "custom", offsetStr: "", date: toDateOnly(task.startDate), time: toTimeOnly(task.startDate) };
+  if (typeof task.startOffsetDays === "number") return { mode: "offset", offsetStr: String(task.startOffsetDays), date: "", time: "" };
+  return { mode: "immediate", offsetStr: "", date: "", time: "" };
 };
 
 const fmtDateMD = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`;
 const fmtDateMDW = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}(${DAY[d.getDay()]})`;
+const fmtDateYMDW = (d: Date) => `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}（${DAY[d.getDay()]}）`;
 const toDateTimeLocal = (d: Date): string => {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -99,6 +104,7 @@ const Card = ({ children }: { children: React.ReactNode }) => (
 
 export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate, cats, setCats, timetable }: TaskFormProps) {
   const isEdit = !!task;
+  const isEventEdit = task?.kind === "event";
 
   const getDefault = () => {
     if (prefillDate) {
@@ -112,7 +118,6 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   };
 
   // ----- 共通 state -----
-  const [kind, setKind] = useState<Kind>(task?.kind || "todo");
   const [title, setTitle] = useState(task?.title || "");
   const [deadline, setDeadline] = useState(task?.deadline ? toDateTimeLocal(new Date(task.deadline)) : getDefault());
   const [endTime, setEndTime] = useState(task?.endTime ? toDateTimeLocal(new Date(task.endTime)) : "");
@@ -123,11 +128,12 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const [memo, setMemo] = useState(task?.memo || "");
   const [url, setUrl] = useState(task?.url || "");
   const [priority, setPriority] = useState<boolean>(task?.priority || false);
-  const [showAdvanced, setShowAdvanced] = useState<boolean>(() => !!task && ((task.recurrence && task.recurrence !== "none") || !!task.priority || task.reminder !== "1day"));
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(() => !!task && ((task.recurrence && task.recurrence !== "none") || task.reminder !== "1day"));
   const initialStart = useMemo(() => inferStartState(task), [task]);
   const [startMode, setStartMode] = useState<StartMode>(initialStart.mode);
   const [startOffsetDaysStr, setStartOffsetDaysStr] = useState<string>(initialStart.offsetStr);
   const [customStartDate, setCustomStartDate] = useState<string>(initialStart.date);
+  const [customStartTime, setCustomStartTime] = useState<string>(initialStart.time);
   const startOffsetDays = useMemo(() => {
     const n = parseInt(startOffsetDaysStr, 10);
     if (isNaN(n) || n < 0) return null;
@@ -154,6 +160,11 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
 
   const deadlineDate = deadline.slice(0, 10);
   const deadlineTime = deadline.slice(11, 16) || "23:59";
+  const deadlinePreview = useMemo(() => {
+    const d = new Date(deadline);
+    if (Number.isNaN(d.getTime())) return "締切を選択してください";
+    return `${fmtDateYMDW(d)} ${deadlineTime}`;
+  }, [deadline, deadlineTime]);
 
   const updateDeadlineDate = (nextDate: string) => {
     if (!nextDate) return;
@@ -220,21 +231,35 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const computedStartOffsetDays: number | null = startMode === "offset" ? startOffsetDays : null;
   const computedStartDate: string | null = useMemo(() => {
     if (startMode !== "custom" || !customStartDate) return null;
-    return new Date(`${customStartDate}T00:00:00`).toISOString();
-  }, [startMode, customStartDate]);
+    return new Date(`${customStartDate}T${customStartTime || "00:00"}:00`).toISOString();
+  }, [startMode, customStartDate, customStartTime]);
+
+  const startPeriodText = useMemo(() => {
+    if (startMode === "immediate") return "本日から締切まで";
+    if (startMode === "custom") {
+      if (!customStartDate) return "開始日を選択してください";
+      const d = new Date(`${customStartDate}T00:00:00`);
+      return `${fmtDateYMDW(d)} ${customStartTime || "00:00"} から締切まで`;
+    }
+    if (startOffsetDays == null) return "開始日数を入力してください";
+    const d = new Date(deadline);
+    d.setDate(d.getDate() - startOffsetDays);
+    d.setHours(0, 0, 0, 0);
+    return `${fmtDateYMDW(d)} 00:00 から締切まで`;
+  }, [startMode, customStartDate, customStartTime, startOffsetDays, deadline]);
 
   const startHelpText = useMemo(() => {
-    if (startMode === "immediate") return "→ 作成時から「今日の課題」に表示します";
+    if (startMode === "immediate") return "作成後すぐに「今日の課題」に表示します";
     if (startMode === "custom") {
       if (!customStartDate) return "→ 開始日を選択してください";
       const d = new Date(`${customStartDate}T00:00:00`);
-      return `→ ${fmtDateMDW(d)} から「今日の課題」に表示します`;
+      return `${fmtDateMDW(d)} ${customStartTime || "00:00"} から「今日の課題」に表示します`;
     }
     // offset
-    if (startOffsetDays == null) return "→ 日数を入力してください";
-    if (startOffsetDays === 0) return "→ 締切日当日に「今日の課題」に表示します";
-    return `→ 締切の${startOffsetDays}日前から「今日の課題」に表示します`;
-  }, [startMode, customStartDate, startOffsetDays]);
+    if (startOffsetDays == null) return "日数を入力してください";
+    if (startOffsetDays === 0) return "締切日当日の0:00から「今日の課題」に表示します";
+    return `締切の${startOffsetDays}日前の0:00から「今日の課題」に表示します`;
+  }, [startMode, customStartDate, customStartTime, startOffsetDays]);
 
   const occurrenceCount = useMemo(() => {
     if (recurrence === "none") return 1;
@@ -267,20 +292,20 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const handleSave = () => {
     if (saving) return;
     if (!title.trim()) { setShowError(true); setFormError(""); return; }
-    if (kind === "event") {
+    if (isEventEdit) {
       if (endTime && new Date(endTime).getTime() < new Date(deadline).getTime()) { setFormError("終了時刻は開始時刻より後にしてください"); return; }
     } else {
       if (recurrence !== "none" && !isTimetableRecurring && repeatEndDate && new Date(repeatEndDate).getTime() < new Date(deadline).getTime()) { setFormError("最終締切日は初回締切日以降に設定してください"); return; }
       if (recurrence === "biweekly" && (biweeklyInterval < 2 || biweeklyInterval > 8)) { setFormError("隔週の間隔は2〜8週間で入力してください"); return; }
       if (isTimetableRecurring && !classStartDate) { setFormError("授業の開始日を入力してください"); return; }
-      if (startMode === "offset" && startOffsetDays == null) { setFormError("タスク開始日の日数を入力してください"); return; }
-      if (startMode === "custom" && !customStartDate) { setFormError("タスク開始日を選択してください"); return; }
-      if (startMode === "custom" && customStartDate && new Date(`${customStartDate}T00:00:00`).getTime() > new Date(deadline).getTime()) { setFormError("タスク開始日は締切より前に設定してください"); return; }
+      if (startMode === "offset" && startOffsetDays == null) { setFormError("取り組む期間の開始日数を入力してください"); return; }
+      if (startMode === "custom" && !customStartDate) { setFormError("取り組む期間の開始日を選択してください"); return; }
+      if (startMode === "custom" && computedStartDate && new Date(computedStartDate).getTime() > new Date(deadline).getTime()) { setFormError("取り組む期間の開始日時は締切以前にしてください"); return; }
     }
     setFormError("");
     setSaving(true);
 
-    if (kind === "event") {
+    if (isEventEdit) {
       onSave({
         id: task?.parentId || task?.id || uid(),
         kind: "event",
@@ -349,30 +374,13 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     }
   };
 
-  // 種別切替
-  const KindSwitch = (
-    <div className="mt-3 mx-4 rounded-[24px] border border-white/80 bg-white p-1.5 shadow-[0_12px_32px_rgba(27,39,75,0.07)]">
-      <div className="grid grid-cols-2 gap-1">
-        {(["todo", "event"] as const).map((k) => (
-          <button
-            key={k}
-            onClick={() => setKind(k)}
-            className={`min-h-11 py-2 rounded-[18px] text-sm font-semibold transition-colors ${kind === k ? "bg-[#007AFF] text-white shadow-[0_8px_18px_rgba(0,122,255,0.22)]" : "text-gray-500"}`}
-          >
-            {k === "todo" ? "課題" : "時間が決まった予定"}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-
-  const CourseTemplateCard = kind === "todo" ? (
+  const CourseTemplateCard = (
     <Card>
       <div className="px-4 py-3">
         <div className="flex items-start justify-between gap-3 mb-2">
           <div>
             <span className="text-sm text-gray-900 font-semibold block">よく使う課題</span>
-            <span className="text-[11px] text-gray-400 block mt-0.5">Moodleなしでも授業ごとの定番課題を素早く作れます</span>
+            <span className="text-[11px] text-gray-400 block mt-0.5">繰り返しや締切時刻をまとめて設定します</span>
           </div>
           {selectedCat && <span className="text-[10px] text-gray-400 rounded-full bg-gray-100 px-2 py-1 max-w-[120px] truncate">{selectedCat.label}</span>}
         </div>
@@ -391,7 +399,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         </div>
       </div>
     </Card>
-  ) : null;
+  );
 
   const RecurrenceCard = (
     <Card>
@@ -410,7 +418,8 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const DeadlineCard = (
     <Card>
       <div className="px-4 py-3">
-        <label className="block text-sm mb-2 text-gray-900 font-medium">締切</label>
+        <label className="block text-sm mb-2 text-gray-900 font-semibold">締切</label>
+        <div className="mb-3 text-lg font-semibold text-gray-950 tabular-nums">{deadlinePreview}</div>
         <div className="grid grid-cols-[minmax(0,1fr)_112px] gap-2">
           <div className="min-w-0">
             <DatePickerField value={deadlineDate} onChange={updateDeadlineDate} placeholder="締切日を選択" />
@@ -462,8 +471,11 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const StartDateCard = (
     <Card>
       <div className="px-4 py-3">
-        <span className="text-sm text-gray-900 font-medium block mb-1">いつから取りかかる？</span>
-        <span className="text-[11px] text-gray-400 block mb-2">締切の何日前から「今日の課題」に出すか</span>
+        <span className="text-sm text-gray-900 font-semibold block mb-1">課題に取り組む期間</span>
+        <span className="text-[11px] text-gray-400 block mb-3">指定した日時から「今日の課題」に表示し、締切まで残します</span>
+        <div className="mb-3 rounded-2xl bg-blue-50/80 px-3 py-2.5 text-sm font-semibold text-blue-700 leading-relaxed">
+          {startPeriodText}
+        </div>
         <div className="flex gap-1.5 flex-wrap">
           {START_PRESETS.map((p) => {
             const isSelected =
@@ -485,6 +497,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
                   if (p.offset === "custom") {
                     setStartMode("custom");
                     if (!customStartDate) setCustomStartDate(toDateOnly(deadline));
+                    if (!customStartTime) setCustomStartTime(deadlineTime || "00:00");
                   } else if (p.offset === null) {
                     setStartMode("immediate");
                     setStartOffsetDaysStr("");
@@ -527,11 +540,21 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
           <span className="text-xs text-gray-500">日前</span>
         </div>
         {startMode === "custom" && (
-          <div className="mt-3">
-            <DatePickerField
-              value={customStartDate}
-              onChange={(v) => setCustomStartDate(v)}
-              placeholder="開始日を選択"
+          <div className="mt-3 grid grid-cols-[minmax(0,1fr)_112px] gap-2">
+            <div className="min-w-0">
+              <DatePickerField
+                value={customStartDate}
+                onChange={(v) => setCustomStartDate(v)}
+                placeholder="開始日を選択"
+                isDateDisabled={(d) => d.getTime() > new Date(`${deadlineDate}T00:00:00`).getTime()}
+              />
+            </div>
+            <input
+              type="time"
+              value={customStartTime}
+              onChange={(e) => setCustomStartTime(e.target.value)}
+              className="min-w-0 w-full text-sm bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-200"
+              aria-label="取り組み開始時刻"
             />
           </div>
         )}
@@ -542,8 +565,14 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
 
   const UrlMemoCard = (
     <Card>
-      <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="提出先URL・資料URL（任意）" className="w-full px-4 py-3 text-sm border-b border-gray-100" />
-      <textarea value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="メモ（任意）" rows={3} className="w-full px-4 py-3 text-sm resize-none" />
+      <label className="block px-4 pt-3 pb-2 border-b border-gray-100">
+        <span className="block text-sm text-gray-900 font-medium mb-2">提出先URL</span>
+        <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." className="w-full text-sm bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-200" />
+      </label>
+      <label className="block px-4 pt-3 pb-3">
+        <span className="block text-sm text-gray-900 font-medium mb-2">メモ</span>
+        <textarea value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="補足・提出条件・先生からの注意など" rows={3} className="w-full text-sm bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-200 resize-none" />
+      </label>
     </Card>
   );
 
@@ -609,14 +638,8 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         <div className="text-[11px] text-gray-400 mt-1">半期は通常 14〜15 回</div>
       </div>
       <div className="px-4 py-3">
-        <label className="block text-sm mb-2 text-gray-900 font-medium">初回締切日</label>
-        <div className="grid grid-cols-[minmax(0,1fr)_112px] gap-2">
-        <div className="min-w-0">
-          <DatePickerField value={deadlineDate} onChange={updateDeadlineDate} placeholder="初回締切日を選択" />
-        </div>
-        <input type="time" value={deadlineTime} onChange={(e) => updateDeadlineTime(e.target.value)} className="min-w-0 w-full text-sm bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-200" />
-      </div>
-        <div className="text-[11px] text-gray-400 mt-1">第1回の課題提出日。以降の回はこれを基準に自動展開（祝日は休講としてスキップ）</div>
+        <div className="text-sm text-gray-900 font-medium">初回締切</div>
+        <div className="text-[11px] text-gray-400 mt-1">上の締切を第1回として、以降の回を授業日に合わせて自動展開します。</div>
       </div>
     </Card>
   );
@@ -630,7 +653,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       >
         <div>
           <div className="text-sm font-semibold text-gray-900">詳細設定</div>
-          <div className="text-[11px] text-gray-400 mt-0.5">繰り返し・最優先・通知を必要なときだけ設定</div>
+          <div className="text-[11px] text-gray-400 mt-0.5">繰り返し・通知・よく使う課題を必要なときだけ設定</div>
         </div>
         <span className="text-xs font-semibold text-blue-500">{showAdvanced ? "閉じる" : "開く"}</span>
       </button>
@@ -640,15 +663,6 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   // 通常カテゴリの繰り返しブロック
   const NormalRecurringScheduleBlock = (
     <Card>
-      <div className="px-4 py-3 border-b border-gray-100">
-        <label className="block text-sm mb-2 text-gray-900 font-medium">初回締切日</label>
-        <div className="grid grid-cols-[minmax(0,1fr)_112px] gap-2">
-          <div className="min-w-0">
-            <DatePickerField value={deadlineDate} onChange={updateDeadlineDate} placeholder="初回締切日を選択" />
-          </div>
-          <input type="time" value={deadlineTime} onChange={(e) => updateDeadlineTime(e.target.value)} className="min-w-0 w-full text-sm bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-200" />
-        </div>
-      </div>
       {recurrence === "biweekly" && (
         <div className="px-4 py-3 border-b border-gray-100">
           <label className="text-sm text-gray-900 font-medium">何週間に1回</label>
@@ -705,7 +719,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   // セクション順: まず課題登録に必要な項目だけ見せ、詳細設定は折りたたむ
   const renderSections = (): React.ReactNode[] => {
     const sections: React.ReactNode[] = [];
-    if (kind === "event") {
+    if (isEventEdit) {
       sections.push(EventTimeCard);
       sections.push(UrlMemoCard);
       sections.push(AdvancedToggleCard);
@@ -716,19 +730,17 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       return sections;
     }
 
-    if (recurrence === "none") {
-      sections.push(DeadlineCard);
-    }
-    sections.push(CourseTemplateCard);
+    sections.push(DeadlineCard);
     sections.push(StartDateCard);
+    sections.push(PriorityCard);
     sections.push(UrlMemoCard);
     sections.push(AdvancedToggleCard);
     if (showAdvanced) {
+      sections.push(CourseTemplateCard);
       sections.push(RecurrenceCard);
       if (recurrence !== "none") {
         sections.push(isTimetableRecurring ? TimetableScheduleBlock : NormalRecurringScheduleBlock);
       }
-      sections.push(PriorityCard);
       sections.push(ReminderCard);
     }
     return sections;
@@ -739,14 +751,11 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       <div className="bg-white/95 border-b border-slate-200/70 shadow-[0_10px_28px_rgba(27,39,75,0.06)] safe-top">
         <div className="flex items-center justify-between px-4 py-3 min-h-[52px]">
           <button onClick={onClose} className="text-sm text-blue-500 font-medium px-2 py-1 -mx-2">キャンセル</button>
-          <span className="text-sm font-semibold text-gray-900">{isEdit ? (kind === "event" ? "予定の編集" : "課題の編集") : (kind === "event" ? "新しい予定" : "新しい課題")}</span>
+          <span className="text-sm font-semibold text-gray-900">{isEventEdit ? "予定の編集" : isEdit ? "課題の編集" : "新しい課題"}</span>
           <button onClick={handleSave} disabled={saving} className="text-sm font-bold text-white bg-[#007AFF] hover:bg-[#0062CC] disabled:opacity-50 disabled:cursor-not-allowed px-4 py-1.5 rounded-full shadow-sm active:scale-[0.98] transition-transform">保存</button>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto pb-24 safe-bottom">
-        {/* 課題 / 予定 切り替え */}
-        {KindSwitch}
-
         <div className="mt-3 mx-4 overflow-hidden rounded-[28px] border border-white/80 bg-white shadow-[0_18px_48px_rgba(27,39,75,0.08),0_2px_8px_rgba(27,39,75,0.04)]">
           <input
             type="text"
@@ -754,8 +763,8 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
             onChange={(e) => { setTitle(e.target.value); if (e.target.value.trim()) setShowError(false); }}
             placeholder={
               showError && !title.trim()
-                ? (kind === "event" ? "予定名を入力してください" : "課題名を入力してください")
-                : (kind === "event" ? "予定名を入力" : "課題名を入力")
+                ? (isEventEdit ? "予定名を入力してください" : "課題名を入力してください")
+                : (isEventEdit ? "予定名を入力" : "課題名を入力")
             }
             className={`w-full px-4 py-3.5 text-sm text-gray-900 focus:outline-none border-b ${
               showError && !title.trim()
