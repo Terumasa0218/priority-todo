@@ -44,8 +44,7 @@ const inferStartState = (task: Task | null, deadlineLocal: string): { date: stri
     d.setHours(0, 0, 0, 0);
     return { date: toDateOnly(toDateTimeLocal(d)), time: "00:00" };
   }
-  const now = new Date();
-  return { date: toDateOnly(toDateTimeLocal(now)), time: toTimeOnly(now.toISOString()) };
+  return { date: "", time: "" };
 };
 
 const fmtDateMDW = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}(${DAY[d.getDay()]})`;
@@ -113,9 +112,11 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const [showError, setShowError] = useState(false);
   const [formError, setFormError] = useState("");
 
+  const todayDate = toDateOnly(toDateTimeLocal(new Date()));
+  const fallbackStartTime = toDateTimeLocal(new Date()).slice(11, 16);
   const deadlineDate = deadline.slice(0, 10);
   const deadlineTime = deadline.slice(11, 16) || "23:59";
-  const deadlinePreview = useMemo(() => {
+  const deadlineLabel = useMemo(() => {
     const d = new Date(deadline);
     if (Number.isNaN(d.getTime())) return "締切を選択してください";
     return `${fmtDateYMDW(d)} ${deadlineTime}`;
@@ -188,20 +189,14 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const computedStartOffsetDays: number | null = null;
   const computedStartDate: string | null = useMemo(() => {
     if (!customStartDate) return null;
-    return new Date(`${customStartDate}T${customStartTime || "00:00"}:00`).toISOString();
-  }, [customStartDate, customStartTime]);
-
-  const startPeriodText = useMemo(() => {
-    if (!customStartDate) return "開始日時を選択してください";
-    const d = new Date(`${customStartDate}T00:00:00`);
-    return `${fmtDateYMDW(d)} ${customStartTime || "00:00"} から ${deadlinePreview} まで`;
-  }, [customStartDate, customStartTime, deadlinePreview]);
+    return new Date(`${customStartDate}T${customStartTime || fallbackStartTime}:00`).toISOString();
+  }, [customStartDate, customStartTime, fallbackStartTime]);
 
   const startHelpText = useMemo(() => {
-    if (!customStartDate) return "開始日時を選ぶと、その時刻から「今日の課題」に表示します";
+    if (!customStartDate) return "未入力なら、作成した瞬間から「今日の課題」に表示します";
     const d = new Date(`${customStartDate}T00:00:00`);
-    return `${fmtDateMDW(d)} ${customStartTime || "00:00"} から「今日の課題」に表示します`;
-  }, [customStartDate, customStartTime]);
+    return `${fmtDateMDW(d)} ${customStartTime || fallbackStartTime} から「今日の課題」に表示します`;
+  }, [customStartDate, customStartTime, fallbackStartTime]);
 
   const occurrenceCount = useMemo(() => {
     if (recurrence === "none") return 1;
@@ -240,7 +235,6 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       if (recurrence !== "none" && !isTimetableRecurring && repeatEndDate && new Date(repeatEndDate).getTime() < new Date(deadline).getTime()) { setFormError("最終締切日は初回締切日以降に設定してください"); return; }
       if (recurrence === "biweekly" && (biweeklyInterval < 2 || biweeklyInterval > 8)) { setFormError("隔週の間隔は2〜8週間で入力してください"); return; }
       if (isTimetableRecurring && !classStartDate) { setFormError("授業の開始日を入力してください"); return; }
-      if (!customStartDate) { setFormError("取り組む期間の開始日を選択してください"); return; }
       if (computedStartDate && new Date(computedStartDate).getTime() > new Date(deadline).getTime()) { setFormError("取り組む期間の開始日時は締切以前にしてください"); return; }
     }
     setFormError("");
@@ -321,16 +315,15 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     <Card>
       <div className="px-4 py-3">
         <label className="block text-sm mb-2 text-gray-900 font-semibold">締切</label>
-        <div className="mb-3 text-[20px] font-semibold text-gray-950 tabular-nums leading-tight">{deadlinePreview}</div>
-        <div className="grid grid-cols-1 gap-2 min-[430px]:grid-cols-[minmax(0,1fr)_136px]">
+        <div className="grid grid-cols-[minmax(0,1fr)_88px] gap-2 items-center">
           <div className="min-w-0">
-            <DatePickerField value={deadlineDate} onChange={updateDeadlineDate} placeholder="締切日を選択" />
+            <DatePickerField value={deadlineDate} onChange={updateDeadlineDate} min={todayDate} placeholder="締切日を選択" />
           </div>
           <input
             type="time"
             value={deadlineTime}
             onChange={(e) => updateDeadlineTime(e.target.value)}
-            className="min-w-0 w-full h-[44px] text-base bg-gray-50 rounded-xl px-3 py-2 border border-gray-200 tabular-nums"
+            className="min-w-0 w-[88px] h-[44px] justify-self-end text-base text-center bg-gray-50 rounded-xl px-2 py-2 border border-gray-200 tabular-nums appearance-none"
             aria-label="締切時刻"
           />
         </div>
@@ -380,17 +373,18 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     <Card>
       <div className="px-4 py-3">
         <span className="text-sm text-gray-900 font-semibold block mb-1">課題に取り組む期間</span>
-        <span className="text-[11px] text-gray-400 block mb-3">開始日時から締切まで「今日の課題」に表示します</span>
-        <div className="mb-3 rounded-xl bg-blue-50/80 px-3 py-2.5 text-sm font-semibold text-blue-700 leading-relaxed">
-          {startPeriodText}
-        </div>
-        <div className="grid grid-cols-1 gap-3 min-[430px]:grid-cols-[minmax(0,1fr)_136px]">
+        <span className="text-[11px] text-gray-400 block mb-3">未入力なら作成した瞬間から表示します。終了は締切と一致します。</span>
+        <div className="grid grid-cols-[minmax(0,1fr)_88px] gap-2 items-end">
           <div className="min-w-0">
             <span className="block text-[11px] text-gray-500 mb-1">開始日</span>
             <DatePickerField
               value={customStartDate}
-              onChange={(v) => setCustomStartDate(v)}
+              onChange={(v) => {
+                setCustomStartDate(v);
+                if (!customStartTime) setCustomStartTime(fallbackStartTime);
+              }}
               placeholder="開始日を選択"
+              min={todayDate}
               isDateDisabled={(d) => d.getTime() > new Date(`${deadlineDate}T00:00:00`).getTime()}
             />
           </div>
@@ -400,12 +394,13 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
               type="time"
               value={customStartTime}
               onChange={(e) => setCustomStartTime(e.target.value)}
-              className="min-w-0 w-full h-[44px] text-base bg-gray-50 rounded-xl px-3 py-2 border border-gray-200 tabular-nums"
+              className="min-w-0 w-[88px] h-[44px] text-base text-center bg-gray-50 rounded-xl px-2 py-2 border border-gray-200 tabular-nums appearance-none"
               aria-label="取り組み開始時刻"
             />
           </label>
         </div>
         <div className="mt-2 text-xs font-medium text-blue-600 leading-relaxed">{startHelpText}</div>
+        <div className="mt-1 text-[11px] text-gray-400 leading-relaxed">締切: {deadlineLabel}</div>
       </div>
     </Card>
   );
@@ -578,9 +573,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     }
 
     sections.push(DeadlineCard);
-    sections.push(StartDateCard);
     sections.push(PriorityCard);
-    sections.push(UrlMemoCard);
     sections.push(AdvancedToggleCard);
     if (showAdvanced) {
       sections.push(RecurrenceCard);
@@ -589,6 +582,8 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       }
       sections.push(ReminderCard);
     }
+    sections.push(StartDateCard);
+    sections.push(UrlMemoCard);
     return sections;
   };
 
