@@ -93,7 +93,7 @@ export default function DatePickerField({
       <button
         type="button"
         onClick={openPicker}
-        className={`w-full text-left text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200 ${className}`}
+        className={`min-w-0 w-full h-[44px] overflow-hidden text-ellipsis whitespace-nowrap text-left text-sm bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-200 ${className}`}
       >
         {labelText || <span className="text-gray-400">{placeholder}</span>}
       </button>
