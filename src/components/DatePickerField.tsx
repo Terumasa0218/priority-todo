@@ -72,9 +72,11 @@ export default function DatePickerField({
   const highlightRange = useMemo(() => {
     const start = tempSelected || parseYMD(rangeStart || "");
     const end = parseYMD(rangeEnd || "");
-    if (!start || !end || start.getTime() > end.getTime()) return null;
+    if (!end) return null;
+    if (!start) return rangeEndFixed ? { start: end, end } : null;
+    if (start.getTime() > end.getTime()) return null;
     return { start, end };
-  }, [rangeStart, rangeEnd, tempSelected]);
+  }, [rangeStart, rangeEnd, rangeEndFixed, tempSelected]);
 
   const grid = useMemo(() => {
     const first = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1);
@@ -154,6 +156,7 @@ export default function DatePickerField({
                 const isInRange = !!highlightRange && !disabled && d.getTime() >= highlightRange.start.getTime() && d.getTime() <= highlightRange.end.getTime();
                 const isRangeStart = !!highlightRange && isInRange && sameYMD(d, highlightRange.start);
                 const isRangeEnd = !!highlightRange && isInRange && sameYMD(d, highlightRange.end);
+                const isFixedEndOnly = rangeEndFixed && isRangeEnd && isRangeStart && !tempSelected && !rangeStart;
                 const startsRangeSegment = isInRange && (isRangeStart || i % 7 === 0);
                 const endsRangeSegment = isInRange && (isRangeEnd || i % 7 === 6);
                 const bandClass = isInRange && !(isRangeStart && isRangeEnd)
@@ -165,6 +168,8 @@ export default function DatePickerField({
                   : "";
                 const dayClass = disabled
                   ? "text-gray-600 opacity-40"
+                  : isFixedEndOnly
+                    ? "bg-blue-500/90 text-white font-semibold ring-4 ring-blue-400/10"
                   : isRangeStart
                     ? "bg-blue-500 text-white font-semibold shadow-sm shadow-blue-500/25"
                     : isRangeEnd
@@ -181,7 +186,14 @@ export default function DatePickerField({
                     key={d.toISOString()}
                     type="button"
                     disabled={disabled}
-                    onClick={() => !disabled && setTempSelected(d)}
+                    onClick={() => {
+                      if (disabled) return;
+                      if (rangeEndFixed && rangeEnd) {
+                        const fixedEnd = parseYMD(rangeEnd);
+                        if (fixedEnd && sameYMD(d, fixedEnd)) return;
+                      }
+                      setTempSelected(d);
+                    }}
                     className={`relative h-11 w-full text-sm flex items-center justify-center transition-colors ${
                       disabled ? "cursor-not-allowed" : "hover:bg-white/10"
                     }`}
