@@ -63,6 +63,10 @@ const normalizeTimetableCode = (value: string | undefined) => {
   return digits.slice(-4);
 };
 
+const FormCard = ({ children }: { children: React.ReactNode }) => (
+  <div className="mt-2 mx-4 overflow-hidden rounded-[16px] border border-slate-200/80 bg-white shadow-[0_6px_18px_rgba(27,39,75,0.05)]">{children}</div>
+);
+
 export default function TimetableView({ items, setItems, setCats, config, setConfig, onShare, tasks, cats }: TimetableViewProps) {
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [showError, setShowError] = useState(false);
@@ -284,6 +288,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
     : 0;
   const moodleLinkedCount = normalizedItems.filter((it) => it.moodleEnabled && normalizeTimetableCode(it.timetableCode).length === 4).length;
   const editingCode = normalizeTimetableCode(editing?.item.timetableCode);
+  const editingCanSave = !!editing && !!editing.item.name.trim() && (!editing.item.moodleEnabled || editingCode.length === 4);
 
   return (
     <div className="px-3 py-3">
@@ -442,14 +447,22 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
       )}
 
       {editing && (
-        <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col safe-x" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
-          <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 safe-top">
-            <button onClick={() => setEditing(null)} className="text-sm text-blue-500 font-medium">キャンセル</button>
-            <span className="text-sm font-semibold text-gray-900">{editing.mode === "edit" ? "授業の編集" : "授業の追加"}</span>
-            <button onClick={handleSave} className="text-sm font-semibold text-blue-500">保存</button>
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#F7F8FC] safe-x" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
+          <div className="bg-white/95 border-b border-slate-200/70 shadow-[0_10px_28px_rgba(27,39,75,0.06)] safe-top">
+            <div className="flex items-center justify-between px-4 py-3 min-h-[52px]">
+              <button onClick={() => setEditing(null)} className="text-sm text-blue-500 font-medium px-2 py-1 -mx-2">キャンセル</button>
+              <span className="text-sm font-semibold text-gray-900">{editing.mode === "edit" ? "授業の編集" : "授業の追加"}</span>
+              <button
+                onClick={handleSave}
+                disabled={!editingCanSave}
+                className="text-sm font-bold text-white bg-[#007AFF] hover:bg-[#0062CC] disabled:bg-blue-300 disabled:cursor-not-allowed px-4 py-1.5 rounded-full shadow-sm active:scale-[0.98] transition-transform"
+              >
+                保存
+              </button>
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto pb-24 safe-bottom">
-            <div className="mt-4 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
+            <div className="mt-3 mx-4 overflow-hidden rounded-[16px] border border-slate-200/80 bg-white shadow-[0_6px_18px_rgba(27,39,75,0.05)]">
               <input
                 type="text"
                 value={editing.item.name}
@@ -457,178 +470,211 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
                   setEditing((prev) => prev ? { ...prev, item: { ...prev.item, name: e.target.value } } : prev);
                   if (e.target.value.trim()) setShowError(false);
                 }}
-                placeholder="授業名を入力"
-                className={`w-full px-4 py-3.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none border-b ${showError && !editing.item.name.trim() ? "border-red-300 bg-red-50/50" : "border-gray-100"}`}
+                placeholder={showError && !editing.item.name.trim() ? "授業名を入力してください" : "授業名を入力"}
+                className={`w-full px-4 py-3.5 text-sm text-gray-900 focus:outline-none border-b ${
+                  showError && !editing.item.name.trim()
+                    ? "border-red-300 bg-red-50/50 placeholder-red-500"
+                    : "border-gray-100 placeholder-gray-400"
+                }`}
                 autoFocus
               />
-              {showError && !editing.item.name.trim() && <div className="px-4 py-2 text-xs text-red-500 bg-red-50/50">授業名を入力してください</div>}
-              {!editingIsOnDemand ? (
-                <>
-                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                    <span className="text-sm text-gray-900">曜日</span>
-                    <select
-                      value={editing.item.day}
-                      onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, day: Number(e.target.value) } } : prev)}
-                      className="text-sm text-gray-700 bg-transparent focus:outline-none"
-                    >
-                      {DAYS.map((d) => <option key={d.value} value={d.value}>{d.label}曜</option>)}
-                    </select>
+              <div className="px-4 py-3 flex items-center gap-3">
+                <span className="shrink-0 text-sm text-gray-900 font-medium">授業カテゴリ</span>
+                <span className="min-w-0 truncate text-xs text-gray-500">保存すると課題作成画面の授業カテゴリに自動で表示されます</span>
+              </div>
+            </div>
+
+            <FormCard>
+              <div className="px-4 py-3 border-b border-gray-100">
+                <div className="text-sm text-gray-900 font-semibold mb-2">曜日</div>
+                {!editingIsOnDemand ? (
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {DAYS.map((d) => (
+                      <button
+                        key={d.value}
+                        type="button"
+                        onClick={() => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, day: d.value } } : prev)}
+                        className={`h-10 rounded-xl text-sm font-semibold transition-colors ${editing.item.day === d.value ? "bg-[#007AFF] text-white" : "bg-gray-100 text-gray-500"}`}
+                      >
+                        {d.label}
+                      </button>
+                    ))}
                   </div>
-                  <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                    <span className="text-sm text-gray-900">時限</span>
-                    <select
-                      value={editing.item.period}
-                      onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, period: e.target.value } } : prev)}
-                      className="text-sm text-gray-700 bg-transparent focus:outline-none"
-                    >
-                      {periodOptions.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-                    </select>
-                  </div>
-                </>
-              ) : (
-                <div className="px-4 py-3 border-b border-gray-100 text-sm text-gray-500">
-                  オンデマンド枠 {DAYS.find((d) => d.value === editing.item.day)?.label}曜 {editingOnDemandSlot + 1}
-                </div>
-              )}
-              <div className="px-4 py-3 border-b border-gray-100 bg-blue-50/40">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-gray-900">Moodle連携</div>
-                    <div className="text-[11px] text-gray-500 mt-0.5">Moodleカレンダーの CATEGORIES 下4桁で課題を自動分類します。</div>
-                  </div>
-                  <button
-                    type="button"
-                    aria-pressed={!!editing.item.moodleEnabled}
-                    onClick={() => {
-                      setEditing((prev) => prev ? { ...prev, item: { ...prev.item, moodleEnabled: !prev.item.moodleEnabled } } : prev);
-                      setShowError(false);
-                    }}
-                    className={`relative mt-0.5 w-12 h-7 rounded-full transition-colors flex-shrink-0 ${editing.item.moodleEnabled ? "bg-[#1688F2]" : "bg-gray-300"}`}
-                  >
-                    <span className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-transform ${editing.item.moodleEnabled ? "translate-x-6" : "translate-x-1"}`} />
-                  </button>
-                </div>
-                {editing.item.moodleEnabled && (
-                  <div className="mt-3">
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">時間割番号 <span className="text-rose-500">必須</span></label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={editing.item.timetableCode || ""}
-                      onChange={(e) => {
-                        const code = normalizeTimetableCode(e.target.value);
-                        setEditing((prev) => prev ? { ...prev, item: { ...prev.item, timetableCode: code } } : prev);
-                        if (code.length === 4) setShowError(false);
-                      }}
-                      placeholder="例: 3001"
-                      maxLength={4}
-                      className={`w-full px-3 py-2.5 rounded-xl border text-sm bg-white focus:outline-none ${showError && editing.item.moodleEnabled && editingCode.length !== 4 ? "border-red-300 bg-red-50/50" : "border-blue-100"}`}
-                    />
-                    <div className="mt-1 text-[11px] text-gray-500">例: 26-4-3001 の場合は <span className="font-semibold text-gray-700">3001</span> だけ入力します。</div>
-                    {showError && editing.item.moodleEnabled && editingCode.length !== 4 && <div className="mt-1 text-xs text-red-500">Moodle連携ありの場合は4桁の時間割番号が必要です。</div>}
-                  </div>
+                ) : (
+                  <div className="text-sm text-gray-500">{DAYS.find((d) => d.value === editing.item.day)?.label}曜のオンデマンド枠</div>
                 )}
               </div>
-              <input
-                type="text"
-                value={editing.item.teacher}
-                onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, teacher: e.target.value } } : prev)}
-                placeholder="教員名（任意）"
-                className="w-full px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none border-b border-gray-100"
-              />
-              <input
-                type="text"
-                value={editing.item.room}
-                onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, room: e.target.value } } : prev)}
-                placeholder="教室（任意）"
-                className="w-full px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none border-b border-gray-100"
-              />
               <div className="px-4 py-3">
-                <span className="text-sm text-gray-900 block mb-2">色</span>
-                <div className="flex gap-1.5 flex-wrap">
+                <label className="block text-sm text-gray-900 font-semibold mb-2">時限</label>
+                {!editingIsOnDemand ? (
+                  <select
+                    value={editing.item.period}
+                    onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, period: e.target.value } } : prev)}
+                    className="w-full h-[44px] text-sm text-gray-900 bg-gray-50 rounded-xl px-3 py-2 border border-gray-200 focus:outline-none"
+                  >
+                    {periodOptions.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                  </select>
+                ) : (
+                  <div className="h-[44px] flex items-center rounded-xl border border-gray-200 bg-gray-50 px-3 text-sm text-gray-600">オンデマンド {editingOnDemandSlot + 1}</div>
+                )}
+              </div>
+            </FormCard>
+
+            <FormCard>
+              <label className="block px-4 pt-3 pb-2 border-b border-gray-100">
+                <span className="block text-sm text-gray-900 font-semibold mb-2">教室</span>
+                <input
+                  type="text"
+                  value={editing.item.room}
+                  onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, room: e.target.value } } : prev)}
+                  placeholder="例: 2号館 201"
+                  className="w-full text-sm bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-200 placeholder-gray-400 focus:outline-none"
+                />
+              </label>
+              <label className="block px-4 pt-3 pb-3">
+                <span className="block text-sm text-gray-900 font-semibold mb-2">教員名</span>
+                <input
+                  type="text"
+                  value={editing.item.teacher}
+                  onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, teacher: e.target.value } } : prev)}
+                  placeholder="先生の名前"
+                  className="w-full text-sm bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-200 placeholder-gray-400 focus:outline-none"
+                />
+              </label>
+            </FormCard>
+
+            <FormCard>
+              <div className="px-4 py-3">
+                <span className="text-sm text-gray-900 font-semibold block mb-2">色</span>
+                <div className="grid grid-cols-8 gap-2">
                   {editingPalette.map((co) => (
                     <button
                       key={co}
+                      type="button"
                       onClick={() => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, color: co } } : prev)}
-                      className={`w-7 h-7 rounded-full transition-all ${editing.item.color === co ? "ring-2 ring-offset-1 ring-gray-900 scale-110" : ""}`}
+                      className={`h-8 rounded-full transition-all ${editing.item.color === co ? "ring-2 ring-offset-2 ring-gray-900 scale-105" : "ring-1 ring-black/5"}`}
                       style={{ backgroundColor: co }}
                       aria-label={`色 ${co}`}
                     />
                   ))}
                 </div>
               </div>
-            </div>
+            </FormCard>
+
+            <FormCard>
+              <div className="px-4 py-3 flex items-center justify-between gap-3 border-b border-gray-100">
+                <div className="min-w-0">
+                  <span className="text-sm text-gray-900 font-semibold">Moodle連携</span>
+                  <div className="text-[10px] text-gray-400 mt-0.5">ICSのCATEGORIES下4桁と照合して、この授業へ自動分類します</div>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Moodle連携"
+                  aria-pressed={!!editing.item.moodleEnabled}
+                  onClick={() => {
+                    setEditing((prev) => prev ? { ...prev, item: { ...prev.item, moodleEnabled: !prev.item.moodleEnabled } } : prev);
+                    setShowError(false);
+                  }}
+                  className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${editing.item.moodleEnabled ? "bg-blue-500" : "bg-gray-300"}`}
+                >
+                  <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${editing.item.moodleEnabled ? "translate-x-[22px]" : "translate-x-0.5"}`} />
+                </button>
+              </div>
+              {editing.item.moodleEnabled && (
+                <div className="px-4 py-3">
+                  <label className="block text-sm text-gray-900 font-semibold mb-2">時間割番号 / Moodleコースコード <span className="text-rose-500 text-xs">必須</span></label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={editing.item.timetableCode || ""}
+                    onChange={(e) => {
+                      const code = normalizeTimetableCode(e.target.value);
+                      setEditing((prev) => prev ? { ...prev, item: { ...prev.item, timetableCode: code } } : prev);
+                      if (code.length === 4) setShowError(false);
+                    }}
+                    placeholder="例: 3001"
+                    maxLength={4}
+                    className={`w-full h-[44px] text-sm bg-gray-50 rounded-xl px-3 py-2 border focus:outline-none ${showError && editing.item.moodleEnabled && editingCode.length !== 4 ? "border-red-300 bg-red-50/50 placeholder-red-500" : "border-gray-200"}`}
+                  />
+                  <div className="mt-1 text-[11px] text-gray-400">例: 26-4-3001 の場合は 3001 だけ保存します。</div>
+                  {showError && editing.item.moodleEnabled && editingCode.length !== 4 && <div className="mt-1 text-xs text-red-500">Moodle連携ありの場合は4桁のコードが必要です。</div>}
+                </div>
+              )}
+            </FormCard>
+
+            <FormCard>
+              <label className="block px-4 pt-3 pb-3">
+                <span className="block text-sm text-gray-900 font-semibold mb-2">メモ</span>
+                <textarea
+                  value={editing.item.memo || ""}
+                  onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, memo: e.target.value } } : prev)}
+                  rows={3}
+                  placeholder="課題・参考書・欠席連絡など"
+                  className="w-full text-sm bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-200 resize-none placeholder-gray-400 focus:outline-none"
+                />
+              </label>
+            </FormCard>
 
             {editing.mode === "edit" && (
-              <>
-                <div className="mt-4 mx-4 bg-white rounded-xl border border-gray-100">
-                  <div className="px-4 py-3 border-b border-gray-100 text-sm font-semibold text-gray-900">出欠</div>
-                  <div className="px-4 py-3 grid grid-cols-3 gap-2">
-                    {([
-                      ["attendancePresent", "出席"],
-                      ["attendanceAbsent", "欠席"],
-                      ["attendanceLate", "遅刻"],
-                    ] as const).map(([k, label]) => (
-                      <div key={k} className="rounded-xl border border-gray-200 bg-gray-50 px-2 py-2 flex flex-col items-center">
-                        <div className="text-xs text-gray-500">{label}</div>
-                        <div className="mt-1 flex items-center gap-2">
-                          <button
-                            type="button"
-                            aria-label={`${label}を1減らす`}
-                            onClick={() => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, [k]: Math.max(0, (prev.item[k] || 0) - 1) } } : prev)}
-                            className="w-7 h-7 rounded-full bg-white border border-gray-200 text-gray-600 text-base leading-none active:bg-gray-100"
-                          >−</button>
-                          <span className="text-base font-semibold w-6 text-center tabular-nums">{editing.item[k] || 0}</span>
-                          <button
-                            type="button"
-                            aria-label={`${label}を1増やす`}
-                            onClick={() => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, [k]: (prev.item[k] || 0) + 1 } } : prev)}
-                            className="w-7 h-7 rounded-full bg-white border border-gray-200 text-gray-600 text-base leading-none active:bg-gray-100"
-                          >+</button>
-                        </div>
+              <FormCard>
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <div className="text-sm font-semibold text-gray-900">出欠</div>
+                  <div className="text-[10px] text-gray-400 mt-0.5">授業ごとの出席状況をメモします</div>
+                </div>
+                <div className="px-4 py-3 grid grid-cols-3 gap-2">
+                  {([
+                    ["attendancePresent", "出席"],
+                    ["attendanceAbsent", "欠席"],
+                    ["attendanceLate", "遅刻"],
+                  ] as const).map(([k, label]) => (
+                    <div key={k} className="rounded-xl border border-gray-200 bg-gray-50 px-2 py-2 flex flex-col items-center">
+                      <div className="text-xs text-gray-500">{label}</div>
+                      <div className="mt-1 flex items-center gap-2">
+                        <button
+                          type="button"
+                          aria-label={`${label}を1減らす`}
+                          onClick={() => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, [k]: Math.max(0, (prev.item[k] || 0) - 1) } } : prev)}
+                          className="w-7 h-7 rounded-full bg-white border border-gray-200 text-gray-600 text-base leading-none active:bg-gray-100"
+                        >−</button>
+                        <span className="text-base font-semibold w-6 text-center tabular-nums">{editing.item[k] || 0}</span>
+                        <button
+                          type="button"
+                          aria-label={`${label}を1増やす`}
+                          onClick={() => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, [k]: (prev.item[k] || 0) + 1 } } : prev)}
+                          className="w-7 h-7 rounded-full bg-white border border-gray-200 text-gray-600 text-base leading-none active:bg-gray-100"
+                        >+</button>
                       </div>
-                    ))}
-                  </div>
-                  <div className="px-4 py-3 border-t border-gray-100">
-                    <div className="text-xs text-gray-500">欠席上限</div>
-                    <div className="mt-1 flex items-center gap-2">
-                      <button
-                        type="button"
-                        aria-label="欠席上限を1減らす"
-                        onClick={() => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, absenceLimit: Math.max(1, (prev.item.absenceLimit ?? 5) - 1) } } : prev)}
-                        className="w-8 h-8 rounded-full bg-gray-50 border border-gray-200 text-gray-600 text-lg leading-none active:bg-gray-100"
-                      >−</button>
-                      <span className="text-base font-semibold w-8 text-center tabular-nums">{editing.item.absenceLimit ?? 5}</span>
-                      <button
-                        type="button"
-                        aria-label="欠席上限を1増やす"
-                        onClick={() => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, absenceLimit: Math.min(30, (prev.item.absenceLimit ?? 5) + 1) } } : prev)}
-                        className="w-8 h-8 rounded-full bg-gray-50 border border-gray-200 text-gray-600 text-lg leading-none active:bg-gray-100"
-                      >+</button>
-                      <span className="ml-2 text-[11px] text-gray-400">回まで</span>
                     </div>
-                    <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-rose-300 rounded-full transition-all" style={{ width: `${Math.min(100, ((editing.item.attendanceAbsent ?? 0) / Math.max(editing.item.absenceLimit ?? 5, 1)) * 100)}%` }} />
-                    </div>
-                    <div className="text-[11px] text-gray-500 mt-1">あと{Math.max((editing.item.absenceLimit ?? 5) - (editing.item.attendanceAbsent ?? 0), 0)}回休める</div>
+                  ))}
+                </div>
+                <div className="px-4 py-3 border-t border-gray-100">
+                  <div className="text-xs text-gray-500">欠席上限</div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <button
+                      type="button"
+                      aria-label="欠席上限を1減らす"
+                      onClick={() => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, absenceLimit: Math.max(1, (prev.item.absenceLimit ?? 5) - 1) } } : prev)}
+                      className="w-8 h-8 rounded-full bg-gray-50 border border-gray-200 text-gray-600 text-lg leading-none active:bg-gray-100"
+                    >−</button>
+                    <span className="text-base font-semibold w-8 text-center tabular-nums">{editing.item.absenceLimit ?? 5}</span>
+                    <button
+                      type="button"
+                      aria-label="欠席上限を1増やす"
+                      onClick={() => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, absenceLimit: Math.min(30, (prev.item.absenceLimit ?? 5) + 1) } } : prev)}
+                      className="w-8 h-8 rounded-full bg-gray-50 border border-gray-200 text-gray-600 text-lg leading-none active:bg-gray-100"
+                    >+</button>
+                    <span className="ml-2 text-[11px] text-gray-400">回まで</span>
                   </div>
+                  <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-rose-300 rounded-full transition-all" style={{ width: `${Math.min(100, ((editing.item.attendanceAbsent ?? 0) / Math.max(editing.item.absenceLimit ?? 5, 1)) * 100)}%` }} />
+                  </div>
+                  <div className="text-[11px] text-gray-500 mt-1">あと{Math.max((editing.item.absenceLimit ?? 5) - (editing.item.attendanceAbsent ?? 0), 0)}回休める</div>
                 </div>
+              </FormCard>
+            )}
 
-                <div className="mt-4 mx-4 bg-white rounded-xl border border-gray-100">
-                  <div className="px-4 py-3 border-b border-gray-100 text-sm font-semibold text-gray-900">メモ</div>
-                  <textarea
-                    value={editing.item.memo || ""}
-                    onChange={(e) => setEditing((prev) => prev ? { ...prev, item: { ...prev.item, memo: e.target.value } } : prev)}
-                    rows={4}
-                    placeholder="課題・参考書・欠席連絡など"
-                    className="w-full px-4 py-3 text-sm resize-none focus:outline-none"
-                  />
-                </div>
-
-                {linkedTaskCount > 0 && (
-                  <div className="mt-3 mx-4 text-[11px] text-gray-500">連携タスク: 未完了 {linkedTaskCount}件</div>
-                )}
-              </>
+            {editing.mode === "edit" && linkedTaskCount > 0 && (
+              <div className="mt-3 mx-4 text-[11px] text-gray-500">連携タスク: 未完了 {linkedTaskCount}件</div>
             )}
           </div>
           {editing.mode === "edit" && (
