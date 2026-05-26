@@ -45,6 +45,23 @@ export interface Task {
   isOccurrence?: boolean;
 }
 
+export interface CourseTaskTemplate {
+  id: string;
+  title: string;
+  recurrence: "weekly" | "biweekly";
+  firstClassDate: string;
+  firstDueDate: string;
+  firstDueTime: string;
+  endMode: "count" | "date";
+  classCount: number;
+  finalDueDate: string;
+  startOffsetDays: number | null;
+  reminder: string;
+  memo: string;
+  url: string;
+  priority: boolean;
+}
+
 export interface Category {
   id: string;
   label: string;
@@ -67,6 +84,7 @@ export interface TimetableItem {
   attendanceLate?: number;
   absenceLimit?: number;
   memo?: string;
+  assignmentTemplate?: CourseTaskTemplate | null;
   color: string;
 }
 

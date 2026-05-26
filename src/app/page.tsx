@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { DEFAULT_APP_SETTINGS, DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG, FILTERS, WEEKDAY_LABELS } from "@/lib/constants";
 import { expandRecurring, remaining, uid } from "@/lib/utils";
-import { AppSettings, Category, Task, TimetableConfig, TimetableItem, TouchDragState } from "@/lib/types";
+import { AppSettings, Category, CourseTaskTemplate, Task, TimetableConfig, TimetableItem, TouchDragState } from "@/lib/types";
 import { MoodleImportCandidate } from "@/lib/moodleIcs";
 import { IconBook, IconList, IconPalette, IconPlus, IconSettings } from "@/components/Icons";
 import TaskRow from "@/components/TaskRow";
@@ -48,6 +48,57 @@ const withTaskDefaults = (task: Task): Task => ({
   startDate: task.startDate ?? null,
   startOffsetDays: task.startOffsetDays ?? null,
 });
+
+const buildTaskFromCourseTemplate = (
+  item: TimetableItem,
+  categoryId: string,
+  template: CourseTaskTemplate
+): Task | null => {
+  if (!template.title.trim() || !template.firstClassDate || !template.firstDueDate) return null;
+  const firstClassDate = new Date(`${template.firstClassDate}T00:00:00`);
+  const firstDue = new Date(`${template.firstDueDate}T${template.firstDueTime || "23:59"}:00`);
+  if (Number.isNaN(firstClassDate.getTime()) || Number.isNaN(firstDue.getTime())) return null;
+
+  const firstDueDateOnly = new Date(firstDue);
+  firstDueDateOnly.setHours(0, 0, 0, 0);
+  const offsetDays = Math.round((firstDueDateOnly.getTime() - firstClassDate.getTime()) / 86_400_000);
+  const intervalDays = template.recurrence === "biweekly" ? 14 : 7;
+  const classCount = Math.max(1, Math.min(50, template.classCount || 14));
+  const lastClass = new Date(firstClassDate);
+  lastClass.setDate(lastClass.getDate() + (classCount - 1) * intervalDays);
+  const lastDue = new Date(lastClass);
+  lastDue.setDate(lastDue.getDate() + offsetDays);
+  const repeatEndDate = template.endMode === "date" && template.finalDueDate
+    ? template.finalDueDate
+    : lastDue.toISOString().slice(0, 10);
+
+  return {
+    id: uid(),
+    kind: "todo",
+    title: template.title.trim(),
+    deadline: firstDue.toISOString(),
+    category: categoryId,
+    priority: template.priority,
+    startDate: null,
+    startOffsetDays: template.startOffsetDays,
+    recurrence: template.recurrence,
+    classDayOfWeek: firstClassDate.getDay(),
+    classStartDate: template.firstClassDate,
+    offsetDays,
+    offsetTime: template.firstDueTime || "23:59",
+    biweeklyInterval: template.recurrence === "biweekly" ? 2 : undefined,
+    repeatCount: template.endMode === "date" ? null : classCount,
+    repeatEndDate,
+    reminder: template.reminder,
+    memo: template.memo,
+    url: template.url,
+    completed: false,
+    completedAt: null,
+    completedOccurrences: [],
+    order: null,
+    createdAt: new Date().toISOString(),
+  };
+};
 
 
 export default function Home() {
@@ -416,6 +467,23 @@ export default function Home() {
       setPrefillDate(null);
     },
     [persistTasks]
+  );
+
+  const handleCreateTaskFromTemplate = useCallback(
+    (item: TimetableItem): boolean => {
+      if (!item.assignmentTemplate) return false;
+      let categoryId = cats.find((c) => c.timetableId === item.id)?.id;
+      if (!categoryId) {
+        categoryId = uid();
+        const newCategory: Category = { id: categoryId, label: item.name, color: item.color, timetableId: item.id };
+        setCats((prev) => [...prev, newCategory]);
+      }
+      const task = buildTaskFromCourseTemplate(item, categoryId, item.assignmentTemplate);
+      if (!task) return false;
+      persistTasks((prev) => [...prev, task]);
+      return true;
+    },
+    [cats, persistTasks]
   );
 
 
@@ -877,7 +945,7 @@ export default function Home() {
         )}
 
         {view === "calendar" && <div className="pt-3"><CalendarView tasks={allExpanded} cats={cats} month={calMonth} setMonth={setCalMonth} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onAddClick={(d) => openNew(d)} onEditTask={openEdit} /></div>}
-        {view === "timetable" && <TimetableView items={timetable} setItems={setTimetable} setCats={setCats} config={timetableConfig} setConfig={setTimetableConfig} onShare={handleShareTimetable} tasks={tasks} cats={cats} />}
+        {view === "timetable" && <TimetableView items={timetable} setItems={setTimetable} setCats={setCats} config={timetableConfig} setConfig={setTimetableConfig} onShare={handleShareTimetable} tasks={tasks} cats={cats} onCreateTaskFromTemplate={handleCreateTaskFromTemplate} />}
         {view === "moodle" && <MoodleImportView tasks={tasks} cats={cats} timetable={timetable} onImport={handleMoodleImport} />}
         {view === "completed" && <div><div className="px-4 py-3 flex items-center justify-between"><span className="text-sm font-semibold text-gray-900">達成済み</span><span className="text-[11px] text-gray-400">{completed.length}件</span></div><CompletedList tasks={completed} cats={cats} onRestore={handleRestore} /></div>}
       </div>
