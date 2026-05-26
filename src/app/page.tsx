@@ -865,7 +865,7 @@ export default function Home() {
             { id: "list", label: "タスク" },
             { id: "calendar", label: "カレンダー" },
             { id: "timetable", label: "時間割" },
-            { id: "moodle", label: "Moodle" },
+            { id: "moodle", label: "連携" },
             { id: "completed", label: "達成済み" },
           ]}
         />
