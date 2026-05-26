@@ -11,7 +11,8 @@ interface CompletedListProps {
 }
 
 export default function CompletedList({ tasks, cats, onRestore }: CompletedListProps) {
-  const oneMonthAgo = Date.now() - 30 * 864e5;
+  const [referenceTime] = React.useState(() => Date.now());
+  const oneMonthAgo = referenceTime - 30 * 864e5;
   const recent = tasks.filter((t) => t.completedAt && new Date(t.completedAt).getTime() > oneMonthAgo);
 
   if (!recent.length) {

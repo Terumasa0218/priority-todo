@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useRef } from "react";
+import React, { useMemo } from "react";
 
 interface ParticleBurstProps {
   x: number;
@@ -10,14 +10,14 @@ export default function ParticleBurst({ x, y }: ParticleBurstProps) {
   const particles = useMemo(() => {
     const count = 10;
     return Array.from({ length: count }, (_, i) => {
-      const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
-      const dist = 22 + Math.random() * 30;
-      const size = 3 + Math.random() * 4;
+      const angle = (i / count) * Math.PI * 2 + (noise(i, 1) - 0.5) * 0.5;
+      const dist = 22 + noise(i, 2) * 30;
+      const size = 3 + noise(i, 3) * 4;
       const tx = Math.cos(angle) * dist;
       const ty = Math.sin(angle) * dist;
       const colors = ["#93C5FD", "#A7F3D0", "#FBCFE8", "#DDD6FE", "#FDE68A", "#C7D2FE"];
-      const color = colors[Math.floor(Math.random() * colors.length)];
-      const dur = 0.35 + Math.random() * 0.22;
+      const color = colors[Math.floor(noise(i, 4) * colors.length)];
+      const dur = 0.35 + noise(i, 5) * 0.22;
       return { tx, ty, size, color, dur };
     });
   }, []);
@@ -31,8 +31,12 @@ export default function ParticleBurst({ x, y }: ParticleBurstProps) {
   );
 }
 
+function noise(index: number, salt: number) {
+  const value = Math.sin((index + 1) * 12.9898 + salt * 78.233) * 43758.5453;
+  return value - Math.floor(value);
+}
+
 function ParticleEl({ p }: { p: { tx: number; ty: number; size: number; color: string; dur: number } }) {
-  const ref = useRef<HTMLDivElement>(null);
   return (
     <div
       ref={(el) => {

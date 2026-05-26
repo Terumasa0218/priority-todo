@@ -75,7 +75,6 @@ export default function Home() {
   const [ready, setReady] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
-  const [syncing, setSyncing] = useState(false);
   const [authIssue, setAuthIssue] = useState<AuthIssue | null>(null);
   const [authFlowMessage, setAuthFlowMessage] = useState<string | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
@@ -194,7 +193,6 @@ export default function Home() {
     }
     let mounted = true;
     const sync = async () => {
-      setSyncing(true);
       const localTasks = loadTasks().map(withTaskDefaults);
       setTasks(localTasks);
       setCats(loadCategories());
@@ -239,8 +237,6 @@ export default function Home() {
       } catch (err) {
         console.error("Cloud sync failed, using local:", err);
         if (mounted) setReady(true);
-      } finally {
-        if (mounted) setSyncing(false);
       }
     };
     sync();
@@ -935,57 +931,6 @@ export default function Home() {
               <div className="px-4 py-3.5 border-b border-gray-100 flex items-center justify-between"><span className="text-sm text-gray-900">完了エフェクト</span><span className="text-sm text-gray-400">近日公開</span></div>
               <div className="px-4 py-3.5 flex items-center justify-between"><span className="text-sm text-gray-900">言語</span><span className="text-sm text-gray-400">日本語</span></div>
             </div>
-            <div className="mt-4 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
-              <div className="px-4 py-3 border-b border-gray-100">
-                <div className="text-sm font-semibold text-gray-900">授業日の祝日扱い</div>
-                <div className="text-xs text-gray-500 mt-1 leading-relaxed">大学ルールに合わせて、祝日でも授業課題を出すか切り替えます。</div>
-              </div>
-              <label className="px-4 py-3.5 flex items-center justify-between">
-                <span className="text-sm text-gray-900">祝日は休講としてスキップ</span>
-                <input type="checkbox" checked={skipHolidayClasses} onChange={(e) => setSkipHolidayClasses(e.target.checked)} />
-              </label>
-            </div>
-
-            <div className="mt-4 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
-              <div className="px-4 py-3 border-b border-gray-100">
-                <div className="text-sm font-semibold text-gray-900">大学・授業ルール</div>
-                <div className="text-xs text-gray-500 mt-1 leading-relaxed">国公立・私立など大学ごとの祝日授業ルールに合わせて、授業課題の自動展開を調整します。</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setAppSettings((prev) => ({ ...prev, skipHolidayClasses: !prev.skipHolidayClasses }))}
-                className="w-full px-4 py-3.5 flex items-center justify-between text-left active:bg-gray-50 min-h-14"
-              >
-                <div className="pr-4">
-                  <div className="text-sm font-medium text-gray-900">祝日は休講としてスキップ</div>
-                  <div className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">オフにすると、祝日でも通常授業の課題を作成します。オンデマンドは常にスキップしません。</div>
-                </div>
-                <span className={`relative inline-flex h-7 w-12 flex-shrink-0 rounded-full transition-colors ${appSettings.skipHolidayClasses ? "bg-[#007AFF]" : "bg-gray-300"}`} aria-hidden="true">
-                  <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${appSettings.skipHolidayClasses ? "translate-x-5" : "translate-x-0.5"}`} />
-                </span>
-              </button>
-            </div>
-
-            <div className="mt-4 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
-              <div className="px-4 py-3 border-b border-gray-100">
-                <div className="text-sm font-semibold text-gray-900">大学・授業ルール</div>
-                <div className="text-xs text-gray-500 mt-1 leading-relaxed">国公立・私立など大学ごとの祝日授業ルールに合わせて、授業課題の自動展開を調整します。</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setAppSettings((prev) => ({ ...prev, skipHolidayClasses: !prev.skipHolidayClasses }))}
-                className="w-full px-4 py-3.5 flex items-center justify-between text-left active:bg-gray-50 min-h-14"
-              >
-                <div className="pr-4">
-                  <div className="text-sm font-medium text-gray-900">祝日は休講としてスキップ</div>
-                  <div className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">オフにすると、祝日でも通常授業の課題を作成します。オンデマンドは常にスキップしません。</div>
-                </div>
-                <span className={`relative inline-flex h-7 w-12 flex-shrink-0 rounded-full transition-colors ${appSettings.skipHolidayClasses ? "bg-[#007AFF]" : "bg-gray-300"}`} aria-hidden="true">
-                  <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${appSettings.skipHolidayClasses ? "translate-x-5" : "translate-x-0.5"}`} />
-                </span>
-              </button>
-            </div>
-
             <div className="mt-4 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">
               <div className="px-4 py-3 border-b border-gray-100">
                 <div className="text-sm font-semibold text-gray-900">大学・授業ルール</div>
