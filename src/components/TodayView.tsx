@@ -2,8 +2,9 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Task, Category } from "@/lib/types";
 import { isActiveOn, isOverdue, isDueToday, taskFacts } from "@/lib/scoring";
-import { fmt, remaining, urgColor } from "@/lib/utils";
-import { IconFlag, IconRepeat } from "./Icons";
+import { fmt, getEffectiveStartDate, remaining } from "@/lib/utils";
+import { DAY } from "@/lib/constants";
+import { IconCheck, IconFlag, IconRepeat } from "./Icons";
 import EmptyState from "./ui/EmptyState";
 import DatePickerField from "./DatePickerField";
 
@@ -15,14 +16,15 @@ interface TodayViewProps {
   onSnooze: (task: Task, snoozeUntilYMD: string) => void;
 }
 
-const Badge = ({ tone, children }: { tone: "red" | "orange" | "blue" | "gray"; children: React.ReactNode }) => {
+const StatusPill = ({ tone, children }: { tone: "red" | "amber" | "blue" | "gray" | "green"; children: React.ReactNode }) => {
   const tones = {
-    red: "bg-rose-100 text-rose-700",
-    orange: "bg-amber-100 text-amber-700",
-    blue: "bg-sky-100 text-sky-700",
-    gray: "bg-slate-100 text-slate-600",
+    red: "status-pill-red",
+    amber: "status-pill-amber",
+    blue: "status-pill-blue",
+    gray: "status-pill-gray",
+    green: "status-pill-green",
   };
-  return <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${tones[tone]}`}>{children}</span>;
+  return <span className={`status-pill ${tones[tone]}`}>{children}</span>;
 };
 
 const fmtTime = (iso: string) => {
@@ -32,6 +34,20 @@ const fmtTime = (iso: string) => {
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const toYMD = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const formatShortDate = (iso: string) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getMonth() + 1}/${d.getDate()}(${DAY[d.getDay()]})`;
+};
+
+const recurrenceText = (task: Task) => {
+  if (!task.recurrence || task.recurrence === "none") return "";
+  if (task.recurrence === "daily") return "毎日";
+  if (task.recurrence === "weekly") return typeof task.classDayOfWeek === "number" ? `毎週${DAY[task.classDayOfWeek]}` : "毎週";
+  if (task.recurrence === "biweekly") return typeof task.classDayOfWeek === "number" ? `隔週${DAY[task.classDayOfWeek]}` : "隔週";
+  if (task.recurrence === "monthly") return "毎月";
+  return "";
+};
 
 const SectionLabel = ({ children }: { children: React.ReactNode }) => (
   <div className="px-4 pt-4 pb-1.5">
@@ -59,7 +75,7 @@ const EventCard = ({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-sm font-semibold text-slate-900 truncate">{task.title}</span>
-            <Badge tone="blue">予定</Badge>
+            <StatusPill tone="blue">予定</StatusPill>
           </div>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             <span className="text-xs text-slate-500">{cat.label}</span>
@@ -87,16 +103,26 @@ const TaskCard = ({
   onLongPress: (task: Task) => void;
   today: Date;
 }) => {
-  const rem = remaining(task.deadline);
-  const uc = urgColor(rem.u);
   const cat = cats.find((c) => c.id === task.category) || { label: "未分類", color: "#889096" };
   const facts = taskFacts(task, today);
+  const rem = remaining(task.deadline);
+  const effectiveStart = getEffectiveStartDate(task);
+  const recurrence = recurrenceText(task);
+  const visibleReason = facts.overdue
+    ? "期限を過ぎています"
+    : facts.dueToday
+      ? "今日が締切"
+      : facts.startingToday
+        ? "今日から表示"
+        : effectiveStart
+          ? `${formatShortDate(effectiveStart)}から表示`
+          : "作成後すぐ表示";
 
   const accent = facts.overdue
-    ? "border-l-[3px] border-rose-500"
+    ? "border-l-[4px] border-rose-400"
     : task.priority
-      ? "border-l-[3px] border-rose-400"
-      : "border-l-[3px] border-transparent";
+      ? "border-l-[4px] border-amber-300"
+      : "border-l-[4px] border-transparent";
 
   const longTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longFired = useRef(false);
@@ -125,13 +151,15 @@ const TaskCard = ({
   };
 
   return (
-    <div className={`surface-card task-card ${accent} px-4 py-3.5`}>
+    <div className={`surface-card task-card ${accent} px-4 py-4`}>
       <div className="flex items-start gap-3">
         <button
           onClick={() => onComplete(task)}
           aria-label="完了"
-          className="task-complete-button mt-0.5 w-5 h-5 rounded-lg border-0 hover:bg-green-50 transition-all flex-shrink-0"
-        />
+          className="task-complete-button mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border-0 hover:bg-green-50"
+        >
+          <IconCheck size={15} stroke="#94A3B8" sw={2.4} />
+        </button>
         <div
           className="relative flex-1 min-w-0 cursor-pointer select-none"
           onClick={handleClick}
@@ -148,29 +176,36 @@ const TaskCard = ({
             onLongPress(task);
           }}
         >
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {task.priority && <IconFlag filled size={12} />}
-            <span className={`text-sm font-semibold truncate ${facts.overdue ? "text-rose-700" : "text-slate-900"}`}>{task.title}</span>
-            {task.recurrence && task.recurrence !== "none" && <IconRepeat size={11} stroke="#94A3B8" />}
-          </div>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
-            <span className="text-xs text-slate-500">{cat.label}</span>
-            <span className="text-xs text-slate-300">•</span>
-            <span className="text-xs text-slate-500">{fmt(task.deadline)}</span>
+          <div className="flex min-w-0 items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                {task.priority && <IconFlag filled size={13} />}
+                <span className={`block truncate text-[15px] font-bold leading-snug ${facts.overdue ? "text-rose-700" : "text-slate-950"}`}>{task.title}</span>
+              </div>
+              <div className="mt-1.5 flex items-center gap-2 overflow-hidden whitespace-nowrap">
+                <span className="inline-block h-2.5 w-2.5 flex-shrink-0 rounded-full" style={{ backgroundColor: cat.color }} />
+                <span className="min-w-0 truncate text-xs font-medium text-slate-600">{cat.label}</span>
+                <span className="text-xs text-slate-300">•</span>
+                <span className="flex-shrink-0 text-xs text-slate-500">{fmt(task.deadline)}</span>
+              </div>
+            </div>
             {!facts.overdue && (
-              <span className="text-xs font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: uc.bg, color: uc.fg }}>
+              <span className="flex-shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold tabular-nums text-slate-700">
                 あと{rem.t}
               </span>
             )}
           </div>
-          {(facts.overdue || facts.dueToday || task.priority) && (
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {facts.overdue && <Badge tone="red">期限超過</Badge>}
-              {!facts.overdue && facts.dueToday && <Badge tone="red">今日締切</Badge>}
-              {task.priority && <Badge tone="red">最優先</Badge>}
-            </div>
-          )}
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            <StatusPill tone={facts.overdue ? "red" : facts.dueToday ? "amber" : "blue"}>{visibleReason}</StatusPill>
+            {task.priority && <StatusPill tone="amber">最優先</StatusPill>}
+            {recurrence && (
+              <StatusPill tone="gray">
+                <IconRepeat size={10} stroke="currentColor" />
+                {recurrence}
+              </StatusPill>
+            )}
+            {task.moodleUid && <StatusPill tone="green">Moodle由来</StatusPill>}
+          </div>
         </div>
       </div>
     </div>
