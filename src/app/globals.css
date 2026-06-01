@@ -34,10 +34,7 @@
 }
 
 body {
-  background:
-    radial-gradient(circle at 14% -10%, rgba(99, 102, 241, 0.08), transparent 32%),
-    radial-gradient(circle at 90% 4%, rgba(14, 165, 233, 0.10), transparent 26%),
-    linear-gradient(180deg, #FCFCFF 0%, var(--background) 44%, #F3F5FA 100%);
+  background: linear-gradient(180deg, #FCFCFF 0%, var(--background) 44%, #F3F5FA 100%);
   color: var(--foreground);
   font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -115,10 +112,7 @@ select {
 .calendar-task-bar { border-radius: 3px; margin-bottom: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .app-shell {
-  background:
-    radial-gradient(circle at 18% 0%, rgba(22, 136, 242, 0.07), transparent 30%),
-    radial-gradient(circle at 88% 8%, rgba(124, 58, 237, 0.06), transparent 24%),
-    transparent;
+  background: transparent;
 }
 
 .glass-header {
@@ -130,12 +124,60 @@ select {
 }
 
 .surface-card {
-  background: var(--surface);
+  background: rgba(255, 255, 255, 0.96);
   border: 1px solid rgba(226, 232, 240, 0.64);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-soft);
-  -webkit-backdrop-filter: blur(14px) saturate(1.12);
-  backdrop-filter: blur(14px) saturate(1.12);
+}
+
+.app-header-action {
+  color: #475569;
+  display: inline-flex;
+  min-height: 36px;
+  min-width: 36px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(226, 232, 240, .72);
+  background: rgba(255,255,255,.68);
+  box-shadow: 0 6px 18px rgba(27, 39, 75, 0.05);
+  transition: transform .16s ease, background-color .16s ease, color .16s ease;
+}
+
+.app-header-action:active {
+  transform: scale(.94);
+}
+
+.app-header-action:hover {
+  background: rgba(255,255,255,.92);
+  color: #0f172a;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: #64748B;
+  background: rgba(248, 250, 252, 0.82);
+  border: 1px solid rgba(226, 232, 240, 0.72);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: transform .16s ease, background-color .16s ease, color .16s ease, box-shadow .16s ease;
+}
+
+.filter-chip:active {
+  transform: scale(.97);
+}
+
+.filter-chip-active {
+  color: #0f172a;
+  background: #EAF3FF;
+  border-color: rgba(22, 136, 242, .22);
+  box-shadow: inset 0 0 0 1px rgba(22, 136, 242, .08);
 }
 
 .task-card {
@@ -252,6 +294,75 @@ select {
   background: rgba(255,255,255,.94);
   color: #0f172a;
   box-shadow: 0 8px 18px rgba(27, 39, 75, 0.08), inset 0 1px 0 rgba(255,255,255,.8);
+}
+
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 45;
+  padding-bottom: calc(.75rem + env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+
+.bottom-nav-inner {
+  pointer-events: auto;
+  width: min(calc(100% - 2rem), 28rem);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  padding: 7px;
+  border-radius: 28px;
+  border: 1px solid rgba(255,255,255,.72);
+  background: rgba(255,255,255,.78);
+  box-shadow: 0 18px 44px rgba(27, 39, 75, .16), inset 0 1px 0 rgba(255,255,255,.7);
+  -webkit-backdrop-filter: blur(22px) saturate(1.25);
+  backdrop-filter: blur(22px) saturate(1.25);
+}
+
+.bottom-nav-button {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  min-height: 52px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border-radius: 22px;
+  color: #94A3B8;
+  transition: transform .16s ease, background-color .18s ease, color .18s ease, box-shadow .18s ease;
+}
+
+.bottom-nav-button:active {
+  transform: scale(.96);
+}
+
+.bottom-nav-button-active {
+  color: #1266C3;
+  background: rgba(231, 242, 255, .92);
+  box-shadow: inset 0 0 0 1px rgba(22, 136, 242, .08);
+}
+
+.bottom-nav-count {
+  position: absolute;
+  top: -4px;
+  right: -10px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #EF4444;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 0 0 2px rgba(255,255,255,.9);
 }
 
 @media (prefers-reduced-motion: reduce) {
