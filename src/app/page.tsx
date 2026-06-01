@@ -5,7 +5,7 @@ import { DEFAULT_APP_SETTINGS, DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG, FILTERS, 
 import { expandRecurring, remaining, uid } from "@/lib/utils";
 import { AppSettings, Category, CourseTaskTemplate, Task, TimetableConfig, TimetableItem, TouchDragState } from "@/lib/types";
 import { MoodleImportCandidate } from "@/lib/moodleIcs";
-import { IconBook, IconList, IconPalette, IconPlus, IconSettings } from "@/components/Icons";
+import { IconArchive, IconCalendar, IconGrid, IconLink, IconList, IconPlus } from "@/components/Icons";
 import TaskRow from "@/components/TaskRow";
 import TaskForm from "@/components/TaskForm";
 import CategoryManager from "@/components/CategoryManager";
@@ -17,6 +17,8 @@ import TodayView from "@/components/TodayView";
 import SegmentedTabs from "@/components/ui/SegmentedTabs";
 import SurfaceCard from "@/components/ui/SurfaceCard";
 import EmptyState from "@/components/ui/EmptyState";
+import AppHeader from "@/components/ui/AppHeader";
+import BottomNav from "@/components/ui/BottomNav";
 import { auth, firebaseEnabled, googleProvider } from "@/lib/firebase";
 import { signInWithPopup, signOut, onAuthStateChanged, signInWithRedirect, User, browserLocalPersistence, getRedirectResult, setPersistence } from "firebase/auth";
 import { deleteCloudSnapshot, loadCloudSnapshot, migrateLocalToCloudOnce, saveCloudSnapshot } from "@/lib/cloudStorage";
@@ -843,35 +845,16 @@ export default function Home() {
 
   return (
     <div className="app-shell h-[100dvh] flex flex-col overflow-hidden bg-background prioritodo-app safe-x">
-      <header className="glass-header sticky top-0 z-40 safe-top">
-        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between gap-2">
-          <div className="min-w-0 flex-shrink"><h1 className="text-lg font-black text-slate-950 tracking-tight">PrioriTodo</h1><p className="text-[11px] text-slate-500 tracking-wide truncate">今日やる課題を、迷わず整理</p></div>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            {overdueCount > 0 && <span className="text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-md whitespace-nowrap">{overdueCount}件超過</span>}
-            <div className="text-right leading-none whitespace-nowrap mr-1"><div className="text-[9px] text-gray-400">今週</div><div className="text-sm font-bold text-gray-900">{weekDone}<span className="text-[9px] text-gray-400 font-normal ml-0.5">達成</span></div></div>
-            <button onClick={() => setShowCatMgr(true)} className="p-2 hover:bg-white/70 rounded-2xl transition-all active:scale-95" aria-label="カテゴリ編集"><IconPalette size={16} stroke="#666" /></button>
-            <button onClick={() => setShowSettings(true)} className="p-2 hover:bg-white/70 rounded-2xl transition-all active:scale-95" aria-label="設定"><IconSettings size={15} stroke="#666" /></button>
-            <button onClick={() => setShowHelp(true)} className="p-2 hover:bg-white/70 rounded-2xl transition-all active:scale-95" aria-label="ヘルプ"><IconBook size={15} stroke="#666" /></button>
-            <button onClick={handleLogout} className="text-[10px] text-slate-600 bg-white/60 border border-white/70 px-2 py-1.5 rounded-full whitespace-nowrap shadow-sm active:scale-95 transition-transform">ログアウト</button>
-          </div>
-        </div>
-      </header>
+      <AppHeader
+        overdueCount={overdueCount}
+        weekDone={weekDone}
+        onCategories={() => setShowCatMgr(true)}
+        onSettings={() => setShowSettings(true)}
+        onHelp={() => setShowHelp(true)}
+        onLogout={handleLogout}
+      />
 
-      <div className="max-w-lg mx-auto px-4 pt-4">
-        <SegmentedTabs
-          value={view}
-          onChange={(id) => setView(id as View)}
-          items={[
-            { id: "list", label: "タスク" },
-            { id: "calendar", label: "カレンダー" },
-            { id: "timetable", label: "時間割" },
-            { id: "moodle", label: "連携" },
-            { id: "completed", label: "達成済み" },
-          ]}
-        />
-      </div>
-
-      <div className={`${view === "calendar" ? "w-full" : "max-w-lg mx-auto"} w-full flex-1 overflow-y-auto pb-24`}>
+      <div className={`${view === "calendar" ? "w-full" : "max-w-lg mx-auto"} w-full flex-1 overflow-y-auto pb-32`}>
         {view === "list" && (
           <>
             <div className="px-4 pt-3 pb-1">
@@ -885,16 +868,16 @@ export default function Home() {
               <div className="flex gap-1.5 overflow-x-auto">
                 <button
                   onClick={() => { setCatFilter("all"); setShowCourseFilters(false); }}
-                  className={`px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === "all" ? "bg-gray-200 text-gray-900" : "text-gray-400 hover:text-gray-600"}`}
+                  className={`filter-chip ${catFilter === "all" ? "filter-chip-active" : ""}`}
                 >
                   すべて
                 </button>
                 {timetableCats.length > 0 && (
                   <button
                     onClick={() => { setCatFilter("timetable_group"); setShowCourseFilters(true); }}
-                    className={`flex items-center gap-1.5 px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === "timetable_group" || timetableCats.some((tc) => tc.id === catFilter) ? "bg-[#007AFF] text-white" : "text-gray-500 hover:bg-gray-50"}`}
+                    className={`filter-chip ${catFilter === "timetable_group" || timetableCats.some((tc) => tc.id === catFilter) ? "filter-chip-active" : ""}`}
                   >
-                    <span className="text-[13px]">📚</span>
+                    <IconGrid size={13} stroke="currentColor" />
                     授業
                     <span className="text-[10px] opacity-70">{timetableCats.length}</span>
                   </button>
@@ -903,7 +886,7 @@ export default function Home() {
                   <button
                     key={c.id}
                     onClick={() => { setCatFilter(c.id); setShowCourseFilters(false); }}
-                    className={`flex items-center gap-1.5 px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === c.id ? "text-white" : "text-gray-500 hover:bg-gray-50"}`}
+                    className={`filter-chip ${catFilter === c.id ? "text-white" : ""}`}
                     style={catFilter === c.id ? { backgroundColor: c.color } : {}}
                   >
                     <span className="w-2 h-2 rounded-full" style={{ backgroundColor: catFilter === c.id ? "rgba(255,255,255,0.7)" : c.color }} />{c.label}
@@ -914,12 +897,12 @@ export default function Home() {
                 <div className="flex gap-1.5 overflow-x-auto pb-1 pt-1 border-t border-gray-100">
                   <button
                     onClick={() => setCatFilter("timetable_group")}
-                    className={`px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === "timetable_group" ? "bg-gray-200 text-gray-900" : "text-gray-400 hover:text-gray-600"}`}
+                    className={`filter-chip ${catFilter === "timetable_group" ? "filter-chip-active" : ""}`}
                   >
                     授業すべて
                   </button>
                   {timetableCats.map((c) => (
-                    <button key={c.id} onClick={() => setCatFilter(c.id)} className={`flex items-center gap-1.5 px-3 py-2 min-h-11 rounded-md text-[11px] font-medium whitespace-nowrap transition-all ${catFilter === c.id ? "text-white" : "text-gray-500 hover:bg-gray-50"}`} style={catFilter === c.id ? { backgroundColor: c.color } : {}}>
+                    <button key={c.id} onClick={() => setCatFilter(c.id)} className={`filter-chip ${catFilter === c.id ? "text-white" : ""}`} style={catFilter === c.id ? { backgroundColor: c.color } : {}}>
                       <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: catFilter === c.id ? "rgba(255,255,255,0.7)" : c.color }} />{c.label}
                     </button>
                   ))}
@@ -954,10 +937,21 @@ export default function Home() {
         <button
           onClick={() => openNew(null)}
           className="floating-fab fixed right-6 z-40 w-14 h-14 text-white rounded-full transition-all flex items-center justify-center"
-          style={{ bottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}
+          style={{ bottom: "calc(5.75rem + env(safe-area-inset-bottom))" }}
           aria-label="課題を追加"
         ><IconPlus size={20} sw={2.5} /></button>
       )}
+      <BottomNav
+        value={view}
+        onChange={(id) => setView(id as View)}
+        items={[
+          { id: "list", label: "タスク", icon: <IconList size={19} stroke="currentColor" />, count: overdueCount },
+          { id: "calendar", label: "カレンダー", icon: <IconCalendar size={19} stroke="currentColor" /> },
+          { id: "timetable", label: "時間割", icon: <IconGrid size={19} stroke="currentColor" /> },
+          { id: "moodle", label: "連携", icon: <IconLink size={19} stroke="currentColor" /> },
+          { id: "completed", label: "完了", icon: <IconArchive size={19} stroke="currentColor" /> },
+        ]}
+      />
       {showForm && <TaskForm task={editTask} prefillDate={prefillDate} cats={cats} setCats={setCats} timetable={timetable} onSave={handleSave} onDelete={handleDeleteFromForm} onClose={() => { setShowForm(false); setEditTask(null); setPrefillDate(null); }} />}
       {showCatMgr && <CategoryManager cats={cats} setCats={setCats} onDeleteCategory={(catId) => setTasks((prev) => prev.map((t) => (t.category === catId ? { ...t, category: "default" } : t)))} onClose={() => setShowCatMgr(false)} />}
 

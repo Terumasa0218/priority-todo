@@ -7,6 +7,7 @@ import { DAY } from "@/lib/constants";
 import { IconCheck, IconFlag, IconRepeat } from "./Icons";
 import EmptyState from "./ui/EmptyState";
 import DatePickerField from "./DatePickerField";
+import StatusPill from "./ui/StatusPill";
 
 interface TodayViewProps {
   tasks: Task[];
@@ -15,17 +16,6 @@ interface TodayViewProps {
   onEdit: (task: Task) => void;
   onSnooze: (task: Task, snoozeUntilYMD: string) => void;
 }
-
-const StatusPill = ({ tone, children }: { tone: "red" | "amber" | "blue" | "gray" | "green"; children: React.ReactNode }) => {
-  const tones = {
-    red: "status-pill-red",
-    amber: "status-pill-amber",
-    blue: "status-pill-blue",
-    gray: "status-pill-gray",
-    green: "status-pill-green",
-  };
-  return <span className={`status-pill ${tones[tone]}`}>{children}</span>;
-};
 
 const fmtTime = (iso: string) => {
   const d = new Date(iso);
