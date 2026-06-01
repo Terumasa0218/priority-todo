@@ -133,8 +133,8 @@ select {
 .app-header-action {
   color: #475569;
   display: inline-flex;
-  min-height: 36px;
-  min-width: 36px;
+  min-height: 38px;
+  min-width: 38px;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
@@ -142,6 +142,10 @@ select {
   background: rgba(255,255,255,.68);
   box-shadow: 0 6px 18px rgba(27, 39, 75, 0.05);
   transition: transform .16s ease, background-color .16s ease, color .16s ease;
+}
+
+.main-scroll-area {
+  padding-bottom: calc(9.5rem + env(safe-area-inset-bottom));
 }
 
 .app-header-action:active {

@@ -119,7 +119,7 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
             <div
               key={idx}
               onClick={() => day && setSelectedDate(new Date(y, m, day))}
-              className={`min-h-[106px] p-1.5 transition-colors ${day ? "cursor-pointer" : ""}`}
+              className={`min-h-[82px] p-1.5 transition-colors sm:min-h-[106px] ${day ? "cursor-pointer" : ""}`}
               style={sel ? { boxShadow: "inset 0 0 0 2px #111827", backgroundColor: "#fff" } : tod ? { backgroundColor: "#EFF6FF" } : { backgroundColor: "#fff" }}
             >
               {day && (

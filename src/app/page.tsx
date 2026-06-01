@@ -433,10 +433,6 @@ export default function Home() {
     sortedRef.current = sorted;
   }, [sorted]);
 
-  const weekDone = useMemo(() => {
-    const w = Date.now() - 7 * 864e5;
-    return completed.filter((t) => t.completedAt && new Date(t.completedAt).getTime() > w).length;
-  }, [completed]);
   const overdueCount = allExpanded.filter((t) => new Date(t.deadline).getTime() < Date.now()).length;
 
   // タスク変更を localStorage とクラウドに即時反映する。
@@ -846,15 +842,13 @@ export default function Home() {
   return (
     <div className="app-shell h-[100dvh] flex flex-col overflow-hidden bg-background prioritodo-app safe-x">
       <AppHeader
-        overdueCount={overdueCount}
-        weekDone={weekDone}
         onCategories={() => setShowCatMgr(true)}
         onSettings={() => setShowSettings(true)}
         onHelp={() => setShowHelp(true)}
         onLogout={handleLogout}
       />
 
-      <div className={`${view === "calendar" ? "w-full" : "max-w-lg mx-auto"} w-full flex-1 overflow-y-auto pb-32`}>
+      <div className={`${view === "calendar" ? "w-full" : "max-w-lg mx-auto"} main-scroll-area w-full flex-1 overflow-y-auto`}>
         {view === "list" && (
           <>
             <div className="px-4 pt-3 pb-1">
