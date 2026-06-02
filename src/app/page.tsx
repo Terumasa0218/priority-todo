@@ -931,7 +931,7 @@ export default function Home() {
         <button
           onClick={() => openNew(null)}
           className="floating-fab fixed right-6 z-40 w-14 h-14 text-white rounded-full transition-all flex items-center justify-center"
-          style={{ bottom: "calc(5.75rem + env(safe-area-inset-bottom))" }}
+          style={{ bottom: "calc(4.75rem + env(safe-area-inset-bottom))" }}
           aria-label="課題を追加"
         ><IconPlus size={20} sw={2.5} /></button>
       )}
