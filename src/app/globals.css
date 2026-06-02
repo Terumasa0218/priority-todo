@@ -145,7 +145,7 @@ select {
 }
 
 .main-scroll-area {
-  padding-bottom: calc(9.5rem + env(safe-area-inset-bottom));
+  padding-bottom: calc(7.25rem + env(safe-area-inset-bottom));
 }
 
 .app-header-action:active {
@@ -306,20 +306,21 @@ select {
   right: 0;
   bottom: 0;
   z-index: 45;
-  padding-bottom: calc(.75rem + env(safe-area-inset-bottom));
+  padding-bottom: 0;
   pointer-events: none;
 }
 
 .bottom-nav-inner {
   pointer-events: auto;
-  width: min(calc(100% - 2rem), 28rem);
+  width: min(100%, 28rem);
   margin: 0 auto;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 4px;
   padding: 7px;
-  border-radius: 28px;
+  border-radius: 28px 28px 0 0;
   border: 1px solid rgba(255,255,255,.72);
+  border-bottom: 0;
   background: rgba(255,255,255,.78);
   box-shadow: 0 18px 44px rgba(27, 39, 75, .16), inset 0 1px 0 rgba(255,255,255,.7);
   -webkit-backdrop-filter: blur(22px) saturate(1.25);
