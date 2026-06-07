@@ -122,6 +122,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     if (Number.isNaN(d.getTime())) return "締切を選択してください";
     return `${fmtDateYMDW(d)} ${deadlineTime}`;
   }, [deadline, deadlineTime]);
+  const reminderLabel = REMINDERS.find((r) => r.id === reminder)?.label ?? "1日前";
 
   const updateDeadlineDate = (nextDate: string) => {
     if (!nextDate) return;
@@ -140,6 +141,11 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const selectedTimetable = selectedCat?.timetableId ? timetable.find((t) => t.id === selectedCat.timetableId) : null;
   const isTimetableCourse = !!selectedCat?.timetableId;
   const isClassBasedRecurring = recurrence === "weekly" || recurrence === "biweekly";
+  const repeatSubjectLabel = isTimetableCourse ? "授業課題" : "課題";
+  const repeatBasisLabel = isTimetableCourse ? "初回授業日" : "初回作成日";
+  const repeatBasisPlaceholder = isTimetableCourse ? "第1回授業の日付" : "最初の日付";
+  const repeatCountLabel = isTimetableCourse ? "授業回数" : "作成回数";
+  const repeatIntroText = isTimetableCourse ? "毎週の課題に使います" : "同じ課題を定期的に作成します";
   const intervalDays = recurrence === "biweekly" ? Math.max(2, biweeklyInterval) * 7 : 7;
   const classDayOfWeek = useMemo(() => {
     if (classStartDate) return new Date(`${classStartDate}T00:00:00`).getDay();
@@ -240,6 +246,15 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       biweeklyInterval,
     });
   }, [recurrence, repeatEndDate, effectiveRepeatEndDate, isClassBasedRecurring, repeatEndMode, classCount, task, title, deadline, category, reminder, memo, url, classDayOfWeek, classStartDate, biweeklyInterval]);
+  const repeatEndSummary = useMemo(() => {
+    if (repeatEndMode === "count") {
+      return `全${occurrenceCount}回分の${repeatSubjectLabel}を作成すると終了します。`;
+    }
+    if (!repeatEndDate) return "最終締切日を選ぶと終了します。";
+    const d = new Date(`${repeatEndDate}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return "最終締切日を選ぶと終了します。";
+    return `${fmtDateMDW(d)}締切の${repeatSubjectLabel}まで作成します。`;
+  }, [occurrenceCount, repeatEndDate, repeatEndMode, repeatSubjectLabel]);
 
   const [saving, setSaving] = useState(false);
   const handleSave = () => {
@@ -250,7 +265,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     } else {
       if (recurrence !== "none" && !isClassBasedRecurring && new Date(effectiveRepeatEndDate).getTime() < new Date(deadline).getTime()) { setFormError("最終締切日は初回締切日以降に設定してください"); return; }
       if (recurrence === "biweekly" && (biweeklyInterval < 2 || biweeklyInterval > 8)) { setFormError("隔週の間隔は2〜8週間で入力してください"); return; }
-      if (isClassBasedRecurring && !classStartDate) { setFormError("初回授業日を入力してください"); return; }
+      if (isClassBasedRecurring && !classStartDate) { setFormError(`${repeatBasisLabel}を入力してください`); return; }
       if (isClassBasedRecurring && repeatEndMode === "date" && !repeatEndDate) { setFormError("最終締切日を入力してください"); return; }
       if (computedStartDate && new Date(computedStartDate).getTime() > new Date(deadline).getTime()) { setFormError("取り組む期間の開始日時は締切以前にしてください"); return; }
     }
@@ -316,17 +331,6 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
 
   const ClassBasedRepeatFields = (
     <>
-      <div className="px-4 py-3 border-t border-gray-100">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-sm text-gray-900 font-medium">授業日基準で作成</div>
-            <div className="text-[11px] text-gray-400 mt-1">
-              初回授業日から毎週/隔週で授業日を進め、初回課題提出日との日数差で締切を作ります。
-            </div>
-          </div>
-          <div className="shrink-0 text-xs text-gray-500">{DAY[classDayOfWeek]}曜日</div>
-        </div>
-      </div>
       {recurrence === "biweekly" && (
         <div className="px-4 py-3 border-t border-gray-100">
           <label className="text-sm text-gray-900 font-medium">何週間に1回提出</label>
@@ -346,10 +350,13 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         </div>
       )}
       <div className="px-4 py-3 border-t border-gray-100">
-        <label className="block text-sm mb-2 text-gray-900 font-medium">初回授業日</label>
-        <DatePickerField value={classStartDate} onChange={(v) => setClassStartDate(v)} placeholder="第1回授業の日付" />
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <label className="text-sm text-gray-900 font-medium">{repeatBasisLabel}</label>
+          <span className="text-xs text-gray-500">{DAY[classDayOfWeek]}曜日</span>
+        </div>
+        <DatePickerField value={classStartDate} onChange={(v) => setClassStartDate(v)} placeholder={repeatBasisPlaceholder} />
         <div className="text-[11px] text-gray-400 mt-1">
-          {isTimetableCourse ? "時間割カテゴリの曜日を自動で使います。変更するとその曜日で生成します。" : "ここで選んだ曜日を授業曜日として使います。"}
+          {DAY[classDayOfWeek]}曜日ごとに{repeatSubjectLabel}を作成します。
         </div>
       </div>
       <div className="px-4 py-3 border-t border-gray-100">
@@ -362,7 +369,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
               onClick={() => setRepeatEndMode(mode)}
               className={`h-9 rounded-xl text-xs font-semibold transition-colors ${repeatEndMode === mode ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-500"}`}
             >
-              {mode === "count" ? "授業回数" : "最終締切日"}
+              {mode === "count" ? repeatCountLabel : "最終締切日"}
             </button>
           ))}
         </div>
@@ -381,7 +388,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
               />
               <span className="text-sm text-gray-500">回</span>
             </div>
-            <div className="text-[11px] text-gray-400 mt-1">半期は通常 14〜15 回。現在の設定では全{occurrenceCount}回です。</div>
+            <div className="text-[11px] text-gray-400 mt-1">{repeatEndSummary}</div>
           </div>
         ) : (
           <div>
@@ -392,7 +399,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
               isDateDisabled={(d) => d.getTime() < new Date(`${deadlineDate}T00:00:00`).getTime()}
               placeholder="最終締切日を選択"
             />
-            <div className="text-[11px] text-gray-400 mt-1">現在の設定では全{occurrenceCount}回です。</div>
+            <div className="text-[11px] text-gray-400 mt-1">{repeatEndSummary}</div>
           </div>
         )}
       </div>
@@ -409,7 +416,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         isDateDisabled={(d) => d.getTime() < new Date(`${deadlineDate}T00:00:00`).getTime()}
         placeholder="最終締切日を選択"
       />
-      <div className="text-xs text-gray-400 mt-1">全{occurrenceCount}回</div>
+      <div className="text-xs text-gray-400 mt-1">全{occurrenceCount}回分の課題を作成します。</div>
     </div>
   ) : null;
 
@@ -417,7 +424,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     <>
       <div className="px-4 py-3 border-t border-gray-100">
         <span className="text-sm text-gray-900 mb-1 block font-medium">繰り返し</span>
-        <span className="text-[11px] text-gray-400 block mb-2">毎週の小テストやレスポンスカードに使います</span>
+        <span className="text-[11px] text-gray-400 block mb-2">{repeatIntroText}</span>
         <div className="flex gap-1.5 flex-wrap">
           {RECUR_OPTIONS.filter((r) => r.id !== "none").map((r) => (
             <button
@@ -435,7 +442,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between gap-3">
         <div>
           <span className="text-sm text-gray-900 font-medium">締切前の通知</span>
-          <div className="text-[10px] text-gray-400">通知機能は環境依存です。締切の指定時間前の目安として保存します。</div>
+          <div className="text-[10px] text-gray-400">{reminder === "none" ? "通知しません。" : `締切の${reminderLabel}に通知します。`}</div>
         </div>
         <select value={reminder} onChange={(e) => setReminder(e.target.value)} className="text-sm bg-transparent">
           {REMINDERS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
@@ -464,7 +471,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between gap-3">
         <div>
           <span className="text-sm text-gray-900 font-medium">繰り返し課題の設定</span>
-          <div className="text-[10px] text-gray-400">毎週課題・隔週課題・通知を設定</div>
+          <div className="text-[10px] text-gray-400">繰り返し・通知を設定</div>
         </div>
         <button
           type="button"
@@ -531,7 +538,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
             <span className="text-sm text-gray-900 font-semibold block mb-1">課題に取り組む期間</span>
-            <span className="text-[11px] text-gray-400 block">未入力なら作成した瞬間から表示します。終了は締切と一致します。</span>
+            <span className="text-[11px] text-gray-400 block">未入力なら今すぐ表示します。</span>
           </div>
           <button type="button" onClick={() => setShowStartPeriod(false)} className="shrink-0 text-xs font-semibold text-blue-500">閉じる</button>
         </div>
@@ -591,7 +598,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         <div>
           <div className="text-sm font-semibold text-gray-900">課題に取り組む期間</div>
           <div className="text-[11px] text-gray-400 mt-0.5">
-            {customStartDate ? startHelpText : "必要なときだけ、今日の課題に表示し始める日時を指定"}
+            {customStartDate ? startHelpText : "表示を始める日時を指定"}
           </div>
         </div>
         <span className="text-xs font-semibold text-blue-500">開く</span>
