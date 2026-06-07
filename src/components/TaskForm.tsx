@@ -630,7 +630,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[#F7F8FC] safe-x" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
+    <div className="fullscreen-form-shell z-50 flex flex-col bg-[#F7F8FC] safe-x" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif" }}>
       <div className="bg-white/95 border-b border-slate-200/70 shadow-[0_10px_28px_rgba(27,39,75,0.06)] safe-top">
         <div className="flex items-center justify-between px-4 py-3 min-h-[52px]">
           <button onClick={onClose} className="text-sm text-blue-500 font-medium px-2 py-1 -mx-2">キャンセル</button>
