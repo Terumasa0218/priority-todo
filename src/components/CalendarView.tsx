@@ -1,10 +1,9 @@
 "use client";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Task, Category } from "@/lib/types";
 import { DAY } from "@/lib/constants";
 import { holidayName } from "@/lib/holidays";
 import { IconChevL, IconChevR, IconX, IconPlus, IconFlag, IconRepeat } from "./Icons";
-import SectionHeader from "./ui/SectionHeader";
 import EmptyState from "./ui/EmptyState";
 
 interface CalendarViewProps {
@@ -26,6 +25,14 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
   const cells: (number | null)[] = [];
   for (let i = 0; i < first; i++) cells.push(null);
   for (let d = 1; d <= total; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+  const monthTaskCount = useMemo(
+    () => tasks.filter((t) => {
+      const dd = new Date(t.deadline);
+      return dd.getFullYear() === y && dd.getMonth() === m;
+    }).length,
+    [m, tasks, y]
+  );
 
   const tasksOn = (day: number) =>
     tasks.filter((t) => {
@@ -70,9 +77,27 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
   // 横スワイプで月を切り替える
   const swipeStartX = useRef<number | null>(null);
   const swipeStartY = useRef<number | null>(null);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isDraggingMonth, setIsDraggingMonth] = useState(false);
+  const [monthMotion, setMonthMotion] = useState<"prev" | "next" | null>(null);
+
+  const changeMonth = (direction: -1 | 1) => {
+    setMonthMotion(direction > 0 ? "next" : "prev");
+    setMonth(new Date(y, m + direction));
+    window.setTimeout(() => setMonthMotion(null), 280);
+  };
+
   const onTouchStart = (e: React.TouchEvent) => {
     swipeStartX.current = e.touches[0].clientX;
     swipeStartY.current = e.touches[0].clientY;
+    setIsDraggingMonth(true);
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (swipeStartX.current == null || swipeStartY.current == null) return;
+    const dx = e.touches[0].clientX - swipeStartX.current;
+    const dy = e.touches[0].clientY - swipeStartY.current;
+    if (Math.abs(dx) < 10 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
+    setDragOffset(Math.max(-72, Math.min(72, dx * 0.35)));
   };
   const onTouchEnd = (e: React.TouchEvent) => {
     if (swipeStartX.current == null || swipeStartY.current == null) return;
@@ -80,32 +105,41 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
     const dy = e.changedTouches[0].clientY - swipeStartY.current;
     swipeStartX.current = null;
     swipeStartY.current = null;
+    setIsDraggingMonth(false);
+    setDragOffset(0);
     // 横方向が縦方向の 2 倍以上で 50px 超えたら月送り
     if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 2) {
-      if (dx < 0) setMonth(new Date(y, m + 1));
-      else setMonth(new Date(y, m - 1));
+      changeMonth(dx < 0 ? 1 : -1);
     }
   };
 
   return (
     <div className={selectedDate ? "pb-[56dvh]" : ""}>
-      <SectionHeader
-        title={`${y}年 ${m + 1}月`}
-        className="mb-2 px-4"
-        action={
-          <div className="flex items-center gap-1">
-            <button onClick={() => setMonth(new Date(y, m - 1))} className="min-h-11 min-w-11 p-2 hover:bg-slate-100 rounded-xl" aria-label="前の月"><IconChevL size={16} /></button>
-            <button onClick={() => setMonth(new Date(y, m + 1))} className="min-h-11 min-w-11 p-2 hover:bg-slate-100 rounded-xl" aria-label="次の月"><IconChevR size={16} /></button>
-          </div>
-        }
-      />
-      <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <div className="grid grid-cols-7 mb-1 px-1">
+      <div className="mx-4 mb-3 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-lg font-bold tracking-normal text-slate-950">{y}年 {m + 1}月</div>
+          <div className="mt-0.5 text-xs font-medium text-slate-400">締切・予定 {monthTaskCount}件</div>
+        </div>
+        <div className="inline-flex items-center rounded-full border border-white/70 bg-white/72 p-1 shadow-[0_12px_28px_rgba(27,39,75,0.08)] backdrop-blur-xl">
+          <button onClick={() => changeMonth(-1)} className="grid min-h-10 min-w-10 place-items-center rounded-full text-slate-500 transition active:scale-95 hover:bg-slate-100" aria-label="前の月"><IconChevL size={16} /></button>
+          <button onClick={() => changeMonth(1)} className="grid min-h-10 min-w-10 place-items-center rounded-full text-slate-500 transition active:scale-95 hover:bg-slate-100" aria-label="次の月"><IconChevR size={16} /></button>
+        </div>
+      </div>
+      <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={() => { setIsDraggingMonth(false); setDragOffset(0); }}>
+      <div
+        className={`calendar-month-panel mx-4 overflow-hidden rounded-[22px] border border-white/80 bg-white/80 shadow-[0_18px_42px_rgba(27,39,75,0.08)] ${monthMotion ? `calendar-month-${monthMotion}` : ""}`}
+        style={{
+          "--calendar-drag-x": `${dragOffset}px`,
+          "--calendar-drag-opacity": String(1 - Math.min(Math.abs(dragOffset) / 220, 0.22)),
+          transition: isDraggingMonth ? "none" : undefined,
+        } as React.CSSProperties}
+      >
+      <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50/72">
         {DAY.map((d, i) => (
-          <div key={d} className={`text-center text-xs font-semibold py-1.5 ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-gray-400"}`}>{d}</div>
+          <div key={d} className={`text-center text-xs font-bold py-2.5 ${i === 0 ? "text-rose-400" : i === 6 ? "text-sky-500" : "text-slate-400"}`}>{d}</div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-px bg-slate-100 border-y border-slate-100 overflow-hidden">
+      <div className="grid grid-cols-7 gap-px bg-slate-100/70">
         {cells.map((day, idx) => {
           const dt = day ? tasksOn(day) : [];
           const sel = isSel(day);
@@ -114,41 +148,47 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
           const hName = day != null ? holidayName(new Date(y, m, day)) : null;
           const isRed = dow === 0 || hName !== null;
           const isBlue = dow === 6;
-          const dayColor = tod ? "" : isRed ? "text-rose-500" : isBlue ? "text-blue-500" : "text-gray-700";
+          const dayColor = tod || sel ? "" : isRed ? "text-rose-500" : isBlue ? "text-sky-600" : "text-slate-700";
           return (
-            <div
+            <button
               key={idx}
+              type="button"
               onClick={() => day && setSelectedDate(new Date(y, m, day))}
-              className={`min-h-[82px] p-1.5 transition-colors sm:min-h-[106px] ${day ? "cursor-pointer" : ""}`}
-              style={sel ? { boxShadow: "inset 0 0 0 2px #111827", backgroundColor: "#fff" } : tod ? { backgroundColor: "#EFF6FF" } : { backgroundColor: "#fff" }}
+              disabled={!day}
+              className={`calendar-day-cell min-h-[84px] p-1.5 text-left transition-colors sm:min-h-[106px] ${day ? "cursor-pointer active:bg-slate-50" : "cursor-default bg-slate-50/45"}`}
+              data-selected={sel || undefined}
+              data-today={tod || undefined}
             >
               {day && (
                 <>
-                  <div className="text-[11px] leading-none mb-1 flex flex-col items-center gap-0.5">
-                    <span className={`inline-flex items-center justify-center ${tod ? "w-5 h-5 rounded-full bg-blue-500 text-white font-bold" : `${dayColor} ${sel ? "font-bold" : ""}`}`}>{day}</span>
-                    {hName && <span className="text-[9px] text-rose-500 leading-none truncate max-w-full" title={hName}>{hName.length > 4 ? `${hName.slice(0, 3)}…` : hName}</span>}
+                  <div className="mb-1 flex min-h-8 flex-col items-center gap-0.5">
+                    <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-[12px] font-bold tabular-nums ${tod ? "bg-blue-500 text-white shadow-[0_8px_16px_rgba(22,136,242,0.24)]" : sel ? "bg-slate-900 text-white" : dayColor}`}>{day}</span>
+                    {hName && <span className="max-w-full truncate text-[9px] font-medium leading-none text-rose-500" title={hName}>{hName.length > 4 ? `${hName.slice(0, 3)}…` : hName}</span>}
                   </div>
-                  <div className="space-y-0.5">
+                  <div className="space-y-1">
                     {dt.slice(0, 2).map((t) => {
                       const tc = cats.find((c) => c.id === t.category);
+                      const color = t.priority ? "#E11D48" : (tc?.color || "#889096");
                       const isEvent = t.kind === "event";
                       return (
                         <div
                           key={t.id}
-                          className="calendar-task-bar text-[10px] leading-tight truncate px-1 py-[1px] rounded"
-                          style={isEvent
-                            ? { backgroundColor: "#fff", color: tc?.color || "#889096", border: `1px solid ${tc?.color || "#889096"}` }
-                            : { backgroundColor: t.priority ? "#CD2B31" : (tc?.color || "#889096"), color: "#fff" }}
-                        >{t.title}</div>
+                          className={`calendar-task-bar ${isEvent ? "calendar-task-bar-event" : ""}`}
+                          style={{ "--task-color": color } as React.CSSProperties}
+                        >
+                          <span className="calendar-task-dot" />
+                          <span className="truncate">{t.title}</span>
+                        </div>
                       );
                     })}
-                    {dt.length > 2 && <div className="text-[9px] px-0.5 text-gray-400">+{dt.length - 2}件</div>}
+                    {dt.length > 2 && <div className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-400">+{dt.length - 2}件</div>}
                   </div>
                 </>
               )}
-            </div>
+            </button>
           );
         })}
+      </div>
       </div>
       </div>
       {selectedDate && (
