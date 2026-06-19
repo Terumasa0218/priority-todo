@@ -107,7 +107,15 @@ export const calcOccurrenceCount = (task: Task): number => {
     }
     return count;
   }
-  if (typeof task.classDayOfWeek !== "number") return Math.max(1, task.repeatCount || 1);
+  if (typeof task.classDayOfWeek !== "number") {
+    const cur = new Date(task.deadline);
+    let count = 0;
+    while (cur <= end && count < 240) {
+      count += 1;
+      advanceDate(cur, task.recurrence, task.biweeklyInterval);
+    }
+    return Math.max(1, count);
+  }
   const cur = task.classStartDate
     ? new Date(`${task.classStartDate}T00:00:00`)
     : firstClassDay(new Date(task.deadline), task.classDayOfWeek);
