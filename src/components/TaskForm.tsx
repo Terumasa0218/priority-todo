@@ -140,12 +140,13 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const selectedCat = cats.find((c) => c.id === category);
   const selectedTimetable = selectedCat?.timetableId ? timetable.find((t) => t.id === selectedCat.timetableId) : null;
   const isTimetableCourse = !!selectedCat?.timetableId;
-  const isClassBasedRecurring = recurrence === "weekly" || recurrence === "biweekly";
+  const isWeeklyLikeRecurring = recurrence === "weekly" || recurrence === "biweekly";
+  const isClassBasedRecurring = isTimetableCourse && isWeeklyLikeRecurring;
   const repeatSubjectLabel = isTimetableCourse ? "授業課題" : "課題";
-  const repeatBasisLabel = isTimetableCourse ? "初回授業日" : "初回作成日";
-  const repeatBasisPlaceholder = isTimetableCourse ? "第1回授業の日付" : "最初の日付";
+  const repeatBasisLabel = "初回授業日";
+  const repeatBasisPlaceholder = "第1回授業の日付";
   const repeatCountLabel = isTimetableCourse ? "授業回数" : "作成回数";
-  const repeatIntroText = isTimetableCourse ? "毎週の課題に使います" : "同じ課題を定期的に作成します";
+  const repeatIntroText = isTimetableCourse ? "授業日を基準に課題を作成します" : "締切日を基準に課題を繰り返します";
   const intervalDays = recurrence === "biweekly" ? Math.max(2, biweeklyInterval) * 7 : 7;
   const classDayOfWeek = useMemo(() => {
     if (classStartDate) return new Date(`${classStartDate}T00:00:00`).getDay();
@@ -242,7 +243,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       completedOccurrences: task?.completedOccurrences || [],
       order: task?.order ?? null,
       createdAt: task?.createdAt || new Date().toISOString(),
-      classDayOfWeek,
+      classDayOfWeek: isClassBasedRecurring ? classDayOfWeek : undefined,
       biweeklyInterval,
     });
   }, [recurrence, repeatEndDate, effectiveRepeatEndDate, isClassBasedRecurring, repeatEndMode, classCount, task, title, deadline, category, reminder, memo, url, classDayOfWeek, classStartDate, biweeklyInterval]);
@@ -356,7 +357,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         </div>
         <DatePickerField value={classStartDate} onChange={(v) => setClassStartDate(v)} placeholder={repeatBasisPlaceholder} />
         <div className="text-[11px] text-gray-400 mt-1">
-          {DAY[classDayOfWeek]}曜日ごとに{repeatSubjectLabel}を作成します。
+          過去の日付も選べます。{DAY[classDayOfWeek]}曜日ごとに{repeatSubjectLabel}を作成します。
         </div>
       </div>
       <div className="px-4 py-3 border-t border-gray-100">
@@ -407,17 +408,37 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   );
 
   const SimpleRepeatEndFields = recurrence !== "none" && !isClassBasedRecurring ? (
-    <div className="px-4 py-3 border-t border-gray-100">
-      <label className="text-sm text-gray-900 font-medium block mb-2">最終締切日</label>
-      <DatePickerField
-        value={effectiveRepeatEndDate}
-        onChange={(v) => setRepeatEndDate(v)}
-        min={deadlineDate}
-        isDateDisabled={(d) => d.getTime() < new Date(`${deadlineDate}T00:00:00`).getTime()}
-        placeholder="最終締切日を選択"
-      />
-      <div className="text-xs text-gray-400 mt-1">全{occurrenceCount}回分の課題を作成します。</div>
-    </div>
+    <>
+      {recurrence === "biweekly" && (
+        <div className="px-4 py-3 border-t border-gray-100">
+          <label className="text-sm text-gray-900 font-medium">何週間に1回繰り返す</label>
+          <div className="mt-2 flex items-center gap-2 text-sm">
+            <input
+              type="number"
+              inputMode="numeric"
+              min={2}
+              max={8}
+              value={biweeklyIntervalStr}
+              onChange={(e) => setBiweeklyIntervalStr(e.target.value)}
+              onBlur={() => setBiweeklyIntervalStr(String(biweeklyInterval))}
+              className="w-20 h-[44px] text-sm bg-gray-50 rounded-xl px-3 py-2 border border-gray-200"
+            />
+            <span className="text-gray-500">週間おき</span>
+          </div>
+        </div>
+      )}
+      <div className="px-4 py-3 border-t border-gray-100">
+        <label className="text-sm text-gray-900 font-medium block mb-2">最終締切日</label>
+        <DatePickerField
+          value={effectiveRepeatEndDate}
+          onChange={(v) => setRepeatEndDate(v)}
+          min={deadlineDate}
+          isDateDisabled={(d) => d.getTime() < new Date(`${deadlineDate}T00:00:00`).getTime()}
+          placeholder="最終締切日を選択"
+        />
+        <div className="text-xs text-gray-400 mt-1">締切日を起点に、全{occurrenceCount}回分の課題を作成します。</div>
+      </div>
+    </>
   ) : null;
 
   const RepeatSettingsFields = repeatSettingsEnabled ? (
