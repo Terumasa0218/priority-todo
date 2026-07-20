@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { Task, Category } from "@/lib/types";
-import { fmt } from "@/lib/utils";
+import { fmt, taskDisplayTitle } from "@/lib/utils";
 import { IconArchive, IconCheck } from "./Icons";
 import EmptyState from "./ui/EmptyState";
 import StatusPill from "./ui/StatusPill";
@@ -38,17 +38,18 @@ export default function CompletedList({ tasks, cats, onRestore }: CompletedListP
       <div className="space-y-2.5">
       {recent.map((t) => {
         const cat = cats.find((c) => c.id === t.category) || { label: "未分類", color: "#889096" };
+        const displayTitle = taskDisplayTitle(t);
         return (
           <div key={t.id} className="surface-card task-card flex items-start gap-3 px-4 py-3.5">
             <button onClick={() => onRestore(t.id)}
               className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-green-50 text-green-600 shadow-inner active:scale-95 transition-transform"
-              aria-label={`${t.title}を未完了に戻す`}
+              aria-label={`${displayTitle}を未完了に戻す`}
             >
               <IconCheck size={14} stroke="currentColor" sw={2.7} />
             </button>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="block truncate text-sm font-semibold text-slate-400 line-through">{t.title}</span>
+                <span className="block truncate text-sm font-semibold text-slate-400 line-through">{displayTitle}</span>
                 <StatusPill tone="green">完了</StatusPill>
               </div>
               <div className="mt-1.5 flex items-center gap-2 overflow-hidden whitespace-nowrap">

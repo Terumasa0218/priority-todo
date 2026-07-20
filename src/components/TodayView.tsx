@@ -2,7 +2,7 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Task, Category } from "@/lib/types";
 import { isActiveOn, isOverdue, isDueToday, taskFacts } from "@/lib/scoring";
-import { fmt, getEffectiveStartDate, remaining } from "@/lib/utils";
+import { fmt, getEffectiveStartDate, remaining, taskDisplayTitle } from "@/lib/utils";
 import { DAY } from "@/lib/constants";
 import { IconCheck, IconFlag, IconRepeat } from "./Icons";
 import EmptyState from "./ui/EmptyState";
@@ -96,6 +96,7 @@ const TaskCard = ({
   const cat = cats.find((c) => c.id === task.category) || { label: "未分類", color: "#889096" };
   const facts = taskFacts(task, today);
   const rem = remaining(task.deadline);
+  const displayTitle = taskDisplayTitle(task);
   const effectiveStart = getEffectiveStartDate(task);
   const recurrence = recurrenceText(task);
   const visibleReason = facts.overdue
@@ -170,7 +171,7 @@ const TaskCard = ({
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
                 {task.priority && <IconFlag filled size={13} />}
-                <span className={`block truncate text-[15px] font-bold leading-snug ${facts.overdue ? "text-rose-700" : "text-slate-950"}`}>{task.title}</span>
+                <span className={`block truncate text-[15px] font-bold leading-snug ${facts.overdue ? "text-rose-700" : "text-slate-950"}`}>{displayTitle}</span>
               </div>
               <div className="mt-1.5 flex items-center gap-2 overflow-hidden whitespace-nowrap">
                 <span className="inline-block h-2.5 w-2.5 flex-shrink-0 rounded-full" style={{ backgroundColor: cat.color }} />

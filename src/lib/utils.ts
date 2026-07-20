@@ -44,6 +44,13 @@ export function urgColor(u: number) {
   return { bg: "#F0F0F3", fg: "#60646C" };
 }
 
+export function taskDisplayTitle(task: Task) {
+  if (task.occurrenceIndex && task.recurrence && task.recurrence !== "none") {
+    return `第${task.occurrenceIndex}回 ${task.title}`;
+  }
+  return task.title;
+}
+
 export function advanceDate(d: Date, r: string, biweeklyInterval = 2) {
   switch (r) {
     case "daily": d.setDate(d.getDate() + 1); break;
@@ -173,7 +180,7 @@ export function expandRecurring(task: Task, horizonDate: Date, options?: ExpandR
   const endDate = task.repeatEndDate ? parseEndBoundary(task.repeatEndDate) : horizon;
   const effectiveEnd = endDate < horizon ? endDate : horizon;
 
-  const pushOccurrence = (current: Date) => {
+  const pushOccurrence = (current: Date, occurrenceIndex: number) => {
     if (current < lookback) return;
     const key = current.toISOString().slice(0, 16);
     if ((task.completedOccurrences || []).includes(key)) return;
@@ -184,6 +191,7 @@ export function expandRecurring(task: Task, horizonDate: Date, options?: ExpandR
       deadline: current.toISOString(),
       startDate: occurrenceStartDate(task, current),
       isOccurrence: true,
+      occurrenceIndex,
     });
   };
 
@@ -195,13 +203,15 @@ export function expandRecurring(task: Task, horizonDate: Date, options?: ExpandR
       ? new Date(`${task.classStartDate}T00:00:00`)
       : firstClassDay(base, task.classDayOfWeek);
     let count = 0;
+    let occurrenceIndex = 1;
     while (classDate <= effectiveEnd && count < 240) {
       // 通常授業のみ: 授業日が祝日の回はスキップ（休講扱い）
       if (!skipHolidays || !isHoliday(classDate)) {
         const due = new Date(classDate);
         due.setDate(due.getDate() + offsetDays);
         due.setHours(hh || 0, mm || 0, 0, 0);
-        if (due <= effectiveEnd) pushOccurrence(due);
+        if (due <= effectiveEnd) pushOccurrence(due, occurrenceIndex);
+        occurrenceIndex += 1;
       }
       classDate.setDate(classDate.getDate() + (task.recurrence === "biweekly" ? Math.max(2, task.biweeklyInterval ?? 2) * 7 : 7));
       count += 1;
@@ -212,7 +222,7 @@ export function expandRecurring(task: Task, horizonDate: Date, options?: ExpandR
   const current = new Date(task.deadline);
   let count = 0;
   while (current <= effectiveEnd && count < 200) {
-    pushOccurrence(current);
+    pushOccurrence(current, count + 1);
     const next = new Date(current);
     advanceDate(next, task.recurrence, task.biweeklyInterval);
     current.setTime(next.getTime());

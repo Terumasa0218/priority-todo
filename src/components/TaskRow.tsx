@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { Task, Category, TouchDragState } from "@/lib/types";
-import { remaining, urgColor, fmt } from "@/lib/utils";
+import { remaining, urgColor, fmt, taskDisplayTitle } from "@/lib/utils";
 import { IconGrip, IconFlag, IconRepeat } from "./Icons";
 import ParticleBurst from "./ParticleBurst";
 
@@ -32,6 +32,7 @@ export default function TaskRow({ task, cats, onComplete, onEdit, onDelete, idx,
 
   const hasMemo = task.memo && task.memo.trim();
   const hasUrl = task.url && task.url.trim();
+  const displayTitle = taskDisplayTitle(task);
 
   const handleComplete = () => {
     const rect = checkRef.current?.getBoundingClientRect();
@@ -130,7 +131,7 @@ export default function TaskRow({ task, cats, onComplete, onEdit, onDelete, idx,
           <div className="relative flex-1 min-w-0 cursor-pointer" onClick={() => onEdit(task)}>
             <div className="flex items-center gap-2">
               {task.priority && <IconFlag filled size={13} />}
-              <span className={`text-sm font-semibold truncate ${isOverdue ? "text-rose-700" : "text-slate-900"}`}>{task.title}</span>
+              <span className={`text-sm font-semibold truncate ${isOverdue ? "text-rose-700" : "text-slate-900"}`}>{displayTitle}</span>
               {task.recurrence && task.recurrence !== "none" && <IconRepeat size={12} stroke="#889096" />}
             </div>
             <div className="flex items-center gap-2 mt-1">
