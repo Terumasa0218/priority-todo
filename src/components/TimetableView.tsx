@@ -722,7 +722,6 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
                       <DatePickerField
                         value={editing.item.assignmentTemplate.firstClassDate}
                         onChange={(v) => updateEditingTemplate({ firstClassDate: v })}
-                        min={todayYmd()}
                         placeholder="授業日"
                       />
                       <div className="mt-1 text-[10px] text-gray-400">この曜日を基準に作成</div>

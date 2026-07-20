@@ -43,6 +43,7 @@ export interface Task {
   // 展開時に付与
   parentId?: string;
   isOccurrence?: boolean;
+  occurrenceIndex?: number;
 }
 
 export interface CourseTaskTemplate {

@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Task, Category } from "@/lib/types";
 import { DAY } from "@/lib/constants";
 import { holidayName } from "@/lib/holidays";
+import { taskDisplayTitle } from "@/lib/utils";
 import { IconChevL, IconChevR, IconX, IconPlus, IconFlag, IconRepeat } from "./Icons";
 import EmptyState from "./ui/EmptyState";
 
@@ -177,7 +178,7 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
                           style={{ "--task-color": color } as React.CSSProperties}
                         >
                           <span className="calendar-task-dot" />
-                          <span className="truncate">{t.title}</span>
+                          <span className="truncate">{taskDisplayTitle(t)}</span>
                         </div>
                       );
                     })}
@@ -232,7 +233,7 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           {t.priority && <IconFlag filled size={11} />}
-                          <span className="text-sm text-gray-900 font-medium truncate">{t.title}</span>
+                          <span className="text-sm text-gray-900 font-medium truncate">{taskDisplayTitle(t)}</span>
                           {t.recurrence && t.recurrence !== "none" && <IconRepeat size={11} stroke="#889096" />}
                           {isEvent && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-sky-100 text-sky-700">予定</span>}
                         </div>
