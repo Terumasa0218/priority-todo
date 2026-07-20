@@ -27,6 +27,12 @@ import { AuthIssue, resolveAuthIssue } from "@/lib/authErrorCatalog";
 import { loadAppSettings, loadCategories, loadTasks, loadTimetable, loadTimetableConfig, saveAppSettings, saveCategories, saveTasks, saveTimetable, saveTimetableConfig } from "@/lib/storage";
 
 type View = "list" | "calendar" | "timetable" | "moodle" | "completed";
+type SnapshotOverrides = Partial<{
+  cats: Category[];
+  timetable: TimetableItem[];
+  timetableConfig: TimetableConfig;
+  settings: AppSettings;
+}>;
 const isInAppBrowser = () => /FBAN|FBAV|Instagram|Line|Twitter|wv|WebView|GSA|LinkedInApp|Slack|Discord|GitHub/i.test(navigator.userAgent);
 const isMobileDevice = () => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -42,6 +48,56 @@ const migratePeriod = (period: string | number): string => {
   if (period <= 4) return "3・4限";
   if (period <= 6) return "5・6限";
   return `オンデマンド${period}`;
+};
+
+const normalizeMoodleCode = (value?: string | null): string =>
+  String(value ?? "").replace(/\D/g, "").slice(-4);
+
+const collectMoodleCodeAssignments = (candidates: MoodleImportCandidate[], cats: Category[]): Map<string, string> => {
+  const categories = new Map(cats.map((cat) => [cat.id, cat]));
+  const assignments = new Map<string, string>();
+  const conflicts = new Set<string>();
+
+  for (const candidate of candidates) {
+    const code = normalizeMoodleCode(candidate.timetableCode);
+    if (code.length !== 4 || !candidate.categoryId) continue;
+
+    const timetableId = categories.get(candidate.categoryId)?.timetableId;
+    if (!timetableId) continue;
+
+    const current = assignments.get(timetableId);
+    if (current && current !== code) {
+      conflicts.add(timetableId);
+      continue;
+    }
+    assignments.set(timetableId, code);
+  }
+
+  for (const timetableId of conflicts) {
+    assignments.delete(timetableId);
+  }
+
+  return assignments;
+};
+
+const rememberMoodleCodesOnTimetable = (
+  timetable: TimetableItem[],
+  assignments: Map<string, string>
+): { nextTimetable: TimetableItem[]; changed: boolean } => {
+  let changed = false;
+  const nextTimetable = timetable.map((item) => {
+    const assignedCode = assignments.get(item.id);
+    if (!assignedCode) return item;
+
+    const currentCode = normalizeMoodleCode(item.timetableCode);
+    if (currentCode && currentCode !== assignedCode) return item;
+    if (item.moodleEnabled && currentCode === assignedCode) return item;
+
+    changed = true;
+    return { ...item, moodleEnabled: true, timetableCode: assignedCode };
+  });
+
+  return { nextTimetable: changed ? nextTimetable : timetable, changed };
 };
 
 const withTaskDefaults = (task: Task): Task => ({
@@ -438,12 +494,25 @@ export default function Home() {
   // タスク変更を localStorage とクラウドに即時反映する。
   // クラウド側 useEffect の 400ms debounce 中にアプリが閉じても取りこぼさない。
   const persistTasks = useCallback(
-    (updater: (prev: Task[]) => Task[]) => {
+    (
+      updater: (prev: Task[]) => Task[],
+      snapshot?: SnapshotOverrides
+    ) => {
       setTasks((prev) => {
         const next = updater(prev);
+        const snapshotCats = snapshot?.cats ?? cats;
+        const snapshotTimetable = snapshot?.timetable ?? timetable;
+        const snapshotTimetableConfig = snapshot?.timetableConfig ?? timetableConfig;
+        const snapshotSettings = snapshot?.settings ?? appSettings;
         try { saveTasks(next); } catch { /* ignore */ }
         if (user) {
-          saveCloudSnapshot(user.uid, { tasks: next, cats, timetable, timetableConfig, settings: appSettings }).catch((err) => {
+          saveCloudSnapshot(user.uid, {
+            tasks: next,
+            cats: snapshotCats,
+            timetable: snapshotTimetable,
+            timetableConfig: snapshotTimetableConfig,
+            settings: snapshotSettings,
+          }).catch((err) => {
             console.error("Immediate cloud save failed:", err);
           });
         }
@@ -487,6 +556,13 @@ export default function Home() {
 
   const handleMoodleImport = useCallback(
     (candidates: MoodleImportCandidate[]) => {
+      const assignments = collectMoodleCodeAssignments(candidates, cats);
+      const { nextTimetable, changed } = rememberMoodleCodesOnTimetable(timetable, assignments);
+      if (changed) {
+        setTimetable(nextTimetable);
+        try { saveTimetable(nextTimetable); } catch { /* ignore */ }
+      }
+
       persistTasks((prev) => {
         const existingUids = new Set(prev.map((task) => task.moodleUid).filter(Boolean));
         const imported = candidates
@@ -517,9 +593,9 @@ export default function Home() {
             createdAt: new Date().toISOString(),
           }));
         return imported.length > 0 ? [...prev, ...imported] : prev;
-      });
+      }, { timetable: nextTimetable });
     },
-    [persistTasks]
+    [cats, persistTasks, timetable]
   );
 
   const handleComplete = useCallback(
