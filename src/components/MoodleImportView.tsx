@@ -237,7 +237,7 @@ export default function MoodleImportView({ tasks, cats, timetable, onImport }: M
                       </select>
                       {candidate.timetableCode && (
                         <span className="mt-1 block text-[10px] font-medium text-slate-400">
-                          Moodle CATEGORIES コード: {candidate.timetableCode}{cat ? ` / ${cat.label} に一致` : " / 未登録のため手動選択できます"}
+                          Moodle CATEGORIES コード: {candidate.timetableCode}{cat ? ` / ${cat.label} に一致` : " / コード未設定の授業なら次回から自動分類します"}
                         </span>
                       )}
                     </label>
