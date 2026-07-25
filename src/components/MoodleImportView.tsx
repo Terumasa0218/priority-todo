@@ -1,7 +1,7 @@
 "use client";
 import React, { useMemo, useState } from "react";
 import DatePickerField from "@/components/DatePickerField";
-import { MoodleImportCandidate, parseMoodleIcs } from "@/lib/moodleIcs";
+import { getMoodleImportStatus, MoodleImportCandidate, MoodleImportStatus, parseMoodleIcs } from "@/lib/moodleIcs";
 import { Category, Task, TimetableItem } from "@/lib/types";
 
 interface MoodleImportViewProps {
@@ -16,6 +16,12 @@ const KIND_LABEL: Record<MoodleImportCandidate["kind"], string> = {
   quiz: "小テスト",
   survey: "アンケート",
   other: "その他",
+};
+
+const STATUS_LABEL: Record<MoodleImportStatus, string> = {
+  new: "新規",
+  update: "更新あり",
+  unchanged: "変更なし",
 };
 
 const pad2 = (value: number) => String(value).padStart(2, "0");
@@ -46,21 +52,32 @@ export default function MoodleImportView({ tasks, cats, timetable, onImport }: M
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState<string | null>(null);
 
-  const existingUids = useMemo(
-    () => new Set(tasks.map((task) => task.moodleUid).filter((uid): uid is string => !!uid)),
+  const existingByUid = useMemo(
+    () => {
+      const map = new Map<string, Task>();
+      for (const task of tasks) {
+        if (task.moodleUid) map.set(task.moodleUid, task);
+      }
+      return map;
+    },
     [tasks]
   );
   const categoryById = useMemo(() => new Map(cats.map((cat) => [cat.id, cat])), [cats]);
-  const newCandidates = candidates.filter((candidate) => !existingUids.has(candidate.uid));
-  const selectedCandidates = newCandidates.filter((candidate) => selected.has(candidate.uid));
+  const candidateStatuses = useMemo(
+    () => new Map(candidates.map((candidate) => [candidate.uid, getMoodleImportStatus(candidate, existingByUid.get(candidate.uid))])),
+    [candidates, existingByUid]
+  );
+  const actionableCandidates = candidates.filter((candidate) => candidateStatuses.get(candidate.uid) !== "unchanged");
+  const selectedCandidates = actionableCandidates.filter((candidate) => selected.has(candidate.uid));
   const invalidSelectedCount = selectedCandidates.filter((candidate) => !candidate.title.trim() || !toLocalDate(candidate.deadline)).length;
   const canImport = selectedCandidates.length > 0 && invalidSelectedCount === 0;
   const stats = useMemo(() => {
-    const duplicateCount = candidates.filter((candidate) => existingUids.has(candidate.uid)).length;
-    const autoLinkedCount = candidates.filter((candidate) => candidate.timetableCode && candidate.categoryId).length;
+    const newCount = candidates.filter((candidate) => candidateStatuses.get(candidate.uid) === "new").length;
+    const updateCount = candidates.filter((candidate) => candidateStatuses.get(candidate.uid) === "update").length;
+    const unchangedCount = candidates.filter((candidate) => candidateStatuses.get(candidate.uid) === "unchanged").length;
     const unlinkedCodeCount = candidates.filter((candidate) => candidate.timetableCode && !candidate.categoryId).length;
-    return { duplicateCount, autoLinkedCount, unlinkedCodeCount };
-  }, [candidates, existingUids]);
+    return { newCount, updateCount, unchangedCount, unlinkedCodeCount };
+  }, [candidates, candidateStatuses]);
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
@@ -70,7 +87,10 @@ export default function MoodleImportView({ tasks, cats, timetable, onImport }: M
       const text = await file.text();
       const parsed = parseMoodleIcs(text, timetable, cats);
       setCandidates(parsed);
-      setSelected(new Set(parsed.filter((candidate) => candidate.includeByDefault && !existingUids.has(candidate.uid)).map((candidate) => candidate.uid)));
+      setSelected(new Set(parsed.filter((candidate) => {
+        const status = getMoodleImportStatus(candidate, existingByUid.get(candidate.uid));
+        return status !== "unchanged" && (candidate.includeByDefault || status === "update");
+      }).map((candidate) => candidate.uid)));
       setMessage(parsed.length > 0 ? `${parsed.length}件の予定を読み込みました` : "VEVENTが見つかりませんでした");
     } catch (error) {
       console.error("Moodle ICS parse failed:", error);
@@ -115,7 +135,13 @@ export default function MoodleImportView({ tasks, cats, timetable, onImport }: M
     onImport(selectedCandidates);
     setCandidates((prev) => prev.filter((candidate) => !selected.has(candidate.uid)));
     setSelected(new Set());
-    setMessage(`${selectedCandidates.length}件を課題として追加しました`);
+    const addCount = selectedCandidates.filter((candidate) => candidateStatuses.get(candidate.uid) === "new").length;
+    const updateCount = selectedCandidates.filter((candidate) => candidateStatuses.get(candidate.uid) === "update").length;
+    const parts = [
+      addCount > 0 ? `${addCount}件を追加` : "",
+      updateCount > 0 ? `${updateCount}件を更新` : "",
+    ].filter(Boolean);
+    setMessage(parts.length > 0 ? `${parts.join("、")}しました` : "反映する変更はありません");
   };
 
   return (
@@ -142,18 +168,22 @@ export default function MoodleImportView({ tasks, cats, timetable, onImport }: M
           <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
             <div>
               <h3 className="text-sm font-bold text-slate-900">取り込み候補</h3>
-              <p className="text-[11px] text-slate-400">重複済みを除き {selectedCandidates.length}/{newCandidates.length} 件選択中</p>
+              <p className="text-[11px] text-slate-400">新規・更新を {selectedCandidates.length}/{actionableCandidates.length} 件選択中</p>
             </div>
-            <button onClick={importSelected} className="rounded-full bg-[#007AFF] px-4 py-2 text-xs font-bold text-white disabled:opacity-50" disabled={!canImport}>追加</button>
+            <button onClick={importSelected} className="rounded-full bg-[#007AFF] px-4 py-2 text-xs font-bold text-white disabled:opacity-50" disabled={!canImport}>反映</button>
           </div>
-          <div className="grid grid-cols-3 gap-2 border-b border-slate-100 px-4 py-3 text-center">
+          <div className="grid grid-cols-4 gap-2 border-b border-slate-100 px-4 py-3 text-center">
             <div className="rounded-2xl bg-blue-50 px-2 py-2">
-              <div className="text-sm font-black text-blue-600">{stats.autoLinkedCount}</div>
-              <div className="text-[10px] font-bold text-blue-500">自動紐付け</div>
+              <div className="text-sm font-black text-blue-600">{stats.newCount}</div>
+              <div className="text-[10px] font-bold text-blue-500">新規</div>
             </div>
             <div className="rounded-2xl bg-amber-50 px-2 py-2">
-              <div className="text-sm font-black text-amber-600">{stats.duplicateCount}</div>
-              <div className="text-[10px] font-bold text-amber-500">取り込み済み</div>
+              <div className="text-sm font-black text-amber-600">{stats.updateCount}</div>
+              <div className="text-[10px] font-bold text-amber-500">更新あり</div>
+            </div>
+            <div className="rounded-2xl bg-slate-100 px-2 py-2">
+              <div className="text-sm font-black text-slate-500">{stats.unchangedCount}</div>
+              <div className="text-[10px] font-bold text-slate-500">変更なし</div>
             </div>
             <div className="rounded-2xl bg-rose-50 px-2 py-2">
               <div className="text-sm font-black text-rose-600">{stats.unlinkedCodeCount}</div>
@@ -162,22 +192,23 @@ export default function MoodleImportView({ tasks, cats, timetable, onImport }: M
           </div>
           <div className="space-y-3 bg-slate-50/70 p-3">
             {candidates.map((candidate) => {
-              const duplicate = existingUids.has(candidate.uid);
+              const status = candidateStatuses.get(candidate.uid) || "new";
+              const readonly = status === "unchanged";
               const cat = candidate.categoryId ? categoryById.get(candidate.categoryId) : null;
-              const checked = selected.has(candidate.uid) && !duplicate;
+              const checked = selected.has(candidate.uid) && !readonly;
               const dateValue = toLocalDate(candidate.deadline);
               const timeValue = toLocalTime(candidate.deadline);
               return (
                 <article
                   key={candidate.uid}
-                  className={`rounded-[22px] border border-white/90 bg-white p-3 shadow-[0_10px_24px_rgba(27,39,75,0.06)] ${duplicate ? "opacity-65" : ""}`}
+                  className={`rounded-[22px] border border-white/90 bg-white p-3 shadow-[0_10px_24px_rgba(27,39,75,0.06)] ${readonly ? "opacity-65" : ""}`}
                 >
                   <div className="flex items-start gap-3">
                     <button
                       type="button"
-                      onClick={() => !duplicate && toggle(candidate.uid)}
-                      disabled={duplicate}
-                      className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border text-xs font-bold transition-colors ${checked ? "border-blue-500 bg-blue-500 text-white" : "border-slate-300 text-transparent"} ${duplicate ? "cursor-not-allowed" : "active:scale-95"}`}
+                      onClick={() => !readonly && toggle(candidate.uid)}
+                      disabled={readonly}
+                      className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border text-xs font-bold transition-colors ${checked ? "border-blue-500 bg-blue-500 text-white" : "border-slate-300 text-transparent"} ${readonly ? "cursor-not-allowed" : "active:scale-95"}`}
                       aria-label={checked ? "取り込み対象から外す" : "取り込み対象にする"}
                     >
                       ✓
@@ -185,7 +216,9 @@ export default function MoodleImportView({ tasks, cats, timetable, onImport }: M
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">{KIND_LABEL[candidate.kind]}</span>
-                        {duplicate && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600">取り込み済み</span>}
+                        {status === "new" && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-600">{STATUS_LABEL[status]}</span>}
+                        {status === "update" && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600">{STATUS_LABEL[status]}</span>}
+                        {status === "unchanged" && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500">{STATUS_LABEL[status]}</span>}
                         {cat && <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: cat.color }}>自動分類: {cat.label}</span>}
                         {!cat && candidate.timetableCode && <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-600">未紐付け {candidate.timetableCode}</span>}
                       </div>
@@ -199,13 +232,13 @@ export default function MoodleImportView({ tasks, cats, timetable, onImport }: M
                         value={candidate.title}
                         onChange={(event) => updateCandidate(candidate.uid, { title: event.target.value })}
                         className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-300"
-                        disabled={duplicate}
+                        disabled={readonly}
                       />
                     </label>
                     <div className="grid grid-cols-[minmax(0,1fr)_92px] gap-2">
                       <label className="block min-w-0">
                         <span className="mb-1 block text-[11px] font-bold text-slate-500">締切日</span>
-                        {duplicate ? (
+                        {readonly ? (
                           <div className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-500">{dateValue}</div>
                         ) : (
                           <DatePickerField value={dateValue} onChange={(date) => updateDeadlineDate(candidate, date)} className="rounded-2xl" />
@@ -218,7 +251,7 @@ export default function MoodleImportView({ tasks, cats, timetable, onImport }: M
                           value={timeValue}
                           onChange={(event) => updateDeadlineTime(candidate, event.target.value)}
                           className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-2 text-center text-sm font-bold text-slate-900 outline-none focus:border-blue-300"
-                          disabled={duplicate}
+                          disabled={readonly}
                         />
                       </label>
                     </div>
@@ -228,7 +261,7 @@ export default function MoodleImportView({ tasks, cats, timetable, onImport }: M
                         value={candidate.categoryId || ""}
                         onChange={(event) => updateCandidate(candidate.uid, { categoryId: event.target.value || null })}
                         className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-bold text-slate-900 outline-none focus:border-blue-300"
-                        disabled={duplicate}
+                        disabled={readonly}
                       >
                         <option value="">未分類</option>
                         {cats.map((category) => (
@@ -248,7 +281,7 @@ export default function MoodleImportView({ tasks, cats, timetable, onImport }: M
                         onChange={(event) => updateCandidate(candidate.uid, { url: event.target.value })}
                         placeholder="https://..."
                         className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none focus:border-blue-300"
-                        disabled={duplicate}
+                        disabled={readonly}
                       />
                     </label>
                     <label className="block">
@@ -258,7 +291,7 @@ export default function MoodleImportView({ tasks, cats, timetable, onImport }: M
                         onChange={(event) => updateCandidate(candidate.uid, { description: event.target.value })}
                         rows={3}
                         className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-300"
-                        disabled={duplicate}
+                        disabled={readonly}
                       />
                     </label>
                   </div>

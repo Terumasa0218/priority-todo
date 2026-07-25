@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { DEFAULT_APP_SETTINGS, DEFAULT_CATS, DEFAULT_TIMETABLE_CONFIG, FILTERS, WEEKDAY_LABELS } from "@/lib/constants";
 import { expandRecurring, remaining, uid } from "@/lib/utils";
 import { AppSettings, Category, CourseTaskTemplate, Task, TimetableConfig, TimetableItem, TouchDragState } from "@/lib/types";
-import { MoodleImportCandidate } from "@/lib/moodleIcs";
+import { getMoodleImportStatus, MoodleImportCandidate } from "@/lib/moodleIcs";
 import { IconArchive, IconCalendar, IconGrid, IconLink, IconList, IconPlus } from "@/components/Icons";
 import TaskRow from "@/components/TaskRow";
 import TaskForm from "@/components/TaskForm";
@@ -106,6 +106,59 @@ const withTaskDefaults = (task: Task): Task => ({
   startDate: task.startDate ?? null,
   startOffsetDays: task.startOffsetDays ?? null,
 });
+
+const createTaskFromMoodleCandidate = (candidate: MoodleImportCandidate): Task => ({
+  id: uid(),
+  title: candidate.title,
+  kind: "todo",
+  deadline: candidate.deadline,
+  category: candidate.categoryId || "default",
+  priority: false,
+  startDate: null,
+  startOffsetDays: 3,
+  recurrence: "none",
+  repeatCount: null,
+  repeatEndDate: null,
+  reminder: "1day",
+  memo: candidate.description,
+  url: candidate.url,
+  moodleUid: candidate.uid,
+  moodleLastModified: candidate.lastModified,
+  moodleCategoryCode: candidate.timetableCode,
+  moodleSourceHash: candidate.sourceHash,
+  completed: false,
+  completedAt: null,
+  completedOccurrences: [],
+  order: null,
+  createdAt: new Date().toISOString(),
+});
+
+const updateTaskFromMoodleCandidate = (task: Task, candidate: MoodleImportCandidate): Task => {
+  const metadata = {
+    moodleUid: candidate.uid,
+    moodleLastModified: candidate.lastModified,
+    moodleCategoryCode: candidate.timetableCode,
+    moodleSourceHash: candidate.sourceHash,
+  };
+
+  if (task.moodleSourceHash === candidate.sourceHash) {
+    return {
+      ...task,
+      ...metadata,
+      category: task.category === "default" && candidate.categoryId ? candidate.categoryId : task.category,
+    };
+  }
+
+  return {
+    ...task,
+    title: candidate.title,
+    deadline: candidate.deadline,
+    category: candidate.categoryId || task.category || "default",
+    memo: candidate.description,
+    url: candidate.url,
+    ...metadata,
+  };
+};
 
 const buildTaskFromCourseTemplate = (
   item: TimetableItem,
@@ -564,35 +617,30 @@ export default function Home() {
       }
 
       persistTasks((prev) => {
-        const existingUids = new Set(prev.map((task) => task.moodleUid).filter(Boolean));
-        const imported = candidates
-          .filter((candidate) => !existingUids.has(candidate.uid))
-          .map((candidate) => ({
-            id: uid(),
-            title: candidate.title,
-            kind: "todo" as const,
-            deadline: candidate.deadline,
-            category: candidate.categoryId || "default",
-            priority: false,
-            startDate: null,
-            startOffsetDays: 3,
-            recurrence: "none" as const,
-            repeatCount: null,
-            repeatEndDate: null,
-            reminder: "1day",
-            memo: candidate.description,
-            url: candidate.url,
-            moodleUid: candidate.uid,
-            moodleLastModified: candidate.lastModified,
-            moodleCategoryCode: candidate.timetableCode,
-            moodleSourceHash: candidate.sourceHash,
-            completed: false,
-            completedAt: null,
-            completedOccurrences: [],
-            order: null,
-            createdAt: new Date().toISOString(),
-          }));
-        return imported.length > 0 ? [...prev, ...imported] : prev;
+        const existingByUid = new Map<string, Task>();
+        for (const task of prev) {
+          if (task.moodleUid) existingByUid.set(task.moodleUid, task);
+        }
+        const updates = new Map<string, MoodleImportCandidate>();
+        const imported: Task[] = [];
+
+        for (const candidate of candidates) {
+          const existingTask = existingByUid.get(candidate.uid);
+          const status = getMoodleImportStatus(candidate, existingTask);
+          if (status === "new") {
+            imported.push(createTaskFromMoodleCandidate(candidate));
+          } else if (status === "update" && existingTask) {
+            updates.set(existingTask.id, candidate);
+          }
+        }
+
+        if (imported.length === 0 && updates.size === 0) return prev;
+
+        const updated = prev.map((task) => {
+          const candidate = updates.get(task.id);
+          return candidate ? updateTaskFromMoodleCandidate(task, candidate) : task;
+        });
+        return [...updated, ...imported];
       }, { timetable: nextTimetable });
     },
     [cats, persistTasks, timetable]
