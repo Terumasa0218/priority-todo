@@ -1,6 +1,7 @@
-import { Category, TimetableItem } from "./types";
+import { Category, Task, TimetableItem } from "./types";
 
 export type MoodleImportKind = "assignment" | "quiz" | "survey" | "other";
+export type MoodleImportStatus = "new" | "update" | "unchanged";
 
 export interface MoodleImportCandidate {
   uid: string;
@@ -172,6 +173,36 @@ const sourceHash = (event: RawEvent) => {
     hash = (hash * 33) ^ source.charCodeAt(i);
   }
   return (hash >>> 0).toString(36);
+};
+
+export const hasMoodleCandidateChanges = (candidate: MoodleImportCandidate, task: Task): boolean => {
+  const nextCategory = candidate.categoryId || "default";
+
+  if (task.moodleSourceHash) {
+    if (task.moodleSourceHash !== candidate.sourceHash) return true;
+    return (
+      (task.category === "default" && nextCategory !== "default") ||
+      (!task.moodleCategoryCode && !!candidate.timetableCode)
+    );
+  }
+
+  if (task.moodleLastModified && candidate.lastModified && task.moodleLastModified !== candidate.lastModified) {
+    return true;
+  }
+
+  return (
+    task.title !== candidate.title ||
+    task.deadline !== candidate.deadline ||
+    task.category !== nextCategory ||
+    task.memo !== candidate.description ||
+    task.url !== candidate.url ||
+    task.moodleCategoryCode !== candidate.timetableCode
+  );
+};
+
+export const getMoodleImportStatus = (candidate: MoodleImportCandidate, existingTask?: Task): MoodleImportStatus => {
+  if (!existingTask) return "new";
+  return hasMoodleCandidateChanges(candidate, existingTask) ? "update" : "unchanged";
 };
 
 export const parseMoodleIcs = (ics: string, timetable: TimetableItem[], cats: Category[]): MoodleImportCandidate[] => {
