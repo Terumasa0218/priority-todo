@@ -1,262 +1,214 @@
 "use client";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Task, Category } from "@/lib/types";
+
+import React, { useMemo, useRef, useState } from "react";
+import { Category, Task } from "@/lib/types";
 import { DAY } from "@/lib/constants";
 import { holidayName } from "@/lib/holidays";
 import { taskDisplayTitle } from "@/lib/utils";
-import { IconChevL, IconChevR, IconX, IconPlus, IconFlag, IconRepeat } from "./Icons";
-import EmptyState from "./ui/EmptyState";
+import { IconChevL, IconChevR, IconFlag, IconPlus, IconRepeat, IconX } from "./Icons";
 
 interface CalendarViewProps {
   tasks: Task[];
   cats: Category[];
   month: Date;
-  setMonth: (d: Date) => void;
-  onAddClick: (d: Date) => void;
-  onEditTask: (t: Task) => void;
+  setMonth: (date: Date) => void;
+  onAddClick: (date: Date) => void;
+  onEditTask: (task: Task) => void;
   selectedDate: Date | null;
-  setSelectedDate: (d: Date | null) => void;
+  setSelectedDate: (date: Date | null) => void;
 }
 
+const fmtTime = (iso: string) => {
+  const date = new Date(iso);
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+};
+
 export default function CalendarView({ tasks, cats, month, setMonth, onAddClick, onEditTask, selectedDate, setSelectedDate }: CalendarViewProps) {
-  const y = month.getFullYear(), m = month.getMonth();
-  const first = new Date(y, m, 1).getDay();
-  const total = new Date(y, m + 1, 0).getDate();
+  const year = month.getFullYear();
+  const monthIndex = month.getMonth();
+  const firstWeekday = new Date(year, monthIndex, 1).getDay();
+  const totalDays = new Date(year, monthIndex + 1, 0).getDate();
   const today = new Date();
   const cells: (number | null)[] = [];
-  for (let i = 0; i < first; i++) cells.push(null);
-  for (let d = 1; d <= total; d++) cells.push(d);
+  for (let index = 0; index < firstWeekday; index += 1) cells.push(null);
+  for (let day = 1; day <= totalDays; day += 1) cells.push(day);
   while (cells.length % 7 !== 0) cells.push(null);
-  const monthTaskCount = useMemo(
-    () => tasks.filter((t) => {
-      const dd = new Date(t.deadline);
-      return dd.getFullYear() === y && dd.getMonth() === m;
-    }).length,
-    [m, tasks, y]
-  );
 
-  const tasksOn = (day: number) =>
-    tasks.filter((t) => {
-      const dd = new Date(t.deadline);
-      return dd.getFullYear() === y && dd.getMonth() === m && dd.getDate() === day;
+  const tasksByDay = useMemo(() => {
+    const next = new Map<number, Task[]>();
+    tasks.forEach((task) => {
+      const date = new Date(task.deadline);
+      if (date.getFullYear() !== year || date.getMonth() !== monthIndex) return;
+      const dayTasks = next.get(date.getDate()) || [];
+      dayTasks.push(task);
+      next.set(date.getDate(), dayTasks);
     });
+    next.forEach((dayTasks) => dayTasks.sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime()));
+    return next;
+  }, [monthIndex, tasks, year]);
 
-  const isToday = (day: number | null) =>
-    day !== null && today.getFullYear() === y && today.getMonth() === m && today.getDate() === day;
+  const monthTaskCount = useMemo(() => Array.from(tasksByDay.values()).reduce((count, dayTasks) => count + dayTasks.length, 0), [tasksByDay]);
+  const selectedTasks = useMemo(() => {
+    if (!selectedDate) return [];
+    return tasks.filter((task) => {
+      const date = new Date(task.deadline);
+      return date.getFullYear() === selectedDate.getFullYear() && date.getMonth() === selectedDate.getMonth() && date.getDate() === selectedDate.getDate();
+    }).sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
+  }, [selectedDate, tasks]);
 
-  const isSel = (day: number | null) => {
-    if (!day || !selectedDate) return false;
-    return selectedDate.getFullYear() === y && selectedDate.getMonth() === m && selectedDate.getDate() === day;
-  };
+  const selectedRow = selectedDate && selectedDate.getFullYear() === year && selectedDate.getMonth() === monthIndex
+    ? Math.floor((firstWeekday + selectedDate.getDate() - 1) / 7)
+    : -1;
+  const shouldLiftMonth = selectedRow >= 3;
+  const selectedLabel = selectedDate ? `${selectedDate.getFullYear()}年${selectedDate.getMonth() + 1}月${selectedDate.getDate()}日(${DAY[selectedDate.getDay()]})` : "";
+  const selectedHoliday = selectedDate ? holidayName(selectedDate) : null;
 
-  const selTasks = selectedDate
-    ? tasks
-        .filter((t) => {
-          const dd = new Date(t.deadline);
-          return dd.getFullYear() === selectedDate.getFullYear() && dd.getMonth() === selectedDate.getMonth() && dd.getDate() === selectedDate.getDate();
-        })
-        .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
-    : [];
-
-  const fmtSel = selectedDate
-    ? `${selectedDate.getFullYear()}年${selectedDate.getMonth() + 1}月${selectedDate.getDate()}日(${DAY[selectedDate.getDay()]})`
-    : "";
-  const selHoliday = selectedDate ? holidayName(selectedDate) : null;
-
-  const detailsRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!selectedDate) return;
-    detailsRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [selectedDate]);
-
-  const fmtTime = (d: string) => {
-    const o = new Date(d);
-    return `${String(o.getHours()).padStart(2, "0")}:${String(o.getMinutes()).padStart(2, "0")}`;
-  };
-
-  // 横スワイプで月を切り替える
-  const swipeStartX = useRef<number | null>(null);
-  const swipeStartY = useRef<number | null>(null);
   const [dragOffset, setDragOffset] = useState(0);
-  const [isDraggingMonth, setIsDraggingMonth] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const [monthMotion, setMonthMotion] = useState<"prev" | "next" | null>(null);
+  const startX = useRef<number | null>(null);
+  const startY = useRef<number | null>(null);
 
   const changeMonth = (direction: -1 | 1) => {
     setMonthMotion(direction > 0 ? "next" : "prev");
-    setMonth(new Date(y, m + direction));
+    setSelectedDate(null);
+    setMonth(new Date(year, monthIndex + direction, 1));
     window.setTimeout(() => setMonthMotion(null), 280);
   };
 
-  const onTouchStart = (e: React.TouchEvent) => {
-    swipeStartX.current = e.touches[0].clientX;
-    swipeStartY.current = e.touches[0].clientY;
-    setIsDraggingMonth(true);
+  const onTouchStart = (event: React.TouchEvent) => {
+    startX.current = event.touches[0].clientX;
+    startY.current = event.touches[0].clientY;
+    setDragging(true);
   };
-  const onTouchMove = (e: React.TouchEvent) => {
-    if (swipeStartX.current == null || swipeStartY.current == null) return;
-    const dx = e.touches[0].clientX - swipeStartX.current;
-    const dy = e.touches[0].clientY - swipeStartY.current;
-    if (Math.abs(dx) < 10 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
-    setDragOffset(Math.max(-72, Math.min(72, dx * 0.35)));
+  const onTouchMove = (event: React.TouchEvent) => {
+    if (startX.current === null || startY.current === null) return;
+    const xDistance = event.touches[0].clientX - startX.current;
+    const yDistance = event.touches[0].clientY - startY.current;
+    if (Math.abs(xDistance) < 10 || Math.abs(xDistance) < Math.abs(yDistance) * 1.4) return;
+    setDragOffset(Math.max(-72, Math.min(72, xDistance * 0.35)));
   };
-  const onTouchEnd = (e: React.TouchEvent) => {
-    if (swipeStartX.current == null || swipeStartY.current == null) return;
-    const dx = e.changedTouches[0].clientX - swipeStartX.current;
-    const dy = e.changedTouches[0].clientY - swipeStartY.current;
-    swipeStartX.current = null;
-    swipeStartY.current = null;
-    setIsDraggingMonth(false);
+  const onTouchEnd = (event: React.TouchEvent) => {
+    if (startX.current === null || startY.current === null) return;
+    const xDistance = event.changedTouches[0].clientX - startX.current;
+    const yDistance = event.changedTouches[0].clientY - startY.current;
+    startX.current = null;
+    startY.current = null;
+    setDragging(false);
     setDragOffset(0);
-    // 横方向が縦方向の 2 倍以上で 50px 超えたら月送り
-    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 2) {
-      changeMonth(dx < 0 ? 1 : -1);
-    }
+    if (Math.abs(xDistance) > 50 && Math.abs(xDistance) > Math.abs(yDistance) * 2) changeMonth(xDistance < 0 ? 1 : -1);
   };
 
+  const isSelected = (day: number | null) => Boolean(day && selectedDate && selectedDate.getFullYear() === year && selectedDate.getMonth() === monthIndex && selectedDate.getDate() === day);
+  const isToday = (day: number | null) => Boolean(day && today.getFullYear() === year && today.getMonth() === monthIndex && today.getDate() === day);
+
   return (
-    <div className={selectedDate ? "pb-[56dvh]" : ""}>
-      <div className="mx-4 mb-3 flex items-center justify-between gap-3">
-        <div>
-          <div className="text-lg font-bold tracking-normal text-slate-950">{y}年 {m + 1}月</div>
-          <div className="mt-0.5 text-xs font-medium text-slate-400">締切・予定 {monthTaskCount}件</div>
+    <div className="relative overflow-hidden pb-3">
+      <div className={`transition-transform duration-200 ease-out ${shouldLiftMonth ? "-translate-y-14" : "translate-y-0"}`}>
+        <div className="mx-5 mb-3 flex items-end justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-bold text-slate-950">{year}年 {monthIndex + 1}月</h2>
+            <p className="mt-1 text-xs font-medium text-slate-500">締切・予定 {monthTaskCount}件</p>
+          </div>
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={() => changeMonth(-1)} className="grid h-10 w-10 place-items-center rounded-full text-slate-600 active:bg-slate-100" aria-label="前の月"><IconChevL size={19} /></button>
+            <button type="button" onClick={() => changeMonth(1)} className="grid h-10 w-10 place-items-center rounded-full text-slate-600 active:bg-slate-100" aria-label="次の月"><IconChevR size={19} /></button>
+          </div>
         </div>
-        <div className="inline-flex items-center rounded-full border border-white/70 bg-white/72 p-1 shadow-[0_12px_28px_rgba(27,39,75,0.08)] backdrop-blur-xl">
-          <button onClick={() => changeMonth(-1)} className="grid min-h-10 min-w-10 place-items-center rounded-full text-slate-500 transition active:scale-95 hover:bg-slate-100" aria-label="前の月"><IconChevL size={16} /></button>
-          <button onClick={() => changeMonth(1)} className="grid min-h-10 min-w-10 place-items-center rounded-full text-slate-500 transition active:scale-95 hover:bg-slate-100" aria-label="次の月"><IconChevR size={16} /></button>
-        </div>
-      </div>
-      <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={() => { setIsDraggingMonth(false); setDragOffset(0); }}>
-      <div
-        className={`calendar-month-panel mx-4 overflow-hidden rounded-[22px] border border-white/80 bg-white/80 shadow-[0_18px_42px_rgba(27,39,75,0.08)] ${monthMotion ? `calendar-month-${monthMotion}` : ""}`}
-        style={{
-          "--calendar-drag-x": `${dragOffset}px`,
-          "--calendar-drag-opacity": String(1 - Math.min(Math.abs(dragOffset) / 220, 0.22)),
-          transition: isDraggingMonth ? "none" : undefined,
-        } as React.CSSProperties}
-      >
-      <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50/72">
-        {DAY.map((d, i) => (
-          <div key={d} className={`text-center text-xs font-bold py-2.5 ${i === 0 ? "text-rose-400" : i === 6 ? "text-sky-500" : "text-slate-400"}`}>{d}</div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 gap-px bg-slate-100/70">
-        {cells.map((day, idx) => {
-          const dt = day ? tasksOn(day) : [];
-          const sel = isSel(day);
-          const tod = isToday(day);
-          const dow = day != null ? new Date(y, m, day).getDay() : -1;
-          const hName = day != null ? holidayName(new Date(y, m, day)) : null;
-          const isRed = dow === 0 || hName !== null;
-          const isBlue = dow === 6;
-          const dayColor = tod || sel ? "" : isRed ? "text-rose-500" : isBlue ? "text-sky-600" : "text-slate-700";
-          return (
-            <button
-              key={idx}
-              type="button"
-              onClick={() => day && setSelectedDate(new Date(y, m, day))}
-              disabled={!day}
-              className={`calendar-day-cell min-h-[84px] p-1.5 text-left transition-colors sm:min-h-[106px] ${day ? "cursor-pointer active:bg-slate-50" : "cursor-default bg-slate-50/45"}`}
-              data-selected={sel || undefined}
-              data-today={tod || undefined}
-            >
-              {day && (
-                <>
-                  <div className="mb-1 flex min-h-8 flex-col items-center gap-0.5">
-                    <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-[12px] font-bold tabular-nums ${tod ? "bg-blue-500 text-white shadow-[0_8px_16px_rgba(22,136,242,0.24)]" : sel ? "bg-slate-900 text-white" : dayColor}`}>{day}</span>
-                    {hName && <span className="max-w-full truncate text-[9px] font-medium leading-none text-rose-500" title={hName}>{hName.length > 4 ? `${hName.slice(0, 3)}…` : hName}</span>}
-                  </div>
-                  <div className="space-y-1">
-                    {dt.slice(0, 2).map((t) => {
-                      const tc = cats.find((c) => c.id === t.category);
-                      const color = t.priority ? "#E11D48" : (tc?.color || "#889096");
-                      const isEvent = t.kind === "event";
-                      return (
-                        <div
-                          key={t.id}
-                          className={`calendar-task-bar ${isEvent ? "calendar-task-bar-event" : ""}`}
-                          style={{ "--task-color": color } as React.CSSProperties}
-                        >
-                          <span className="calendar-task-dot" />
-                          <span className="truncate">{taskDisplayTitle(t)}</span>
+
+        <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={() => { setDragging(false); setDragOffset(0); }}>
+          <div
+            className={`calendar-month-panel mx-4 overflow-hidden rounded-[18px] border border-slate-200/80 bg-white shadow-[0_12px_32px_rgba(27,39,75,0.06)] ${monthMotion ? `calendar-month-${monthMotion}` : ""}`}
+            style={{
+              "--calendar-drag-x": `${dragOffset}px`,
+              "--calendar-drag-opacity": String(1 - Math.min(Math.abs(dragOffset) / 220, 0.22)),
+              transition: dragging ? "none" : undefined,
+            } as React.CSSProperties}
+          >
+            <div className="grid grid-cols-7 border-b border-slate-100 bg-slate-50/70">
+              {DAY.map((label, index) => <div key={label} className={`py-2 text-center text-xs font-bold ${index === 0 ? "text-rose-400" : index === 6 ? "text-sky-500" : "text-slate-400"}`}>{label}</div>)}
+            </div>
+            <div className="grid grid-cols-7 gap-px bg-slate-100/80">
+              {cells.map((day, index) => {
+                const dayTasks = day ? tasksByDay.get(day) || [] : [];
+                const selected = isSelected(day);
+                const currentDay = isToday(day);
+                const dayDate = day ? new Date(year, monthIndex, day) : null;
+                const holiday = dayDate ? holidayName(dayDate) : null;
+                const weekday = dayDate?.getDay() ?? -1;
+                const dayColor = currentDay || selected ? "" : weekday === 0 || holiday ? "text-rose-500" : weekday === 6 ? "text-sky-600" : "text-slate-700";
+                return (
+                  <button
+                    key={`${year}-${monthIndex}-${index}`}
+                    type="button"
+                    disabled={!day}
+                    onClick={() => day && setSelectedDate(new Date(year, monthIndex, day))}
+                    className={`calendar-day-cell min-h-[72px] p-1 text-left sm:min-h-[88px] ${day ? "active:bg-slate-50" : "cursor-default bg-slate-50/40"}`}
+                    data-selected={selected || undefined}
+                    data-today={currentDay || undefined}
+                  >
+                    {day && (
+                      <>
+                        <div className="mb-1 flex items-center justify-center">
+                          <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${currentDay ? "bg-[#0B7DEE] text-white" : selected ? "bg-slate-900 text-white" : dayColor}`}>{day}</span>
                         </div>
-                      );
-                    })}
-                    {dt.length > 2 && <div className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-400">+{dt.length - 2}件</div>}
-                  </div>
-                </>
-              )}
-            </button>
-          );
-        })}
+                        <div className="space-y-1">
+                          {dayTasks.slice(0, 2).map((task) => {
+                            const category = cats.find((item) => item.id === task.category);
+                            const color = task.priority ? "#E11D48" : category?.color || "#889096";
+                            return (
+                              <div key={task.id} className="calendar-task-bar" style={{ "--task-color": color } as React.CSSProperties}>
+                                <span className="calendar-task-dot" />
+                                <span className="truncate">{taskDisplayTitle(task)}</span>
+                              </div>
+                            );
+                          })}
+                          {dayTasks.length > 2 && <div className="px-1 text-center text-[9px] font-bold text-slate-400">+{dayTasks.length - 2}</div>}
+                        </div>
+                      </>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       </div>
-      </div>
-      </div>
+
       {selectedDate && (
-        <div
-          ref={detailsRef}
-          className="mt-3 mx-4 bg-white rounded-3xl shadow-sm sheet-slide-up flex flex-col border border-slate-100 overflow-hidden"
-          role="region"
-          aria-live="polite"
-        >
-            <div className="flex items-center justify-center pt-2 pb-1">
-              <div className="w-10 h-1 rounded-full bg-slate-200" />
+        <section className="sheet-slide-up fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+56px)] z-40 mx-auto max-h-[34dvh] w-full max-w-lg overflow-hidden rounded-t-[24px] border border-slate-200/80 bg-white shadow-[0_-16px_42px_rgba(27,39,75,0.14)]" aria-live="polite">
+          <div className="flex justify-center pb-1 pt-2"><span className="h-1 w-10 rounded-full bg-slate-200" /></div>
+          <div className="flex items-start justify-between gap-3 px-5 pb-3">
+            <div className="min-w-0">
+              <h3 className="text-base font-bold text-slate-950">{selectedLabel}</h3>
+              {selectedHoliday && <p className="mt-0.5 text-xs font-medium text-rose-500">{selectedHoliday}</p>}
             </div>
-            <div className="px-4 pb-3 flex items-center justify-between">
-              <div className="flex items-baseline gap-2 min-w-0">
-                <span className="text-sm font-semibold text-gray-900">{fmtSel}</span>
-                {selHoliday && <span className="text-[11px] text-rose-500 font-medium truncate">{selHoliday}</span>}
+            <button type="button" onClick={() => setSelectedDate(null)} className="grid h-8 w-8 place-items-center rounded-full text-slate-400 active:bg-slate-100" aria-label="閉じる"><IconX size={18} /></button>
+          </div>
+          <div className="max-h-[calc(34dvh-120px)] overflow-y-auto border-t border-slate-100">
+            {selectedTasks.length === 0 ? (
+              <div className="px-5 py-5 text-center">
+                <p className="text-sm font-semibold text-slate-700">予定はありません</p>
+                <p className="mt-1 text-xs text-slate-500">この日に課題を追加できます。</p>
               </div>
-              <button onClick={() => setSelectedDate(null)} aria-label="閉じる" className="text-gray-400 hover:text-gray-600 p-1.5 -mr-1.5">
-                <IconX size={16} />
-              </button>
-            </div>
-            <div className="max-h-[38dvh] overflow-y-auto">
-              {selTasks.length === 0 ? (
-                <EmptyState title="予定はありません" description="この日は余白です。追加して整えましょう。" className="!border-none !shadow-none !bg-transparent py-7" />
-              ) : (
-                selTasks.map((t) => {
-                  const tc = cats.find((c) => c.id === t.category) || { label: "未分類", color: "#889096" };
-                  const hasMemo = t.memo && t.memo.trim();
-                  const hasUrl = t.url && t.url.trim();
-                  const isEvent = t.kind === "event";
-                  const timeLabel = isEvent && t.endTime
-                    ? `${fmtTime(t.deadline)}–${fmtTime(t.endTime)}`
-                    : fmtTime(t.deadline);
-                  return (
-                    <div key={t.id} onClick={() => onEditTask(t)}
-                      className="flex items-start gap-3 px-4 py-3 border-b border-gray-50 last:border-b-0 hover:bg-gray-50 cursor-pointer transition-colors">
-                      <div className={`flex-shrink-0 ${isEvent && t.endTime ? "w-20" : "w-12"} text-right mt-0.5`}>
-                        <div className="text-xs font-medium text-gray-500 tabular-nums">{timeLabel}</div>
-                      </div>
-                      <div className="w-1 self-stretch rounded-full flex-shrink-0" style={{ backgroundColor: t.priority ? "#CD2B31" : tc.color, minHeight: "24px" }} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          {t.priority && <IconFlag filled size={11} />}
-                          <span className="text-sm text-gray-900 font-medium truncate">{taskDisplayTitle(t)}</span>
-                          {t.recurrence && t.recurrence !== "none" && <IconRepeat size={11} stroke="#889096" />}
-                          {isEvent && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-sky-100 text-sky-700">予定</span>}
-                        </div>
-                        <span className="text-[11px] text-gray-400">{tc.label}</span>
-                        {hasMemo && (
-                          <div className="mt-1 text-[11px] text-gray-400 leading-relaxed"
-                            style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } as React.CSSProperties}>
-                            {t.memo}
-                          </div>
-                        )}
-                        {hasUrl && <div className="mt-0.5 text-[10px] text-blue-400 truncate">{t.url.replace(/^https?:\/\//, "").slice(0, 35)}</div>}
-                      </div>
-                      <IconChevR size={14} stroke="#ccc" className="mt-0.5" />
-                    </div>
-                  );
-                })
-              )}
-            </div>
-            <button onClick={() => onAddClick(selectedDate)}
-              className="flex items-center justify-center gap-2 w-full px-4 py-3.5 text-sm font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 transition-colors border-t border-slate-100">
-              <IconPlus size={15} />この日に課題を追加
-            </button>
-        </div>
+            ) : selectedTasks.map((task) => {
+              const category = cats.find((item) => item.id === task.category) || { label: "未分類", color: "#889096" };
+              const eventTime = task.kind === "event" && task.endTime ? `${fmtTime(task.deadline)}-${fmtTime(task.endTime)}` : fmtTime(task.deadline);
+              return (
+                <button key={task.id} type="button" onClick={() => onEditTask(task)} className="flex w-full items-center gap-3 border-b border-slate-100 px-5 py-3 text-left active:bg-slate-50">
+                  <span className="w-11 flex-none text-right text-xs font-semibold tabular-nums text-slate-500">{eventTime}</span>
+                  <span className="h-8 w-1 rounded-full" style={{ backgroundColor: task.priority ? "#E11D48" : category.color }} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5"><span className="truncate text-sm font-semibold text-slate-950">{taskDisplayTitle(task)}</span>{task.priority && <IconFlag size={12} filled />}{task.recurrence !== "none" && <IconRepeat size={12} stroke="#94A3B8" />}</span>
+                    <span className="mt-0.5 block truncate text-xs text-slate-500">{category.label}</span>
+                  </span>
+                  <IconChevR size={16} stroke="#94A3B8" />
+                </button>
+              );
+            })}
+          </div>
+          <button type="button" onClick={() => onAddClick(selectedDate)} className="flex w-full items-center justify-center gap-2 border-t border-slate-100 px-5 py-3 text-sm font-bold text-[#0B7DEE] active:bg-blue-50"><IconPlus size={17} />この日に課題を追加</button>
+        </section>
       )}
     </div>
   );

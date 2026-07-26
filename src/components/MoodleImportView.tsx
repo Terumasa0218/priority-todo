@@ -74,6 +74,8 @@ export default function MoodleImportView({ tasks, cats, timetable, onImport }: M
   const [calendarUrl, setCalendarUrl] = useState("");
   const [urlSettings, setUrlSettings] = useState<MoodleCalendarUrlSettings | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [showUrlSettings, setShowUrlSettings] = useState(false);
+  const [expandedCandidateUid, setExpandedCandidateUid] = useState<string | null>(null);
 
   useEffect(() => {
     const settings = loadMoodleCalendarUrlSettings();
@@ -140,6 +142,7 @@ export default function MoodleImportView({ tasks, cats, timetable, onImport }: M
       saveMoodleCalendarUrlSettings(next);
       setCalendarUrl(url);
       setUrlSettings(next);
+      setShowUrlSettings(false);
       setMessage("MoodleカレンダーURLをこの端末に保存しました");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "URLを保存できませんでした");
@@ -222,43 +225,59 @@ export default function MoodleImportView({ tasks, cats, timetable, onImport }: M
 
   return (
     <div className="px-4 pt-4 pb-28 space-y-4">
-      <section className="rounded-[28px] border border-white/80 bg-white p-4 shadow-[0_18px_48px_rgba(27,39,75,0.08)]">
+      <section className="overflow-hidden rounded-[24px] border border-white/80 bg-white shadow-[0_18px_48px_rgba(27,39,75,0.08)]">
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-base font-black text-slate-950">Moodleカレンダー同期</h2>
-            <p className="mt-1 text-xs leading-relaxed text-slate-500">URL同期または .ics ファイルから、課題候補を確認して反映します。</p>
+          <div className="px-4 pb-2 pt-4">
+            <h2 className="text-base font-black text-slate-950">Moodle連携</h2>
+            <p className="mt-1 text-xs leading-relaxed text-slate-500">カレンダーから課題候補を読み込み、追加・更新を反映します。</p>
           </div>
-          <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-600">β</span>
+          <span className="mr-4 mt-4 rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-600">β</span>
         </div>
-        <div className="mt-4 rounded-3xl border border-slate-100 bg-slate-50/70 p-3">
-          <label className="block">
-            <span className="text-xs font-bold text-slate-700">MoodleカレンダーURL</span>
-            <input
-              type="url"
-              inputMode="url"
-              autoComplete="off"
-              value={calendarUrl}
-              onChange={(event) => setCalendarUrl(event.target.value)}
-              placeholder="https://..."
-              className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-300"
-            />
+        <div className="border-t border-slate-100 px-4 py-4">
+          {urlSettings?.url && !showUrlSettings ? (
+            <div className="rounded-2xl bg-slate-50 px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-slate-900">カレンダーURLを保存済み</p>
+                  <p className="mt-1 text-xs text-slate-500">{formatSyncTime(urlSettings.lastSyncedAt)}</p>
+                </div>
+                <button type="button" onClick={() => void syncFromCalendarUrl()} disabled={isSyncing} className="shrink-0 rounded-full bg-[#0B7DEE] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{isSyncing ? "同期中..." : "今すぐ同期"}</button>
+              </div>
+              <button type="button" onClick={() => setShowUrlSettings(true)} className="mt-3 text-xs font-semibold text-[#0B7DEE]">URLを変更</button>
+            </div>
+          ) : (
+            <div>
+              <label className="block">
+                <span className="text-sm font-semibold text-slate-900">MoodleカレンダーURL</span>
+                <input
+                  type="url"
+                  inputMode="url"
+                  autoComplete="off"
+                  value={calendarUrl}
+                  onChange={(event) => setCalendarUrl(event.target.value)}
+                  placeholder="https://..."
+                  className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-base text-slate-900 outline-none focus:border-blue-300"
+                />
+              </label>
+              <p className="mt-2 text-xs leading-relaxed text-slate-500">URLはこの端末だけに保存します。カレンダーを読み取る情報を含むため、他人に共有しないでください。</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" onClick={saveCalendarUrl} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">URLを保存</button>
+                <button type="button" onClick={() => void syncFromCalendarUrl()} disabled={!calendarUrl.trim() || isSyncing} className="rounded-full bg-[#0B7DEE] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{isSyncing ? "同期中..." : "保存して同期"}</button>
+                {urlSettings?.url && <button type="button" onClick={() => { clearCalendarUrl(); setShowUrlSettings(false); }} className="rounded-full px-3 py-2 text-xs font-bold text-slate-500">URLを削除</button>}
+              </div>
+            </div>
+          )}
+          {message && <p className="mt-3 text-xs font-medium text-slate-600">{message}</p>}
+        </div>
+        <div className="border-t border-slate-100 px-4 py-3">
+          <label className="flex cursor-pointer items-center justify-between gap-3 text-left">
+            <span><span className="block text-sm font-semibold text-slate-900">.icsファイルから取り込む</span><span className="mt-0.5 block text-xs text-slate-500">URL同期できない場合はこちらを使います</span></span>
+            <span className="rounded-full bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">選択</span>
+            <input type="file" accept=".ics,text/calendar" className="sr-only" onChange={(event) => void handleFile(event.target.files?.[0])} />
           </label>
-          <p className="mt-2 text-[10px] leading-relaxed text-slate-500">このURLにはカレンダーを読み取る情報が含まれる場合があります。URLはこの端末だけに保存され、クラウド同期しません。</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" onClick={saveCalendarUrl} className="rounded-full bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm ring-1 ring-slate-200">URLを保存</button>
-            <button type="button" onClick={() => void syncFromCalendarUrl()} disabled={!calendarUrl.trim() || isSyncing} className="rounded-full bg-[#007AFF] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{isSyncing ? "同期中..." : "今すぐ同期"}</button>
-            {urlSettings?.url && <button type="button" onClick={clearCalendarUrl} className="rounded-full px-3 py-2 text-xs font-bold text-slate-500">URLを削除</button>}
-          </div>
-          <p className="mt-2 text-[10px] text-slate-400">{formatSyncTime(urlSettings?.lastSyncedAt || null)}</p>
+          {fileName && <p className="mt-2 text-[11px] text-slate-400">選択中: {fileName}</p>}
+          {!message && urlSettings?.url && <p className="mt-2 text-[11px] text-slate-400">{formatSyncTime(urlSettings.lastSyncedAt)}</p>}
         </div>
-        <div className="my-4 flex items-center gap-3 text-[10px] font-bold text-slate-400 before:h-px before:flex-1 before:bg-slate-100 after:h-px after:flex-1 after:bg-slate-100">または</div>
-        <label className="flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-3xl border border-dashed border-blue-200 bg-blue-50/50 px-4 py-5 text-center active:scale-[0.99] transition-transform">
-          <span className="text-sm font-bold text-blue-600">.icsファイルを選択</span>
-          <span className="mt-1 text-[11px] text-slate-500">URL同期できない大学でも、同じ確認画面で取り込めます</span>
-          <input type="file" accept=".ics,text/calendar" className="sr-only" onChange={(e) => void handleFile(e.target.files?.[0])} />
-        </label>
-        {fileName && <p className="mt-2 text-[11px] text-slate-400">選択中: {fileName}</p>}
-        {message && <p className="mt-2 text-xs font-medium text-slate-600">{message}</p>}
       </section>
 
       {candidates.length > 0 && (
@@ -296,6 +315,7 @@ export default function MoodleImportView({ tasks, cats, timetable, onImport }: M
               const checked = selected.has(candidate.uid) && !readonly;
               const dateValue = toLocalDate(candidate.deadline);
               const timeValue = toLocalTime(candidate.deadline);
+              const expanded = expandedCandidateUid === candidate.uid;
               return (
                 <article
                   key={candidate.uid}
@@ -320,10 +340,12 @@ export default function MoodleImportView({ tasks, cats, timetable, onImport }: M
                         {cat && <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: cat.color }}>自動分類: {cat.label}</span>}
                         {!cat && candidate.timetableCode && <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-600">未紐付け {candidate.timetableCode}</span>}
                       </div>
-                      <p className="mt-1 text-[11px] text-slate-400">締切候補から最も早い日時を採用: {formatDeadline(candidate.deadline)}</p>
+                      <p className="mt-1 truncate text-sm font-bold text-slate-900">{candidate.title || "課題名未入力"}</p>
+                      <p className="mt-1 text-[11px] text-slate-400">{formatDeadline(candidate.deadline)} / 最も早い締切候補を採用</p>
                     </div>
                   </div>
-                  <div className="mt-3 space-y-3">
+                  {!readonly && <button type="button" onClick={() => setExpandedCandidateUid((value) => value === candidate.uid ? null : candidate.uid)} className="mt-3 flex items-center gap-1 text-xs font-semibold text-[#0B7DEE]">{expanded ? "編集を閉じる" : "内容を編集"}</button>}
+                  {expanded && <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
                     <label className="block">
                       <span className="mb-1 block text-[11px] font-bold text-slate-500">課題名</span>
                       <input
@@ -392,7 +414,7 @@ export default function MoodleImportView({ tasks, cats, timetable, onImport }: M
                         disabled={readonly}
                       />
                     </label>
-                  </div>
+                  </div>}
                 </article>
               );
             })}
