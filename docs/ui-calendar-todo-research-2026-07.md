@@ -48,7 +48,7 @@ Priority Todo への採用候補:
 
 - タスク画面の期間フィルタとカテゴリフィルタは、常時二段で広げず、主フィルタを一つに絞る。
 - カテゴリが多い場合は横スクロールまたは絞り込みシートに逃がす。
-- 今日画面では、授業名・締切・「なぜ今日表示されるか」だけを優先する。
+- 今日画面では、授業名・締切・期限超過または当日締切だけを優先する。任意の表示開始日を通常UIに持ち込まない。
 
 参照: <https://www.todoist.com/help/articles/customize-views-in-todoist-AoHhBxFdZ>、<https://www.todoist.com/help/articles/does-todoist-support-start-dates-qhqlgZhk>
 
@@ -62,7 +62,7 @@ Microsoft To DoのMy Dayは、日ごとに取り組む対象を明示的に絞�
 
 Priority Todo への採用候補:
 
-- 「今日の課題」は開始日から締切までの表示期間で決める現行方針を維持する。
+- 新規課題は作成直後から「今日の課題」の対象にする。表示開始日を入力する複雑さは持ち込まない。
 - タスクカードの最優先情報は、課題名、締切、授業、表示理由の4つまでを基本にする。
 - URL、メモ、Moodle由来の詳細はカード内で常時広げない。
 

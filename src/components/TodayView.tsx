@@ -2,7 +2,7 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { Task, Category } from "@/lib/types";
 import { isActiveOn, isOverdue, isDueToday, taskFacts } from "@/lib/scoring";
-import { fmt, getEffectiveStartDate, remaining, taskDisplayTitle } from "@/lib/utils";
+import { fmt, remaining, taskDisplayTitle } from "@/lib/utils";
 import { DAY } from "@/lib/constants";
 import { IconCheck, IconFlag, IconRepeat } from "./Icons";
 import EmptyState from "./ui/EmptyState";
@@ -24,12 +24,6 @@ const fmtTime = (iso: string) => {
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const toYMD = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-const formatShortDate = (iso: string) => {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return `${d.getMonth() + 1}/${d.getDate()}(${DAY[d.getDay()]})`;
-};
-
 const recurrenceText = (task: Task) => {
   if (!task.recurrence || task.recurrence === "none") return "";
   if (task.recurrence === "daily") return "毎日";
@@ -97,17 +91,12 @@ const TaskCard = ({
   const facts = taskFacts(task, today);
   const rem = remaining(task.deadline);
   const displayTitle = taskDisplayTitle(task);
-  const effectiveStart = getEffectiveStartDate(task);
   const recurrence = recurrenceText(task);
   const visibleReason = facts.overdue
     ? "期限を過ぎています"
     : facts.dueToday
       ? "今日が締切"
-      : facts.startingToday
-        ? "今日から表示"
-        : effectiveStart
-          ? `${formatShortDate(effectiveStart)}から表示`
-          : "作成後すぐ表示";
+      : "";
 
   const accent = facts.overdue
     ? "border-l-[4px] border-rose-400"
@@ -187,7 +176,7 @@ const TaskCard = ({
             )}
           </div>
           <div className="mt-2.5 flex flex-wrap gap-1.5">
-            <StatusPill tone={facts.overdue ? "red" : facts.dueToday ? "amber" : "blue"}>{visibleReason}</StatusPill>
+            {visibleReason && <StatusPill tone={facts.overdue ? "red" : "amber"}>{visibleReason}</StatusPill>}
             {task.priority && <StatusPill tone="amber">最優先</StatusPill>}
             {recurrence && (
               <StatusPill tone="gray">
