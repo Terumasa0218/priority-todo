@@ -59,7 +59,7 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
   const selectedRow = selectedDate && selectedDate.getFullYear() === year && selectedDate.getMonth() === monthIndex
     ? Math.floor((firstWeekday + selectedDate.getDate() - 1) / 7)
     : -1;
-  const shouldLiftMonth = selectedRow >= 3;
+  const monthLift = selectedRow >= 5 ? 144 : selectedRow === 4 ? 104 : selectedRow === 3 ? 48 : 0;
   const selectedLabel = selectedDate ? `${selectedDate.getFullYear()}年${selectedDate.getMonth() + 1}月${selectedDate.getDate()}日(${DAY[selectedDate.getDay()]})` : "";
   const selectedHoliday = selectedDate ? holidayName(selectedDate) : null;
 
@@ -104,7 +104,7 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
 
   return (
     <div className="relative overflow-hidden pb-3">
-      <div className={`transition-transform duration-200 ease-out ${shouldLiftMonth ? "-translate-y-14" : "translate-y-0"}`}>
+      <div className="transition-transform duration-200 ease-out" style={{ transform: `translateY(-${monthLift}px)` }}>
         <div className="mx-5 mb-3 flex items-end justify-between gap-3">
           <div>
             <h2 className="text-xl font-bold text-slate-950">{year}年 {monthIndex + 1}月</h2>
@@ -159,7 +159,7 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
                             return (
                               <div key={task.id} className="calendar-task-bar" style={{ "--task-color": color } as React.CSSProperties}>
                                 <span className="calendar-task-dot" />
-                                <span className="truncate">{taskDisplayTitle(task)}</span>
+                                <span className="truncate">{task.title}</span>
                               </div>
                             );
                           })}

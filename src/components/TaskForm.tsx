@@ -6,7 +6,7 @@ import { DAY, REMINDERS } from "@/lib/constants";
 import { calcOccurrenceCount, uid } from "@/lib/utils";
 import CategoryPicker from "./CategoryPicker";
 import DatePickerField from "./DatePickerField";
-import { IconChevD, IconLink, IconRepeat } from "./Icons";
+import { IconCalendar, IconChevD, IconFlag, IconLink, IconRepeat } from "./Icons";
 
 interface TaskFormProps {
   task: Task | null;
@@ -28,10 +28,8 @@ const RECUR_OPTIONS: { id: Exclude<Task["recurrence"], "none">; label: string }[
 
 const pad2 = (value: number) => String(value).padStart(2, "0");
 const toDateTimeLocal = (date: Date) => `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
-const fmtDateMDW = (date: Date) => `${date.getMonth() + 1}/${date.getDate()}(${DAY[date.getDay()]})`;
-
 const FormSection = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
-  <section className={`border-b border-slate-200/80 bg-white ${className}`}>{children}</section>
+  <section className={`border-b border-slate-100 bg-white ${className}`}>{children}</section>
 );
 
 const Toggle = ({ checked, onClick, label }: { checked: boolean; onClick: () => void; label: string }) => (
@@ -39,10 +37,11 @@ const Toggle = ({ checked, onClick, label }: { checked: boolean; onClick: () => 
     type="button"
     onClick={onClick}
     aria-label={label}
-    aria-pressed={checked}
-    className={`relative h-7 w-12 flex-none rounded-full transition-colors ${checked ? "bg-[#0B7DEE]" : "bg-slate-300"}`}
+    role="switch"
+    aria-checked={checked}
+    className={`flex h-8 w-[52px] flex-none items-center rounded-full p-1 transition-colors ${checked ? "bg-[#0B7DEE]" : "bg-slate-300"}`}
   >
-    <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-6" : "translate-x-1"}`} />
+    <span className={`h-6 w-6 rounded-full bg-white shadow-sm transition-transform duration-200 ${checked ? "translate-x-5" : "translate-x-0"}`} />
   </button>
 );
 
@@ -71,9 +70,6 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const [biweeklyIntervalStr, setBiweeklyIntervalStr] = useState(String(task?.biweeklyInterval ?? 2));
   const [classStartDate, setClassStartDate] = useState(task?.classStartDate || "");
   const [classCountStr, setClassCountStr] = useState(String(task?.repeatCount || 14));
-  const [repeatEndMode, setRepeatEndMode] = useState<"count" | "date">(
-    task?.repeatEndDate && !task.repeatCount ? "date" : "count"
-  );
   const [showError, setShowError] = useState(false);
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -121,12 +117,13 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     return {
       offsetDays,
       offsetTime: `${pad2(firstDeadline.getHours())}:${pad2(firstDeadline.getMinutes())}`,
-      repeatEndDate: repeatEndMode === "date" ? repeatEndDate : toDateTimeLocal(lastDeadline).slice(0, 10),
+      repeatEndDate: toDateTimeLocal(lastDeadline).slice(0, 10),
     };
-  }, [classCount, classStartDate, deadline, intervalDays, isClassBasedRecurring, repeatEndDate, repeatEndMode]);
+  }, [classCount, classStartDate, deadline, intervalDays, isClassBasedRecurring]);
 
   const occurrenceCount = useMemo(() => {
     if (recurrence === "none") return 1;
+    if (isClassBasedRecurring) return classCount;
     return calcOccurrenceCount({
       ...(task || ({} as Task)),
       id: task?.id || "preview",
@@ -180,10 +177,6 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         setFormError("初回授業日を入力してください");
         return;
       }
-      if (isClassBasedRecurring && repeatEndMode === "date" && !repeatEndDate) {
-        setFormError("最終締切日を入力してください");
-        return;
-      }
       if (!isClassBasedRecurring && new Date(effectiveRepeatEndDate).getTime() < new Date(deadline).getTime()) {
         setFormError("最終締切日は初回締切日以降に設定してください");
         return;
@@ -229,7 +222,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       startDate: null,
       startOffsetDays: null,
       recurrence,
-      repeatCount: recurrence === "none" ? null : (isClassBasedRecurring ? (repeatEndMode === "count" ? classCount : occurrenceCount) : (task?.repeatCount || 14)),
+      repeatCount: recurrence === "none" ? null : (isClassBasedRecurring ? classCount : (task?.repeatCount || 14)),
       repeatEndDate: recurrence === "none" ? null : (isClassBasedRecurring ? (derivedClassSchedule?.repeatEndDate || null) : effectiveRepeatEndDate),
       reminder,
       memo,
@@ -248,16 +241,16 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
     });
   };
 
-  const repeatSummary = repeatEndMode === "count"
-    ? `${occurrenceCount}回分の課題を作成します`
-    : repeatEndDate
-      ? `${fmtDateMDW(new Date(`${repeatEndDate}T00:00:00`))}締切の課題まで作成します`
-      : "最終締切日を選択してください";
+  const repeatSummary = isClassBasedRecurring
+    ? classStartDate
+      ? `第1回から第${classCount}回までを作成します`
+      : `初回授業日を選ぶと、第1回から第${classCount}回までを作成します`
+    : `${occurrenceCount}回分の課題を作成します`;
 
   const RepeatSettings = repeatSettingsEnabled && !isEventEdit ? (
     <FormSection>
       <div className="px-5 py-4">
-        <div className="flex items-center gap-2 text-sm font-bold text-slate-950"><IconRepeat size={16} stroke="#0B7DEE" /> 繰り返し</div>
+        <div className="flex items-center gap-2 text-sm font-bold text-slate-950"><IconRepeat size={16} stroke="#0B7DEE" /> 繰り返し設定</div>
         <div className="mt-3 flex flex-wrap gap-2">
           {RECUR_OPTIONS.map((option) => (
             <button
@@ -294,50 +287,27 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         <>
           <div className="border-t border-slate-100 px-5 py-4">
             <div className="mb-2 flex items-center justify-between gap-3">
-              <label className="text-sm font-semibold text-slate-900">初回授業日</label>
+              <label className="flex items-center gap-2 text-sm font-semibold text-slate-900"><IconCalendar size={16} stroke="#64748B" /> 初回授業日</label>
               <span className="text-xs font-medium text-slate-400">{DAY[classDayOfWeek]}曜日</span>
             </div>
             <DatePickerField value={classStartDate} onChange={setClassStartDate} placeholder="第1回授業の日付" />
-            <p className="mt-2 text-xs leading-relaxed text-slate-500">過去の日付も選べます。授業日から提出日までの間隔を使って、各回の課題を作成します。</p>
+            <p className="mt-2 text-xs leading-relaxed text-slate-500">過去の日付も選べます。</p>
           </div>
           <div className="border-t border-slate-100 px-5 py-4">
-            <div className="mb-3 text-sm font-semibold text-slate-900">終了条件</div>
-            <div className="grid grid-cols-2 gap-2">
-              {(["count", "date"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setRepeatEndMode(mode)}
-                  className={`h-10 rounded-xl text-sm font-semibold ${repeatEndMode === mode ? "bg-[#0B7DEE] text-white" : "bg-slate-100 text-slate-500"}`}
-                >
-                  {mode === "count" ? "授業回数" : "最終締切日"}
-                </button>
-              ))}
+            <label className="block text-sm font-semibold text-slate-900">授業回数</label>
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={classCountStr}
+                onChange={(event) => setClassCountStr(event.target.value)}
+                onBlur={() => setClassCountStr(String(classCount))}
+                className="h-11 w-24 rounded-xl border border-slate-200 bg-slate-50 px-3 text-center font-semibold text-slate-900 outline-none focus:border-blue-400"
+                aria-label="授業回数"
+              />
+              <span className="text-sm text-slate-500">回</span>
             </div>
-            {repeatEndMode === "count" ? (
-              <div className="mt-3 flex items-center gap-2">
-                <input
-                  type="number"
-                  min={1}
-                  max={50}
-                  value={classCountStr}
-                  onChange={(event) => setClassCountStr(event.target.value)}
-                  onBlur={() => setClassCountStr(String(classCount))}
-                  className="h-11 w-24 rounded-xl border border-slate-200 bg-slate-50 px-3 text-center font-semibold text-slate-900 outline-none focus:border-blue-400"
-                />
-                <span className="text-sm text-slate-500">回</span>
-              </div>
-            ) : (
-              <div className="mt-3">
-                <DatePickerField
-                  value={repeatEndDate}
-                  onChange={setRepeatEndDate}
-                  min={deadlineDate}
-                  isDateDisabled={(date) => date.getTime() < new Date(`${deadlineDate}T00:00:00`).getTime()}
-                  placeholder="最終締切日を選択"
-                />
-              </div>
-            )}
             <p className="mt-2 text-xs text-slate-500">{repeatSummary}</p>
           </div>
         </>
@@ -373,7 +343,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         <div className="flex min-h-[60px] items-center justify-between px-5 py-3">
           <button type="button" onClick={onClose} className="px-1 py-2 text-sm font-semibold text-[#0B7DEE]">キャンセル</button>
           <h1 className="text-base font-bold text-slate-950">{isEventEdit ? "予定の編集" : isEdit ? "課題の編集" : "新しい課題"}</h1>
-          <button type="button" onClick={save} disabled={saving} className="rounded-full bg-[#0B7DEE] px-4 py-2 text-sm font-bold text-white shadow-[0_5px_14px_rgba(11,125,238,0.26)] disabled:opacity-50">保存</button>
+          <button type="button" onClick={save} disabled={saving} className="rounded-lg bg-[#0B7DEE] px-4 py-2 text-sm font-bold text-white shadow-sm disabled:opacity-50">保存</button>
         </div>
       </header>
 
@@ -382,6 +352,8 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
           <input
             autoFocus={!isEdit}
             type="text"
+            inputMode="text"
+            enterKeyHint="done"
             value={title}
             onChange={(event) => { setTitle(event.target.value); if (event.target.value.trim()) setShowError(false); }}
             placeholder={showError ? (isEventEdit ? "予定名を入力してください" : "課題名を入力してください") : (isEventEdit ? "予定名を入力" : "課題名を入力")}
@@ -416,12 +388,12 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
               </div>
               <div className="flex items-center justify-between gap-4 border-t border-slate-100 px-5 py-4">
                 <div>
-                  <div className="text-sm font-semibold text-slate-900">繰り返し課題</div>
-                  <p className="mt-0.5 text-xs text-slate-500">毎週・隔週の課題を自動で作成</p>
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900"><IconRepeat size={16} stroke="#64748B" /> 繰り返し設定</div>
+                  <p className="mt-0.5 text-xs text-slate-500">毎週・隔週などを設定</p>
                 </div>
                 <Toggle
                   checked={repeatSettingsEnabled}
-                  label="繰り返し課題の設定"
+                  label="繰り返し設定"
                   onClick={() => setRepeatSettingsEnabled((enabled) => {
                     const next = !enabled;
                     setRecurrence(next ? (recurrence === "none" ? "weekly" : recurrence) : "none");
@@ -436,10 +408,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
 
         <FormSection>
           <div className="flex items-center justify-between gap-4 px-5 py-4">
-            <div>
-              <div className="text-sm font-semibold text-slate-900">最優先</div>
-              <p className="mt-0.5 text-xs text-slate-500">タスク一覧の先頭に表示</p>
-            </div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-900"><IconFlag size={16} stroke="#64748B" /> 最優先</div>
             <Toggle checked={priority} label="最優先" onClick={() => setPriority((value) => !value)} />
           </div>
         </FormSection>
