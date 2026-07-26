@@ -1,7 +1,15 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import DatePickerField from "@/components/DatePickerField";
 import { getMoodleImportStatus, MoodleImportCandidate, MoodleImportStatus, parseMoodleIcs } from "@/lib/moodleIcs";
+import {
+  clearMoodleCalendarUrlSettings,
+  fetchMoodleCalendar,
+  loadMoodleCalendarUrlSettings,
+  MoodleCalendarUrlSettings,
+  normalizeMoodleCalendarUrl,
+  saveMoodleCalendarUrlSettings,
+} from "@/lib/moodleCalendarUrl";
 import { Category, Task, TimetableItem } from "@/lib/types";
 
 interface MoodleImportViewProps {
@@ -46,11 +54,32 @@ const formatDeadline = (iso: string) => {
   return `${d.getMonth() + 1}/${d.getDate()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 };
 
+const formatSyncTime = (iso: string | null) => {
+  if (!iso) return "まだ同期していません";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "まだ同期していません";
+  return `最終同期: ${date.getFullYear()}/${pad2(date.getMonth() + 1)}/${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+};
+
+const getEmptyImportMessage = (ics: string) =>
+  /BEGIN:VEVENT\s*/i.test(ics)
+    ? "予定は見つかりましたが、課題候補として取り込めませんでした"
+    : "予定が入っていないカレンダーファイルです";
+
 export default function MoodleImportView({ tasks, cats, timetable, onImport }: MoodleImportViewProps) {
   const [fileName, setFileName] = useState("");
   const [candidates, setCandidates] = useState<MoodleImportCandidate[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState<string | null>(null);
+  const [calendarUrl, setCalendarUrl] = useState("");
+  const [urlSettings, setUrlSettings] = useState<MoodleCalendarUrlSettings | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  useEffect(() => {
+    const settings = loadMoodleCalendarUrlSettings();
+    setCalendarUrl(settings.url);
+    setUrlSettings(settings);
+  }, []);
 
   const existingByUid = useMemo(
     () => {
@@ -79,25 +108,72 @@ export default function MoodleImportView({ tasks, cats, timetable, onImport }: M
     return { newCount, updateCount, unchangedCount, unlinkedCodeCount };
   }, [candidates, candidateStatuses]);
 
+  const setParsedCandidates = (ics: string) => {
+    const parsed = parseMoodleIcs(ics, timetable, cats);
+    setCandidates(parsed);
+    setSelected(new Set(parsed.filter((candidate) => {
+      const status = getMoodleImportStatus(candidate, existingByUid.get(candidate.uid));
+      return status !== "unchanged" && (candidate.includeByDefault || status === "update");
+    }).map((candidate) => candidate.uid)));
+    return parsed;
+  };
+
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
     setFileName(file.name);
     setMessage(null);
     try {
       const text = await file.text();
-      const parsed = parseMoodleIcs(text, timetable, cats);
-      setCandidates(parsed);
-      setSelected(new Set(parsed.filter((candidate) => {
-        const status = getMoodleImportStatus(candidate, existingByUid.get(candidate.uid));
-        return status !== "unchanged" && (candidate.includeByDefault || status === "update");
-      }).map((candidate) => candidate.uid)));
-      setMessage(parsed.length > 0 ? `${parsed.length}件の予定を読み込みました` : "VEVENTが見つかりませんでした");
-    } catch (error) {
-      console.error("Moodle ICS parse failed:", error);
+      const parsed = setParsedCandidates(text);
+      setMessage(parsed.length > 0 ? `${parsed.length}件の予定を読み込みました` : getEmptyImportMessage(text));
+    } catch {
       setCandidates([]);
       setSelected(new Set());
       setMessage("読み込みに失敗しました。Moodleカレンダーの .ics ファイルか確認してください。");
     }
+  };
+
+  const saveCalendarUrl = () => {
+    try {
+      const url = normalizeMoodleCalendarUrl(calendarUrl);
+      const next = { url, lastSyncedAt: urlSettings?.lastSyncedAt || null };
+      saveMoodleCalendarUrlSettings(next);
+      setCalendarUrl(url);
+      setUrlSettings(next);
+      setMessage("MoodleカレンダーURLをこの端末に保存しました");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "URLを保存できませんでした");
+    }
+  };
+
+  const syncFromCalendarUrl = async () => {
+    try {
+      const url = normalizeMoodleCalendarUrl(calendarUrl);
+      const saved = { url, lastSyncedAt: urlSettings?.lastSyncedAt || null };
+      saveMoodleCalendarUrlSettings(saved);
+      setCalendarUrl(url);
+      setUrlSettings(saved);
+      setIsSyncing(true);
+      setMessage(null);
+      const text = await fetchMoodleCalendar(url);
+      const parsed = setParsedCandidates(text);
+      const next = { url, lastSyncedAt: new Date().toISOString() };
+      saveMoodleCalendarUrlSettings(next);
+      setUrlSettings(next);
+      setFileName("MoodleカレンダーURL");
+      setMessage(parsed.length > 0 ? `URLから${parsed.length}件の予定を読み込みました` : getEmptyImportMessage(text));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "URL同期に失敗しました");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const clearCalendarUrl = () => {
+    clearMoodleCalendarUrlSettings();
+    setCalendarUrl("");
+    setUrlSettings({ url: "", lastSyncedAt: null });
+    setMessage("この端末に保存したMoodleカレンダーURLを削除しました");
   };
 
   const updateCandidate = (uid: string, patch: Partial<MoodleImportCandidate>) => {
@@ -149,14 +225,36 @@ export default function MoodleImportView({ tasks, cats, timetable, onImport }: M
       <section className="rounded-[28px] border border-white/80 bg-white p-4 shadow-[0_18px_48px_rgba(27,39,75,0.08)]">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-base font-black text-slate-950">Moodle ICS取り込み</h2>
-            <p className="mt-1 text-xs leading-relaxed text-slate-500">Moodleカレンダーから書き出した .ics ファイルを読み込み、課題候補だけを選んで追加します。</p>
+            <h2 className="text-base font-black text-slate-950">Moodleカレンダー同期</h2>
+            <p className="mt-1 text-xs leading-relaxed text-slate-500">URL同期または .ics ファイルから、課題候補を確認して反映します。</p>
           </div>
           <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-600">β</span>
         </div>
-        <label className="mt-4 flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-3xl border border-dashed border-blue-200 bg-blue-50/50 px-4 py-5 text-center active:scale-[0.99] transition-transform">
+        <div className="mt-4 rounded-3xl border border-slate-100 bg-slate-50/70 p-3">
+          <label className="block">
+            <span className="text-xs font-bold text-slate-700">MoodleカレンダーURL</span>
+            <input
+              type="url"
+              inputMode="url"
+              autoComplete="off"
+              value={calendarUrl}
+              onChange={(event) => setCalendarUrl(event.target.value)}
+              placeholder="https://..."
+              className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none focus:border-blue-300"
+            />
+          </label>
+          <p className="mt-2 text-[10px] leading-relaxed text-slate-500">このURLにはカレンダーを読み取る情報が含まれる場合があります。URLはこの端末だけに保存され、クラウド同期しません。</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" onClick={saveCalendarUrl} className="rounded-full bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm ring-1 ring-slate-200">URLを保存</button>
+            <button type="button" onClick={() => void syncFromCalendarUrl()} disabled={!calendarUrl.trim() || isSyncing} className="rounded-full bg-[#007AFF] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{isSyncing ? "同期中..." : "今すぐ同期"}</button>
+            {urlSettings?.url && <button type="button" onClick={clearCalendarUrl} className="rounded-full px-3 py-2 text-xs font-bold text-slate-500">URLを削除</button>}
+          </div>
+          <p className="mt-2 text-[10px] text-slate-400">{formatSyncTime(urlSettings?.lastSyncedAt || null)}</p>
+        </div>
+        <div className="my-4 flex items-center gap-3 text-[10px] font-bold text-slate-400 before:h-px before:flex-1 before:bg-slate-100 after:h-px after:flex-1 after:bg-slate-100">または</div>
+        <label className="flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-3xl border border-dashed border-blue-200 bg-blue-50/50 px-4 py-5 text-center active:scale-[0.99] transition-transform">
           <span className="text-sm font-bold text-blue-600">.icsファイルを選択</span>
-          <span className="mt-1 text-[11px] text-slate-500">URL同期ではなく、まずは安全なファイル取り込みだけ対応しています</span>
+          <span className="mt-1 text-[11px] text-slate-500">URL同期できない大学でも、同じ確認画面で取り込めます</span>
           <input type="file" accept=".ics,text/calendar" className="sr-only" onChange={(e) => void handleFile(e.target.files?.[0])} />
         </label>
         {fileName && <p className="mt-2 text-[11px] text-slate-400">選択中: {fileName}</p>}

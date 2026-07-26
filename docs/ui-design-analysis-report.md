@@ -1,5 +1,7 @@
 # Priority Todo UIデザイン分析レポート
 
+カレンダーと主要Todoアプリを追加調査したメモは `docs/ui-calendar-todo-research-2026-07.md` を参照する。
+
 作成日: 2026-05-17
 
 ## この文書の目的
