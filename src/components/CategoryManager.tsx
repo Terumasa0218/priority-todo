@@ -48,7 +48,7 @@ export default function CategoryManager({ cats, setCats, onClose, onDeleteCatego
               {eid === c.id ? (
                 <div className="px-4 py-3 space-y-3">
                   <input type="text" value={eLabel} onChange={(e) => setELabel(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-gray-400" autoFocus />
+                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-gray-400" />
                   <div className="flex gap-1.5 flex-wrap">
                     {palette.map((co) => (
                       <button key={co} onClick={() => setEColor(co)}

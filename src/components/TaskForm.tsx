@@ -7,6 +7,7 @@ import { calcOccurrenceCount, uid } from "@/lib/utils";
 import CategoryPicker from "./CategoryPicker";
 import DatePickerField from "./DatePickerField";
 import { IconCalendar, IconChevD, IconFlag, IconLink, IconRepeat } from "./Icons";
+import Switch from "./ui/Switch";
 
 interface TaskFormProps {
   task: Task | null;
@@ -30,19 +31,6 @@ const pad2 = (value: number) => String(value).padStart(2, "0");
 const toDateTimeLocal = (date: Date) => `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 const FormSection = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
   <section className={`border-b border-slate-100 bg-white ${className}`}>{children}</section>
-);
-
-const Toggle = ({ checked, onClick, label }: { checked: boolean; onClick: () => void; label: string }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    aria-label={label}
-    role="switch"
-    aria-checked={checked}
-    className={`flex h-8 w-[52px] flex-none items-center rounded-full p-1 transition-colors ${checked ? "bg-[#0B7DEE]" : "bg-slate-300"}`}
-  >
-    <span className={`h-6 w-6 rounded-full bg-white shadow-sm transition-transform duration-200 ${checked ? "translate-x-5" : "translate-x-0"}`} />
-  </button>
 );
 
 export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate, cats, setCats, timetable }: TaskFormProps) {
@@ -350,7 +338,6 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
       <main className="flex-1 overflow-y-auto bg-white pb-8 safe-bottom">
         <FormSection>
           <input
-            autoFocus={!isEdit}
             type="text"
             inputMode="text"
             enterKeyHint="done"
@@ -391,14 +378,13 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
                   <div className="flex items-center gap-2 text-sm font-semibold text-slate-900"><IconRepeat size={16} stroke="#64748B" /> 繰り返し設定</div>
                   <p className="mt-0.5 text-xs text-slate-500">毎週・隔週などを設定</p>
                 </div>
-                <Toggle
+                <Switch
                   checked={repeatSettingsEnabled}
                   label="繰り返し設定"
-                  onClick={() => setRepeatSettingsEnabled((enabled) => {
-                    const next = !enabled;
-                    setRecurrence(next ? (recurrence === "none" ? "weekly" : recurrence) : "none");
-                    return next;
-                  })}
+                  onCheckedChange={(enabled) => {
+                    setRepeatSettingsEnabled(enabled);
+                    setRecurrence(enabled ? (recurrence === "none" ? "weekly" : recurrence) : "none");
+                  }}
                 />
               </div>
             </FormSection>
@@ -409,7 +395,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
         <FormSection>
           <div className="flex items-center justify-between gap-4 px-5 py-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-900"><IconFlag size={16} stroke="#64748B" /> 最優先</div>
-            <Toggle checked={priority} label="最優先" onClick={() => setPriority((value) => !value)} />
+            <Switch checked={priority} label="最優先" onCheckedChange={setPriority} />
           </div>
         </FormSection>
 
