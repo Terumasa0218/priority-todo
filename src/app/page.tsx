@@ -15,10 +15,10 @@ import TimetableView from "@/components/TimetableView";
 import MoodleImportView from "@/components/MoodleImportView";
 import TodayView from "@/components/TodayView";
 import SegmentedTabs from "@/components/ui/SegmentedTabs";
-import SurfaceCard from "@/components/ui/SurfaceCard";
 import EmptyState from "@/components/ui/EmptyState";
 import AppHeader from "@/components/ui/AppHeader";
 import BottomNav from "@/components/ui/BottomNav";
+import Switch from "@/components/ui/Switch";
 import { auth, firebaseEnabled, googleProvider } from "@/lib/firebase";
 import { signInWithPopup, signOut, onAuthStateChanged, signInWithRedirect, User, browserLocalPersistence, getRedirectResult, setPersistence } from "firebase/auth";
 import { deleteCloudSnapshot, loadCloudSnapshot, migrateLocalToCloudOnce, saveCloudSnapshot } from "@/lib/cloudStorage";
@@ -982,8 +982,8 @@ export default function Home() {
                 items={FILTERS.map((f) => ({ id: f.id, label: f.label }))}
               />
             </div>
-            <SurfaceCard className="mx-4 mb-3 px-3 py-2.5 space-y-1.5 !rounded-[22px]">
-              <div className="flex gap-1.5 overflow-x-auto">
+            <div className="mx-4 mb-3 space-y-2">
+              <div className="flex gap-1.5 overflow-x-auto pb-0.5">
                 <button
                   onClick={() => { setCatFilter("all"); setShowCourseFilters(false); }}
                   className={`filter-chip ${catFilter === "all" ? "filter-chip-active" : ""}`}
@@ -1012,7 +1012,7 @@ export default function Home() {
                 ))}
               </div>
               {showCourseFilters && timetableCats.length > 0 && (
-                <div className="flex gap-1.5 overflow-x-auto pb-1 pt-1 border-t border-gray-100">
+                <div className="flex gap-1.5 overflow-x-auto border-t border-slate-200 pt-2">
                   <button
                     onClick={() => setCatFilter("timetable_group")}
                     className={`filter-chip ${catFilter === "timetable_group" ? "filter-chip-active" : ""}`}
@@ -1026,7 +1026,7 @@ export default function Home() {
                   ))}
                 </div>
               )}
-            </SurfaceCard>
+            </div>
             {activeFilter === "today" ? (
               <TodayView
                 tasks={allExpanded.filter((t) => catFilter === "all" || (catFilter === "timetable_group" ? timetableCats.some((c) => c.id === t.category) : t.category === catFilter))}
@@ -1116,19 +1116,13 @@ export default function Home() {
                 <div className="text-sm font-semibold text-gray-900">大学・授業ルール</div>
                 <div className="text-xs text-gray-500 mt-1 leading-relaxed">国公立・私立など大学ごとの祝日授業ルールに合わせて、授業課題の自動展開を調整します。</div>
               </div>
-              <button
-                type="button"
-                onClick={() => setSkipHolidayClasses(!skipHolidayClasses)}
-                className="w-full px-4 py-3.5 flex items-center justify-between text-left active:bg-gray-50 min-h-14"
-              >
+              <div className="w-full px-4 py-3.5 flex items-center justify-between text-left min-h-14">
                 <div className="pr-4">
                   <div className="text-sm font-medium text-gray-900">祝日は休講としてスキップ</div>
                   <div className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">オフにすると、祝日でも通常授業の課題を作成します。オンデマンドは常にスキップしません。</div>
                 </div>
-                <span className={`relative inline-flex h-7 w-12 flex-shrink-0 rounded-full transition-colors ${skipHolidayClasses ? "bg-[#007AFF]" : "bg-gray-300"}`} aria-hidden="true">
-                  <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${skipHolidayClasses ? "translate-x-5" : "translate-x-0.5"}`} />
-                </span>
-              </button>
+                <Switch checked={skipHolidayClasses} onCheckedChange={setSkipHolidayClasses} label="祝日は休講としてスキップ" />
+              </div>
             </div>
 
             <div className="mt-4 mx-4 bg-white rounded-xl overflow-hidden border border-gray-100">

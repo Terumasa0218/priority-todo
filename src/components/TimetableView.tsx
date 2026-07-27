@@ -2,6 +2,7 @@
 import React, { useMemo, useState } from "react";
 import { IconPencil } from "@/components/Icons";
 import DatePickerField from "@/components/DatePickerField";
+import Switch from "@/components/ui/Switch";
 import { Category, CourseTaskTemplate, Task, TimetableConfig, TimetableItem } from "@/lib/types";
 import { PALETTE, REMINDERS } from "@/lib/constants";
 import { orderedPalette } from "@/lib/utils";
@@ -98,6 +99,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
   const [showError, setShowError] = useState(false);
   const [formError, setFormError] = useState("");
   const [showCustomize, setShowCustomize] = useState(false);
+  const [customShowOnDemand, setCustomShowOnDemand] = useState(config.showOnDemand);
   const [sharing, setSharing] = useState(false);
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [templateMessage, setTemplateMessage] = useState<string | null>(null);
@@ -364,7 +366,7 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
           <button onClick={handleShare} disabled={sharing} className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900 px-2.5 py-1.5 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
             {sharing ? "共有中..." : "共有"}
           </button>
-          <button onClick={() => setShowCustomize(true)} className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900 px-2.5 py-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+          <button onClick={() => { setCustomShowOnDemand(config.showOnDemand); setShowCustomize(true); }} className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-900 px-2.5 py-1.5 rounded-lg hover:bg-gray-100 transition-colors">
             <IconPencil size={13} />カスタム
           </button>
         </div>
@@ -472,12 +474,11 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
             <button
               onClick={() => {
                 const periodInput = document.getElementById("max-period-input") as HTMLInputElement | null;
-                const toggle = document.getElementById("ondemand-toggle") as HTMLInputElement | null;
                 const slotInputs = DAYS.map((d, idx) => {
                   const input = document.getElementById(`ondemand-slots-day-${d.value}`) as HTMLInputElement | null;
                   return Number(input?.value ?? config.onDemandSlotsByDay?.[idx] ?? 0);
                 });
-                applyCustomize(Number(periodInput?.value || config.maxPeriod), !!toggle?.checked, slotInputs);
+                applyCustomize(Number(periodInput?.value || config.maxPeriod), customShowOnDemand, slotInputs);
               }}
               className="text-sm font-semibold text-blue-500"
             >保存</button>
@@ -489,10 +490,10 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
                 <input id="max-period-input" type="number" min={2} max={20} step={2} defaultValue={config.maxPeriod} className="w-full px-3 py-2 rounded-md border border-gray-200 text-sm" />
                 <p className="text-[11px] text-gray-400 mt-1">偶数で入力（例: 6 / 8 / 10）。1・2限、3・4限のセットで表示します。</p>
               </div>
-              <label className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                 <span className="text-sm text-gray-900">オンデマンド枠を表示</span>
-                <input id="ondemand-toggle" type="checkbox" defaultChecked={config.showOnDemand} className="w-4 h-4" />
-              </label>
+                <Switch checked={customShowOnDemand} onCheckedChange={setCustomShowOnDemand} label="オンデマンド枠を表示" />
+              </div>
               <div className="px-4 py-3">
                 <div className="text-sm text-gray-900 mb-2">オンデマンド枠数（曜日ごと）</div>
                 <div className="grid grid-cols-5 gap-2">
@@ -540,7 +541,6 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
                     ? "border-red-300 bg-red-50/50 placeholder-red-500"
                     : "border-gray-100 placeholder-gray-400"
                 }`}
-                autoFocus
               />
               <div className="px-4 py-3 flex items-center gap-3">
                 <span className="shrink-0 text-sm text-gray-900 font-medium">授業カテゴリ</span>
@@ -631,18 +631,14 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
                   <span className="text-sm text-gray-900 font-semibold">Moodle連携</span>
                   <div className="text-[10px] text-gray-400 mt-0.5">ICSのCATEGORIES下4桁と照合して、この授業へ自動分類します</div>
                 </div>
-                <button
-                  type="button"
-                  aria-label="Moodle連携"
-                  aria-pressed={!!editing.item.moodleEnabled}
-                  onClick={() => {
-                    setEditing((prev) => prev ? { ...prev, item: { ...prev.item, moodleEnabled: !prev.item.moodleEnabled } } : prev);
+                <Switch
+                  checked={!!editing.item.moodleEnabled}
+                  label="Moodle連携"
+                  onCheckedChange={(moodleEnabled) => {
+                    setEditing((prev) => prev ? { ...prev, item: { ...prev.item, moodleEnabled } } : prev);
                     setShowError(false);
                   }}
-                  className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${editing.item.moodleEnabled ? "bg-blue-500" : "bg-gray-300"}`}
-                >
-                  <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${editing.item.moodleEnabled ? "translate-x-[22px]" : "translate-x-0.5"}`} />
-                </button>
+                />
               </div>
               {editing.item.moodleEnabled && (
                 <div className="px-4 py-3">
@@ -672,22 +668,17 @@ export default function TimetableView({ items, setItems, setCats, config, setCon
                   <span className="text-sm text-gray-900 font-semibold">課題テンプレート</span>
                   <div className="text-[10px] text-gray-400 mt-0.5">毎週のレスポンスカードなどを、この授業から作成します</div>
                 </div>
-                <button
-                  type="button"
-                  aria-label="課題テンプレート"
-                  aria-pressed={!!editing.item.assignmentTemplate}
-                  onClick={() => {
+                <Switch
+                  checked={!!editing.item.assignmentTemplate}
+                  label="課題テンプレート"
+                  onCheckedChange={(enabled) => {
                     setEditing((prev) => {
                       if (!prev) return prev;
-                      const nextTemplate = prev.item.assignmentTemplate ? null : createDefaultTemplate();
-                      return { ...prev, item: { ...prev.item, assignmentTemplate: nextTemplate } };
+                      return { ...prev, item: { ...prev.item, assignmentTemplate: enabled ? (prev.item.assignmentTemplate || createDefaultTemplate()) : null } };
                     });
                     setFormError("");
                   }}
-                  className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${editing.item.assignmentTemplate ? "bg-emerald-500" : "bg-gray-300"}`}
-                >
-                  <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${editing.item.assignmentTemplate ? "translate-x-[22px]" : "translate-x-0.5"}`} />
-                </button>
+                />
               </div>
               {editing.item.assignmentTemplate && (
                 <>

@@ -33,9 +33,10 @@ const recurrenceText = (task: Task) => {
   return "";
 };
 
-const SectionLabel = ({ children }: { children: React.ReactNode }) => (
-  <div className="px-4 pt-4 pb-1.5">
-    <span className="text-[10px] font-bold text-slate-400 tracking-[0.18em] uppercase">{children}</span>
+const SectionLabel = ({ children, count }: { children: React.ReactNode; count: number }) => (
+  <div className="flex items-center justify-between px-4 pt-5 pb-2">
+    <span className="text-sm font-semibold text-slate-700">{children}</span>
+    <span className="text-xs text-slate-400">{count}件</span>
   </div>
 );
 
@@ -54,12 +55,12 @@ const EventCard = ({
 
   return (
     <div className="surface-card task-card px-4 py-3 cursor-pointer" onClick={() => onEdit(task)}>
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-2.5">
         <div className="flex-shrink-0 w-1 self-stretch rounded-full" style={{ backgroundColor: cat.color, minHeight: "32px" }} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-sm font-semibold text-slate-900 truncate">{task.title}</span>
-            <StatusPill tone="blue">予定</StatusPill>
+            <StatusPill tone="gray">予定</StatusPill>
           </div>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             <span className="text-xs text-slate-500">{cat.label}</span>
@@ -131,8 +132,8 @@ const TaskCard = ({
   };
 
   return (
-    <div className={`surface-card task-card ${accent} px-4 py-4`}>
-      <div className="flex items-start gap-3">
+    <div className={`surface-card task-card ${accent} px-4 py-3`}>
+      <div className="flex items-start gap-2.5">
         <button
           onClick={() => onComplete(task)}
           aria-label="完了"
@@ -160,9 +161,9 @@ const TaskCard = ({
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
                 {task.priority && <IconFlag filled size={13} />}
-                <span className={`block truncate text-[15px] font-bold leading-snug ${facts.overdue ? "text-rose-700" : "text-slate-950"}`}>{displayTitle}</span>
+                <span className={`block truncate text-[15px] font-semibold leading-snug ${facts.overdue ? "text-rose-700" : "text-slate-950"}`}>{displayTitle}</span>
               </div>
-              <div className="mt-1.5 flex items-center gap-2 overflow-hidden whitespace-nowrap">
+              <div className="mt-1 flex items-center gap-1.5 overflow-hidden whitespace-nowrap">
                 <span className="inline-block h-2.5 w-2.5 flex-shrink-0 rounded-full" style={{ backgroundColor: cat.color }} />
                 <span className="min-w-0 truncate text-xs font-medium text-slate-600">{cat.label}</span>
                 <span className="text-xs text-slate-300">•</span>
@@ -175,16 +176,14 @@ const TaskCard = ({
               </span>
             )}
           </div>
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
+          <div className="mt-2 flex flex-wrap gap-1.5">
             {visibleReason && <StatusPill tone={facts.overdue ? "red" : "amber"}>{visibleReason}</StatusPill>}
-            {task.priority && <StatusPill tone="amber">最優先</StatusPill>}
             {recurrence && (
               <StatusPill tone="gray">
                 <IconRepeat size={10} stroke="currentColor" />
                 {recurrence}
               </StatusPill>
             )}
-            {task.moodleUid && <StatusPill tone="green">Moodle由来</StatusPill>}
           </div>
         </div>
       </div>
@@ -352,20 +351,20 @@ export default function TodayView({ tasks, cats, onComplete, onEdit, onSnooze }:
     <div className="pb-4">
       {overdueList.length > 0 && (
         <>
-          <SectionLabel><span className="text-rose-500">期限超過</span></SectionLabel>
-          <div className="px-4 space-y-2.5">{overdueList.map(renderRow)}</div>
+          <SectionLabel count={overdueList.length}><span className="text-rose-600">期限超過</span></SectionLabel>
+          <div className="px-4 space-y-2">{overdueList.map(renderRow)}</div>
         </>
       )}
       {priorityList.length > 0 && (
         <>
-          <SectionLabel>優先タスク</SectionLabel>
-          <div className="px-4 space-y-2.5">{priorityList.map(renderRow)}</div>
+          <SectionLabel count={priorityList.length}>優先タスク</SectionLabel>
+          <div className="px-4 space-y-2">{priorityList.map(renderRow)}</div>
         </>
       )}
       {taskList.length > 0 && (
         <>
-          {(overdueList.length > 0 || priorityList.length > 0) && <SectionLabel>タスク</SectionLabel>}
-          <div className={`${overdueList.length > 0 || priorityList.length > 0 ? "px-4" : "px-4 py-4"} space-y-2.5`}>
+          {(overdueList.length > 0 || priorityList.length > 0) && <SectionLabel count={taskList.length}>タスク</SectionLabel>}
+          <div className={`${overdueList.length > 0 || priorityList.length > 0 ? "px-4" : "px-4 py-4"} space-y-2`}>
             {taskList.map(renderRow)}
           </div>
         </>

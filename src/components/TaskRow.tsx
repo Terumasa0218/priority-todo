@@ -117,7 +117,7 @@ export default function TaskRow({ task, cats, onComplete, onEdit, onDelete, idx,
         onContextMenu={handleContextMenu}
       >
         <div
-          className={`surface-card task-card flex items-start gap-3 px-4 py-3.5 transition-colors ${
+          className={`surface-card task-card flex items-start gap-2.5 px-4 py-3 transition-colors ${
             touchDrag.active && touchDrag.dragIdx === idx ? "opacity-50 bg-gray-100" : ""
           } ${isOverdue ? "bg-rose-50/80" : task.priority ? "bg-rose-50/50" : ""}`}
           style={task.priority || isOverdue ? { borderLeft: "3px solid #CD2B31" } : { borderLeft: "3px solid transparent" }}
@@ -126,7 +126,7 @@ export default function TaskRow({ task, cats, onComplete, onEdit, onDelete, idx,
           <div className="text-gray-300 flex-shrink-0 mt-0.5"><IconGrip size={14} /></div>
           {/* Checkbox */}
           <button ref={checkRef} onClick={handleComplete}
-            className="task-complete-button w-5 h-5 rounded-lg border-0 hover:bg-green-50 transition-all flex-shrink-0 mt-0.5" />
+            className="task-complete-button w-7 h-7 rounded-full border-0 hover:bg-green-50 transition-all flex-shrink-0" />
           {/* Content */}
           <div className="relative flex-1 min-w-0 cursor-pointer" onClick={() => onEdit(task)}>
             <div className="flex items-center gap-2">
@@ -134,7 +134,7 @@ export default function TaskRow({ task, cats, onComplete, onEdit, onDelete, idx,
               <span className={`text-sm font-semibold truncate ${isOverdue ? "text-rose-700" : "text-slate-900"}`}>{displayTitle}</span>
               {task.recurrence && task.recurrence !== "none" && <IconRepeat size={12} stroke="#889096" />}
             </div>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center gap-1.5 mt-1">
               <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
               <span className="text-xs text-slate-500">{cat.label}</span>
               <span className="text-xs text-slate-300">•</span>

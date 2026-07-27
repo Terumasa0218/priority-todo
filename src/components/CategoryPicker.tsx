@@ -67,7 +67,7 @@ export default function CategoryPicker({ cats, setCats, selected, onSelect }: Ca
               <input
                 type="text" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="カテゴリ名"
                 className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm placeholder-gray-400 focus:outline-none focus:border-gray-400"
-                autoFocus onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                onKeyDown={(e) => e.key === "Enter" && handleCreate()}
               />
               <div className="flex gap-1.5 flex-wrap">
                 {palette.map((c) => (
