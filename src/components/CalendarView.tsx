@@ -118,7 +118,7 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
 
         <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={() => { setDragging(false); setDragOffset(0); }}>
           <div
-            className={`calendar-month-panel mx-4 overflow-hidden rounded-[18px] border border-slate-200/80 bg-white shadow-[0_12px_32px_rgba(27,39,75,0.06)] ${monthMotion ? `calendar-month-${monthMotion}` : ""}`}
+            className={`calendar-month-panel mx-4 overflow-hidden rounded-[18px] border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] ${monthMotion ? `calendar-month-${monthMotion}` : ""}`}
             style={{
               "--calendar-drag-x": `${dragOffset}px`,
               "--calendar-drag-opacity": String(1 - Math.min(Math.abs(dragOffset) / 220, 0.22)),
@@ -150,7 +150,7 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
                     {day && (
                       <>
                         <div className="mb-1 flex items-center justify-center">
-                          <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${currentDay ? "bg-[#0B7DEE] text-white" : selected ? "bg-slate-900 text-white" : dayColor}`}>{day}</span>
+                          <span className={`grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${currentDay && selected ? "bg-[#0B7DEE] text-white" : selected ? "bg-slate-900 text-white" : currentDay ? "bg-white text-[#0B7DEE] ring-2 ring-[#0B7DEE]" : dayColor}`}>{day}</span>
                         </div>
                         <div className="space-y-1">
                           {dayTasks.slice(0, 2).map((task) => {
@@ -188,8 +188,7 @@ export default function CalendarView({ tasks, cats, month, setMonth, onAddClick,
           <div className="max-h-[calc(34dvh-120px)] overflow-y-auto border-t border-slate-100">
             {selectedTasks.length === 0 ? (
               <div className="px-5 py-5 text-center">
-                <p className="text-sm font-semibold text-slate-700">予定はありません</p>
-                <p className="mt-1 text-xs text-slate-500">この日に課題を追加できます。</p>
+                <p className="text-sm font-semibold text-slate-700">予定なし</p>
               </div>
             ) : selectedTasks.map((task) => {
               const category = cats.find((item) => item.id === task.category) || { label: "未分類", color: "#889096" };

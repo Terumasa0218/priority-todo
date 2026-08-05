@@ -35,7 +35,7 @@ export const isDueToday = (task: Task, today: Date = new Date()): boolean => {
 
 export const isOverdue = (task: Task, today: Date = new Date()): boolean => {
   if (!task.deadline) return false;
-  return new Date(task.deadline).getTime() < startOfDay(today).getTime();
+  return new Date(task.deadline).getTime() < today.getTime();
 };
 
 export interface TaskFacts {
@@ -49,8 +49,8 @@ export interface TaskFacts {
 export const taskFacts = (task: Task, today: Date = new Date()): TaskFacts => {
   const hasDeadline = !!task.deadline;
   const daysToDue = hasDeadline ? diffDays(today, new Date(task.deadline)) : null;
-  const overdue = hasDeadline && new Date(task.deadline).getTime() < startOfDay(today).getTime();
-  const dueToday = hasDeadline && daysToDue === 0;
+  const overdue = hasDeadline && new Date(task.deadline).getTime() < today.getTime();
+  const dueToday = hasDeadline && !overdue && daysToDue === 0;
   const eff = getEffectiveStartDate(task);
   const started = !eff || diffDays(today, new Date(eff)) <= 0;
   const startingToday = !!eff && diffDays(today, new Date(eff)) === 0;
