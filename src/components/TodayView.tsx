@@ -93,11 +93,11 @@ const TaskCard = ({
   const rem = remaining(task.deadline);
   const displayTitle = taskDisplayTitle(task);
   const recurrence = recurrenceText(task);
-  const visibleReason = facts.overdue
-    ? "期限を過ぎています"
+  const deadlineStatus = facts.overdue
+    ? { label: "期限超過", tone: "red" as const }
     : facts.dueToday
-      ? "今日が締切"
-      : "";
+      ? { label: "今日締切", tone: "amber" as const }
+      : { label: `あと${rem.t}`, tone: "gray" as const };
 
   const accent = facts.overdue
     ? "border-l-[4px] border-rose-400"
@@ -161,7 +161,7 @@ const TaskCard = ({
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
                 {task.priority && <IconFlag filled size={13} />}
-                <span className={`block truncate text-[15px] font-semibold leading-snug ${facts.overdue ? "text-rose-700" : "text-slate-950"}`}>{displayTitle}</span>
+                <span className="block truncate text-[15px] font-semibold leading-snug text-slate-950">{displayTitle}</span>
               </div>
               <div className="mt-1 flex items-center gap-1.5 overflow-hidden whitespace-nowrap">
                 <span className="inline-block h-2.5 w-2.5 flex-shrink-0 rounded-full" style={{ backgroundColor: cat.color }} />
@@ -170,14 +170,9 @@ const TaskCard = ({
                 <span className="flex-shrink-0 text-xs text-slate-500">{fmt(task.deadline)}</span>
               </div>
             </div>
-            {!facts.overdue && (
-              <span className="flex-shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold tabular-nums text-slate-700">
-                あと{rem.t}
-              </span>
-            )}
+            <StatusPill tone={deadlineStatus.tone} className="flex-shrink-0">{deadlineStatus.label}</StatusPill>
           </div>
           <div className="mt-2 flex flex-wrap gap-1.5">
-            {visibleReason && <StatusPill tone={facts.overdue ? "red" : "amber"}>{visibleReason}</StatusPill>}
             {recurrence && (
               <StatusPill tone="gray">
                 <IconRepeat size={10} stroke="currentColor" />

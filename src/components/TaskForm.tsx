@@ -238,7 +238,7 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
   const RepeatSettings = repeatSettingsEnabled && !isEventEdit ? (
     <FormSection>
       <div className="px-5 py-4">
-        <div className="flex items-center gap-2 text-sm font-bold text-slate-950"><IconRepeat size={16} stroke="#0B7DEE" /> 繰り返し設定</div>
+        <div className="text-sm font-bold text-slate-950">頻度</div>
         <div className="mt-3 flex flex-wrap gap-2">
           {RECUR_OPTIONS.map((option) => (
             <button
@@ -375,8 +375,8 @@ export default function TaskForm({ task, onSave, onDelete, onClose, prefillDate,
               </div>
               <div className="flex items-center justify-between gap-4 border-t border-slate-100 px-5 py-4">
                 <div>
-                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900"><IconRepeat size={16} stroke="#64748B" /> 繰り返し設定</div>
-                  <p className="mt-0.5 text-xs text-slate-500">毎週・隔週などを設定</p>
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900"><IconRepeat size={16} stroke="#64748B" /> 繰り返しを設定</div>
+                  <p className="mt-0.5 text-xs text-slate-500">毎週・隔週などをまとめて設定</p>
                 </div>
                 <Switch
                   checked={repeatSettingsEnabled}
